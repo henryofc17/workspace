@@ -4,7 +4,6 @@ import {
   extractCookiesFromText,
   checkCookie,
   getMetadata,
-  buildCookieString,
 } from "@/lib/netflix-checker";
 import type { CheckResult, NFTokenResult, NetflixMetadata } from "@/lib/netflix-checker";
 
@@ -24,11 +23,10 @@ async function processCookie(
       index,
       rawCookie,
       success: false,
-      error: "No se pudieron extraer cookies del texto",
+      error: "No se pudieron extraer cookies",
     };
   }
 
-  // Step 1: Check NFToken
   const tokenResult: NFTokenResult = await checkCookie(cookieDict);
 
   if (!tokenResult.success) {
@@ -40,13 +38,10 @@ async function processCookie(
     };
   }
 
-  // Step 2: Get metadata (non-critical)
   let metadata: NetflixMetadata = {};
   try {
     metadata = await getMetadata(cookieDict);
-  } catch {
-    // Non-critical failure
-  }
+  } catch {}
 
   return {
     index,
@@ -58,107 +53,46 @@ async function processCookie(
   };
 }
 
-/** Parse Netscape cookie file → returns list of cookie dictionaries (each with NetflixId+SecureNetflixId+nfvdid) */
-function parseNetscapeMulti(content: string): Record<string, string>[] {
-  const results: Record<string, string>[] = [];
-  let current: Record<string, string> = {};
-
-  const lines = content.split("\n");
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) {
-      // Blank line or comment = boundary between cookies
-      if (Object.keys(current).length > 0) {
-        results.push(current);
-        current = {};
-      }
-      continue;
-    }
-
-    const parts = line.split("\t");
-    if (parts.length >= 7) {
-      const name = parts[5].trim();
-      const value = parts[6].trim();
-      if (name) current[name] = value;
-
-      // When we have the 3 required cookies, save this set
-      if (current["NetflixId"] && current["SecureNetflixId"] && current["nfvdid"]) {
-        results.push(current);
-        current = {};
-      }
-    }
-  }
-
-  // Don't forget last one
-  if (Object.keys(current).length > 0) results.push(current);
-  return results;
-}
-
-/** Try to extract cookies from any text format, returns array of cookie strings */
-function extractAllCookies(content: string): string[] {
-  const results: string[] = [];
-
-  // 1. Try JSON format (Cookie Editor)
-  const trimmed = content.trim();
-  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
-    const dict = extractCookiesFromText(trimmed);
-    if (dict && (dict["NetflixId"] || dict["SecureNetflixId"])) {
-      results.push(trimmed);
-      return results;
-    }
-  }
-
-  // 2. Try Netscape format (multi-cookie file)
-  if (trimmed.includes("\t")) {
-    const netscapeCookies = parseNetscapeMulti(trimmed);
-    for (const cookie of netscapeCookies) {
-      const str = buildCookieString(cookie);
-      results.push(str);
-    }
-    if (results.length > 0) return results;
-  }
-
-  // 3. Split by blank lines and try each block
-  const blocks = content.split(/\n\s*\n/);
-  for (const block of blocks) {
-    const t = block.trim();
-    if (!t || t.length < 10 || t.startsWith("#") || t.startsWith("---")) continue;
-
-    const dict = extractCookiesFromText(t);
-    if (dict && (dict["NetflixId"] || dict["SecureNetflixId"] || dict["nfvdid"])) {
-      results.push(t);
-      continue;
-    }
-
-    // Try line by line within block
-    const lines = t.split("\n").map(l => l.trim()).filter(l => l.length > 10);
-    for (const line of lines) {
-      const ld = extractCookiesFromText(line);
-      if (ld && (ld["NetflixId"] || ld["SecureNetflixId"] || ld["nfvdid"])) {
-        results.push(line);
-      }
-    }
-  }
-
-  return results;
-}
-
 /** Extract cookie strings from a .txt file content */
 function parseTxtFile(content: string): string[] {
-  if (!content || !content.trim()) return [];
-  return extractAllCookies(content);
+  const cookies: string[] = [];
+
+  if (!content || !content.trim()) return cookies;
+
+  const blocks = content.split(/\n\s*\n/);
+
+  for (const block of blocks) {
+    const trimmed = block.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const dict = extractCookiesFromText(trimmed);
+    if (dict && Object.keys(dict).length > 0) {
+      cookies.push(trimmed);
+      continue;
+    }
+
+    const lines = trimmed.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("#"));
+    for (const line of lines) {
+      const lineDict = extractCookiesFromText(line);
+      if (lineDict && Object.keys(lineDict).length > 0) {
+        cookies.push(line);
+      }
+    }
+  }
+
+  return cookies;
 }
 
-/** Extract cookie strings from a .zip file — reads ALL files inside */
+/** Extract cookie strings from a .zip file */
 function parseZipFile(buffer: Buffer): string[] {
-  const allCookies: string[] = [];
+  const cookies: string[] = [];
   let zip: AdmZip;
 
   try {
     zip = new AdmZip(buffer);
   } catch (err) {
     console.error("Error opening ZIP:", err);
-    return allCookies;
+    return cookies;
   }
 
   const entries = zip.getEntries();
@@ -170,17 +104,14 @@ function parseZipFile(buffer: Buffer): string[] {
 
     try {
       const content = entry.getData().toString("utf-8");
-      const cookies = extractAllCookies(content);
-      if (cookies.length > 0) {
-        console.log(`ZIP: ${entry.entryName} → ${cookies.length} cookie(s)`);
-        allCookies.push(...cookies);
-      }
+      const fileCookies = parseTxtFile(content);
+      cookies.push(...fileCookies);
     } catch (err) {
-      console.error(`Error leyendo ${entry.entryName}:`, err);
+      console.error(`Error reading ${entry.entryName}:`, err);
     }
   }
 
-  return allCookies;
+  return cookies;
 }
 
 export async function POST(request: NextRequest) {
@@ -190,12 +121,10 @@ export async function POST(request: NextRequest) {
     let cookieTexts: string[] = [];
 
     if (contentType.includes("multipart/form-data")) {
-      // Handle file upload
       const formData = await request.formData();
       const file = formData.get("file") as File | null;
 
       if (!file) {
-        // Check if cookies array was sent
         const cookiesRaw = formData.get("cookies");
         if (cookiesRaw) {
           try {
@@ -216,13 +145,11 @@ export async function POST(request: NextRequest) {
         if (file.name.endsWith(".zip")) {
           cookieTexts = parseZipFile(buffer);
         } else {
-          // .txt file
           const content = buffer.toString("utf-8");
           cookieTexts = parseTxtFile(content);
         }
       }
     } else {
-      // Handle JSON body
       const body = await request.json();
       const { cookies } = body;
 
@@ -243,13 +170,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Limit batch size
-    const MAX_BATCH = 50;
-    if (cookieTexts.length > MAX_BATCH) {
-      cookieTexts = cookieTexts.slice(0, MAX_BATCH);
+    if (cookieTexts.length > 50) {
+      cookieTexts = cookieTexts.slice(0, 50);
     }
 
-    // Process cookies sequentially (to avoid rate limiting)
     const results: BatchResult[] = [];
     for (let i = 0; i < cookieTexts.length; i++) {
       const result = await processCookie(cookieTexts[i], i);
@@ -261,19 +185,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       results,
-      stats: {
-        total: results.length,
-        hits,
-        fails,
-      },
+      stats: { total: results.length, hits, fails },
     });
   } catch (err: any) {
     console.error("Batch check error:", err);
     return NextResponse.json(
-      {
-        success: false,
-        error: `Error del servidor: ${err.message || "Desconocido"}`,
-      },
+      { success: false, error: `Error del servidor: ${err.message || "Desconocido"}` },
       { status: 500 }
     );
   }

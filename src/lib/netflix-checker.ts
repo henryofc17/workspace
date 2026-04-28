@@ -110,7 +110,6 @@ function extractBalancedForward(text: string, start: number): string | null {
         return text.substring(start, i + 1);
       }
     } else if (ch === '"') {
-      // skip string
       i++;
       while (i < text.length) {
         if (text[i] === "\\") {
@@ -128,7 +127,6 @@ function extractBalancedForward(text: string, start: number): string | null {
 
 /** Extract root JSON object from Netflix HTML response */
 function extractRootJson(html: string): any | null {
-  // Try to find netflix.reactContext pattern
   const reactCtxMatch = html.indexOf("netflix.reactContext = ");
   if (reactCtxMatch !== -1) {
     const start = html.indexOf("{", reactCtxMatch);
@@ -137,31 +135,24 @@ function extractRootJson(html: string): any | null {
       if (raw) {
         try {
           return JSON.parse(cleanJsonStr(raw));
-        } catch {
-          // fallback
-        }
+        } catch {}
       }
     }
   }
 
-  // Try to find {"title":"Netflix" pattern
   const titleMatch = html.indexOf('{"title":"Netflix"');
   if (titleMatch !== -1) {
     const raw = extractBalancedForward(html, titleMatch);
     if (raw) {
       try {
         return JSON.parse(cleanJsonStr(raw));
-      } catch {
-        // fallback
-      }
+      } catch {}
     }
   }
 
-  // Try finding any top-level JSON object
   for (const marker of ['"title":"Netflix"', '"userInfo"', '"membership"']) {
     const idx = html.indexOf(marker);
     if (idx !== -1) {
-      // Walk backwards to find the opening {
       let start = idx;
       while (start > 0 && html[start] !== "{") start--;
       const raw = extractBalancedForward(html, start);
@@ -203,12 +194,10 @@ function parseNetscapeCookies(content: string): Record<string, string> {
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
-    // Skip comments and empty lines
     if (!line || line.startsWith("#")) continue;
 
     const parts = line.split("\t");
     if (parts.length >= 7) {
-      // Netscape format: domain flag path secure expiration name value
       const name = parts[5].trim();
       const value = parts[6].trim();
       if (name) {
@@ -226,7 +215,6 @@ export function extractCookiesFromText(text: string): Record<string, string> | n
 
   const trimmed = text.trim();
 
-  // Try JSON format (Cookie Editor export)
   if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
     try {
       const parsed = JSON.parse(trimmed);
@@ -240,18 +228,14 @@ export function extractCookiesFromText(text: string): Record<string, string> | n
       }
 
       if (Object.keys(cookies).length > 0) return cookies;
-    } catch {
-      // Not valid JSON, try other formats
-    }
+    } catch {}
   }
 
-  // Try Netscape format (tab-separated)
   if (trimmed.includes("\t")) {
     const cookies = parseNetscapeCookies(trimmed);
     if (Object.keys(cookies).length > 0) return cookies;
   }
 
-  // Try raw cookie string format: "name=value; name2=value2; ..."
   if (trimmed.includes("=")) {
     const cookies: Record<string, string> = {};
     const pairs = trimmed.split(";");
@@ -278,7 +262,6 @@ export function buildCookieString(
   cookieDict: Record<string, string>,
   onlyAndroid: boolean = false
 ): string {
-  // Core Android cookies that Netflix needs
   const androidKeys = new Set([
     "NetflixId",
     "SecureNetflixId",
@@ -364,42 +347,21 @@ export async function checkCookie(
 
     const data = await response.json();
 
-    // Navigate the response to find the token
-    // Format 1: data.data.createAutoLoginToken (string token directly)
-    const tokenDirect = dig(
-      data,
-      "data",
-      "createAutoLoginToken"
-    );
-    // Format 2: data.data.createAutoLoginToken.autoLoginToken.token
-    const tokenNested = dig(
-      data,
-      "data",
-      "createAutoLoginToken",
-      "autoLoginToken",
-      "token"
-    );
+    const tokenDirect = dig(data, "data", "createAutoLoginToken");
+    const tokenNested = dig(data, "data", "createAutoLoginToken", "autoLoginToken", "token");
     const token = typeof tokenDirect === "string" ? tokenDirect : tokenNested;
 
     if (token) {
       const link = `${NF_TOKEN_BASE}?autoLoginToken=${token}`;
-      return {
-        success: true,
-        token,
-        link,
-      };
+      return { success: true, token, link };
     }
 
-    // Check for errors
     const errors = data.errors;
     if (errors && Array.isArray(errors) && errors.length > 0) {
       const errMessage = typeof errors[0] === "string"
         ? errors[0]
         : errors[0]?.message || JSON.stringify(errors[0]);
-      return {
-        success: false,
-        error: `API de Netflix: ${errMessage}`,
-      };
+      return { success: false, error: `API de Netflix: ${errMessage}` };
     }
 
     return {
@@ -419,167 +381,11 @@ export async function checkCookie(
 
 // ─── Metadata Extraction ─────────────────────────────────────────────────────
 
-/** _getv: Netflix wraps values in { value: actualValue }, this unwraps them */
-function _getv(d: any, key: string): any {
-  if (!d || typeof d !== "object") return undefined;
-  const v = d[key];
-  if (v === undefined || v === null) return undefined;
-  if (typeof v === "object" && !Array.isArray(v) && "value" in v) return v.value;
-  return v;
-}
-
-/** Convert timestamp ms to readable date */
-function tsToDate(ts: any): string | undefined {
-  if (!ts || typeof ts !== "number") return undefined;
-  try {
-    const d = new Date(ts);
-    return isNaN(d.getTime()) ? undefined : d.toISOString().split("T")[0];
-  } catch {
-    return undefined;
-  }
-}
-
-/** Port of Python parse_metadata_from_json — uses Netflix's actual JSON structure */
-function parseMetadataFromJson(rcData: any): NetflixMetadata {
-  const m: NetflixMetadata = {};
-
-  const models = rcData?.models || {};
-
-  // ── signupContext ──
-  const sc = dig(models, "signupContext", "data") || {};
-  const fields = dig(sc, "flow", "fields") || {};
-  const plan = dig(fields, "currentPlan", "fields") || {};
-
-  m.plan          = _getv(plan, "localizedPlanName") || undefined;
-  m.price         = _getv(plan, "planPrice") || undefined;
-  m.videoQuality  = _getv(plan, "videoQuality") || undefined;
-  m.maxStreams     = _getv(plan, "maxStreams") ?? undefined;
-
-  const nextBilling = _getv(fields, "nextBillingDate");
-  if (nextBilling) m.nextBilling = typeof nextBilling === "number" ? tsToDate(nextBilling) : String(nextBilling);
-
-  const memberSince = _getv(fields, "memberSince");
-  if (memberSince) m.memberSince = typeof memberSince === "number" ? tsToDate(memberSince) : String(memberSince);
-
-  // Country from geo
-  const geoRc = dig(sc, "geo", "requestCountry") || {};
-  if (geoRc.countryName) m.countryName = geoRc.countryName;
-  if (geoRc.id) {
-    m.country = geoRc.id;
-    if (!m.countryName) m.countryName = COUNTRY_NAMES[geoRc.id] || geoRc.id;
-  }
-
-  // userInfo from signupContext
-  const user = sc.userInfo || {};
-  if (user.membershipStatus) m.status = user.membershipStatus;
-  if (user.countryOfSignup) {
-    if (!m.country) m.country = user.countryOfSignup;
-    if (!m.countryName) m.countryName = COUNTRY_NAMES[user.countryOfSignup] || user.countryOfSignup;
-  }
-  if (!m.memberSince && user.memberSince) {
-    m.memberSince = typeof user.memberSince === "number" ? tsToDate(user.memberSince) : String(user.memberSince);
-  }
-
-  // ── Fallbacks from other model paths ──
-  if (!m.status) m.status = dig(models, "userInfo", "data", "membershipStatus");
-  if (!m.country) {
-    const m2 = dig(models, "geo", "data", "requestCountry") || {};
-    if (m2.id) {
-      m.country = m2.id;
-      if (!m.countryName) m.countryName = COUNTRY_NAMES[m2.id] || m2.id;
-    }
-  }
-
-  // ── accountInfo ──
-  const ai = dig(models, "accountInfo", "data") || {};
-  if (!m.email && ai.emailAddress) m.email = ai.emailAddress;
-  if (!m.phone && ai.phoneNumber) m.phone = ai.phoneNumber;
-  if (m.maxStreams === undefined && ai.maxStreams !== undefined) m.maxStreams = Number(ai.maxStreams);
-
-  // ── contentRestrictions ──
-  const cr = dig(models, "contentRestrictions", "data", "profileInfo") || {};
-  if (cr.profileName) {
-    if (!m.profiles) m.profiles = cr.profileName;
-  }
-
-  // ── Payment method ──
-  const pm = _getv(fields, "paymentMethods");
-  if (pm && Array.isArray(pm) && pm.length > 0) {
-    const fv = dig(pm[0], "value") || {};
-    const ct = _getv(fv, "type");
-    const cn = _getv(fv, "displayText");
-    if (ct && cn) m.paymentMethod = `${ct} ****${cn}`;
-  }
-
-  // ── GraphQL ROOT_QUERY ──
-  const rq = dig(rcData, "graphql", "data", "ROOT_QUERY") || {};
-  for (const k of Object.keys(rq)) {
-    if (!k.includes("growthAccount")) continue;
-    const v = rq[k];
-    if (!v || typeof v !== "object") continue;
-
-    // Plan
-    if (!m.plan) {
-      const gp = dig(v, "currentPlan", "plan", "name");
-      if (gp) m.plan = gp;
-    }
-    // Status
-    if (!m.status && v.membershipStatus) m.status = v.membershipStatus;
-    // Member since
-    if (!m.memberSince && v.memberSince) {
-      m.memberSince = typeof v.memberSince === "number" ? tsToDate(v.memberSince) : String(v.memberSince);
-    }
-    // Next billing
-    if (!m.nextBilling && v.nextBillingDate) {
-      const nbd = v.nextBillingDate;
-      if (typeof nbd === "object" && nbd.localDate) m.nextBilling = nbd.localDate;
-      else if (typeof nbd === "string") m.nextBilling = nbd;
-    }
-    // Country of sign up
-    if (!m.country) {
-      const cos = dig(v, "countryOfSignUp");
-      if (cos) {
-        m.country = typeof cos === "object" ? cos.code || cos : cos;
-        if (!m.countryName) m.countryName = COUNTRY_NAMES[m.country] || m.country;
-      }
-    }
-    // Phone
-    if (!m.phone) {
-      const ph = dig(v, "growthLocalizablePhoneNumber", "rawPhoneNumber", "phoneNumberDigits", "value");
-      if (ph) m.phone = ph;
-    }
-    // Profiles
-    const profs = v.profiles;
-    if (profs && Array.isArray(profs) && !m.profiles) {
-      m.profiles = profs.map((p: any) => p.name || "Sin nombre").join(", ");
-    }
-    // Max streams
-    if (m.maxStreams === undefined) {
-      const ms2 = dig(v, "currentPlan", "plan", "streams");
-      if (ms2 !== undefined) m.maxStreams = Number(ms2);
-    }
-    // Video quality
-    if (!m.videoQuality) {
-      const vq = dig(v, "currentPlan", "plan", "videoQuality");
-      if (vq) m.videoQuality = vq;
-    }
-    break; // Only process first growthAccount entry
-  }
-
-  // ── Devices ──
-  const dm = dig(models, "deviceManagementModel", "data") || {};
-  const devs = dm.devices;
-  if (devs && Array.isArray(devs) && devs.length > 0) {
-    m.devices = `${devs.length} dispositivo(s) activo(s)`;
-  }
-
-  return m;
-}
-
 /** Fetch Netflix membership page and extract metadata */
 export async function getMetadata(
   cookieDict: Record<string, string>
 ): Promise<NetflixMetadata> {
+  const metadata: NetflixMetadata = {};
   const cookieString = buildCookieString(cookieDict, false);
 
   try {
@@ -599,38 +405,103 @@ export async function getMetadata(
         "Sec-Fetch-Mode": "navigate",
       },
       signal: controller.signal,
-      redirect: "manual",
+      redirect: "follow",
     });
 
     clearTimeout(timeoutId);
 
-    // If Netflix redirects (301/302/303/307), cookie doesn't have web access
-    if (response.status >= 300 && response.status < 400) {
-      return {};
-    }
-
-    if (response.status !== 200) {
-      return {};
+    if (!response.ok) {
+      return metadata;
     }
 
     const html = await response.text();
+    const jsonData = extractRootJson(html);
 
-    // Extract JSON from HTML using the bot's exact approach
-    const jsonStr = extractRootJson(html);
-    if (!jsonStr) return {};
+    if (jsonData) {
+      const userInfo = dig(jsonData, "data", "userInfo");
+      if (userInfo) {
+        const country = dig(userInfo, "countryOfSignup");
+        if (country) {
+          metadata.country = country;
+          metadata.countryName = COUNTRY_NAMES[country] || country;
+        }
 
-    let rcData: any;
-    try {
-      rcData = JSON.parse(jsonStr);
-    } catch {
-      return {};
+        const membership = dig(userInfo, "membership");
+        if (membership) {
+          const planName = dig(membership, "planName") || dig(membership, "currentSubscription", "planName");
+          if (planName) metadata.plan = planName;
+          const status = dig(membership, "status") || dig(membership, "currentSubscription", "status");
+          if (status) metadata.status = status;
+          const memberSince = dig(membership, "memberSince") || dig(membership, "memberSinceDate");
+          if (memberSince) metadata.memberSince = memberSince;
+          const nextBilling = dig(membership, "nextBillingDate") || dig(membership, "currentSubscription", "nextBillingDate");
+          if (nextBilling) metadata.nextBilling = nextBilling;
+        }
+
+        const subscription = dig(userInfo, "membership", "currentSubscription");
+        if (subscription) {
+          const price = dig(subscription, "price") || dig(subscription, "amount");
+          if (price !== undefined) metadata.price = String(price);
+          const currency = dig(subscription, "currency") || dig(subscription, "priceCurrency");
+          if (currency) metadata.currency = currency;
+        }
+
+        const maxScreens = dig(userInfo, "maxScreens") || dig(userInfo, "membership", "maxScreens");
+        if (maxScreens !== undefined) metadata.maxStreams = Number(maxScreens);
+
+        const email = dig(userInfo, "email") || dig(userInfo, "userEmail");
+        if (email) metadata.email = email;
+
+        const phone = dig(userInfo, "phone") || dig(userInfo, "phoneNumber");
+        if (phone) metadata.phone = phone;
+      }
+
+      const paymentInfo = dig(jsonData, "data", "paymentInfo") || dig(jsonData, "data", "userInfo", "paymentInfo");
+      if (paymentInfo) {
+        const method = dig(paymentInfo, "paymentMethod") || dig(paymentInfo, "method") || dig(paymentInfo, "description");
+        if (method) metadata.paymentMethod = method;
+      }
+
+      const profiles = dig(jsonData, "data", "profiles") || dig(jsonData, "data", "userInfo", "profiles");
+      if (profiles) {
+        if (Array.isArray(profiles)) {
+          metadata.profiles = profiles.map((p: any) => p.name || p.profileName || "Sin nombre").join(", ");
+        } else if (typeof profiles === "string") {
+          metadata.profiles = profiles;
+        }
+      }
+
+      const devices = dig(jsonData, "data", "devices") || dig(jsonData, "data", "userInfo", "devices");
+      if (devices) {
+        if (Array.isArray(devices)) {
+          metadata.devices = `${devices.length} dispositivo(s) activo(s)`;
+        } else if (typeof devices === "string") {
+          metadata.devices = devices;
+        }
+      }
     }
 
-    return parseMetadataFromJson(rcData);
+    if (!metadata.country && !metadata.plan) {
+      const countryRegex = /countryOfSignup['":\s]+['"]([A-Z]{2})['"]/;
+      const countryMatch = html.match(countryRegex);
+      if (countryMatch) {
+        metadata.country = countryMatch[1];
+        metadata.countryName = COUNTRY_NAMES[countryMatch[1]] || countryMatch[1];
+      }
+
+      const planRegex = /(?:plan|subscription)[^"]*?['"]([^'"]+)['"]/i;
+      const planMatch = html.match(planRegex);
+      if (planMatch) metadata.plan = planMatch[1];
+
+      const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
+      const emailMatch = html.match(emailRegex);
+      if (emailMatch) metadata.email = emailMatch[1];
+    }
   } catch (err: any) {
     console.error("Error fetching metadata:", err.message);
-    return {};
   }
+
+  return metadata;
 }
 
 // ─── Full Check ──────────────────────────────────────────────────────────────
@@ -648,7 +519,6 @@ export async function fullCheck(
     };
   }
 
-  // Check NFToken
   const tokenResult = await checkCookie(cookieDict);
 
   if (!tokenResult.success) {
@@ -658,13 +528,10 @@ export async function fullCheck(
     };
   }
 
-  // Get metadata (don't fail if this fails)
   let metadata: NetflixMetadata = {};
   try {
     metadata = await getMetadata(cookieDict);
-  } catch {
-    // Non-critical, continue
-  }
+  } catch {}
 
   return {
     success: true,
