@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import AdmZip from "adm-zip";
 import {
   extractCookiesFromText,
   checkCookie,
@@ -22,7 +23,7 @@ async function processCookie(
       index,
       rawCookie,
       success: false,
-      error: "No se pudieron extraer cookies",
+      error: "No se pudieron extraer cookies del texto",
     };
   }
 
@@ -38,7 +39,7 @@ async function processCookie(
     };
   }
 
-  // Step 2: Get metadata (non-blocking)
+  // Step 2: Get metadata (non-critical)
   let metadata: NetflixMetadata = {};
   try {
     metadata = await getMetadata(cookieDict);
@@ -54,6 +55,84 @@ async function processCookie(
     link: tokenResult.link,
     metadata,
   };
+}
+
+/** Extract cookie strings from a .txt file content (one cookie per block separated by blank lines or line-by-line) */
+function parseTxtFile(content: string): string[] {
+  const cookies: string[] = [];
+
+  // Strategy 1: Try to find individual cookie blocks separated by blank lines
+  // Each block may contain multiple lines (Netscape format) or a single line (raw string)
+  const blocks = content.split(/\n\s*\n/);
+
+  for (const block of blocks) {
+    const trimmed = block.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    // Try parsing as a single cookie
+    const dict = extractCookiesFromText(trimmed);
+    if (dict && Object.keys(dict).length > 0) {
+      cookies.push(trimmed);
+      continue;
+    }
+
+    // If block didn't parse as cookie, try each line individually
+    const lines = trimmed.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("#"));
+    for (const line of lines) {
+      const lineDict = extractCookiesFromText(line);
+      if (lineDict && Object.keys(lineDict).length > 0) {
+        cookies.push(line);
+      }
+    }
+  }
+
+  // If no cookies found with block strategy, try line-by-line
+  if (cookies.length === 0) {
+    const lines = content.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("#"));
+    for (const line of lines) {
+      const dict = extractCookiesFromText(line);
+      if (dict && Object.keys(dict).length > 0) {
+        cookies.push(line);
+      }
+    }
+  }
+
+  return cookies;
+}
+
+/** Extract cookie strings from a .zip file */
+function parseZipFile(buffer: Buffer): string[] {
+  const cookies: string[] = [];
+  let zip: AdmZip;
+
+  try {
+    zip = new AdmZip(buffer);
+  } catch (err) {
+    console.error("Error opening ZIP:", err);
+    return cookies;
+  }
+
+  const entries = zip.getEntries();
+
+  for (const entry of entries) {
+    // Skip directories and hidden files
+    if (entry.isDirectory) continue;
+    if (entry.entryName.startsWith("__MACOSX")) continue;
+    if (entry.entryName.endsWith(".DS_Store")) continue;
+
+    // Only process .txt files
+    if (!entry.entryName.endsWith(".txt")) continue;
+
+    try {
+      const content = entry.getData().toString("utf-8");
+      const fileCookies = parseTxtFile(content);
+      cookies.push(...fileCookies);
+    } catch (err) {
+      console.error(`Error reading ${entry.entryName}:`, err);
+    }
+  }
+
+  return cookies;
 }
 
 export async function POST(request: NextRequest) {
@@ -85,27 +164,14 @@ export async function POST(request: NextRequest) {
         }
       } else {
         const buffer = Buffer.from(await file.arrayBuffer());
-        const content = buffer.toString("utf-8");
 
         if (file.name.endsWith(".zip")) {
-          // For zip files, we need JSZip server-side
-          // Simple approach: treat as text (uncompressed zip won't work this way)
-          // In production, you'd use a server-side zip library
-          // For now, try to parse as plain text
-          return NextResponse.json(
-            {
-              success: false,
-              error: "Archivos ZIP no soportados directamente. Por favor, sube un archivo .txt",
-            },
-            { status: 400 }
-          );
+          cookieTexts = parseZipFile(buffer);
+        } else {
+          // .txt file
+          const content = buffer.toString("utf-8");
+          cookieTexts = parseTxtFile(content);
         }
-
-        // Parse txt file - each line is a cookie string
-        cookieTexts = content
-          .split("\n")
-          .map((line) => line.trim())
-          .filter((line) => line.length > 0);
       }
     } else {
       // Handle JSON body
@@ -124,14 +190,15 @@ export async function POST(request: NextRequest) {
 
     if (cookieTexts.length === 0) {
       return NextResponse.json(
-        { success: false, error: "No se encontraron cookies para verificar" },
+        { success: false, error: "No se encontraron cookies válidas en el archivo" },
         { status: 400 }
       );
     }
 
     // Limit batch size
-    if (cookieTexts.length > 50) {
-      cookieTexts = cookieTexts.slice(0, 50);
+    const MAX_BATCH = 50;
+    if (cookieTexts.length > MAX_BATCH) {
+      cookieTexts = cookieTexts.slice(0, MAX_BATCH);
     }
 
     // Process cookies sequentially (to avoid rate limiting)

@@ -42,8 +42,8 @@ const NETFLIX_MEMBERSHIP_URL = "https://www.netflix.com/account/membership";
 const NF_TOKEN_BASE = "https://www.netflix.com/browse";
 const FETCH_TIMEOUT = 30000;
 
-const ANDROID_USER_AGENT =
-  "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
+const DROID_USER_AGENT =
+  "com.netflix.mediaclient/63884 (Linux; U; Android 13; ro; M2007J3SG; Build/TQ1A.230205.001.A2; Cronet/143.0.7445.0)";
 
 const COUNTRY_NAMES: Record<string, string> = {
   US: "Estados Unidos",
@@ -323,8 +323,15 @@ export async function checkCookie(
 
   const graphqlBody = JSON.stringify({
     operationName: "CreateAutoLoginToken",
-    variables: {},
-    query: `mutation CreateAutoLoginToken{createAutoLoginToken{autoLoginToken{token,tokenType}}}`,
+    variables: {
+      scope: "WEBVIEW_MOBILE_STREAMING",
+    },
+    extensions: {
+      persistedQuery: {
+        version: 1,
+        sha256Hash: "76e97129-f4b5-41a0-a73c-12e674896849",
+      },
+    },
   });
 
   try {
@@ -335,11 +342,12 @@ export async function checkCookie(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "User-Agent": ANDROID_USER_AGENT,
+        "User-Agent": DROID_USER_AGENT,
         Cookie: cookieString,
-        "X-Netflix.browserName": "Chrome",
-        "X-Netflix.browserVersion": "120.0",
-        "Accept-Language": "en-US,en;q=0.9",
+        Accept:
+          "multipart/mixed;deferSpec=20220824, application/graphql-response+json, application/json",
+        Origin: "https://www.netflix.com",
+        Referer: "https://www.netflix.com/",
       },
       body: graphqlBody,
       signal: controller.signal,
@@ -357,13 +365,21 @@ export async function checkCookie(
     const data = await response.json();
 
     // Navigate the response to find the token
-    const token = dig(
+    // Format 1: data.data.createAutoLoginToken (string token directly)
+    const tokenDirect = dig(
+      data,
+      "data",
+      "createAutoLoginToken"
+    );
+    // Format 2: data.data.createAutoLoginToken.autoLoginToken.token
+    const tokenNested = dig(
       data,
       "data",
       "createAutoLoginToken",
       "autoLoginToken",
       "token"
     );
+    const token = typeof tokenDirect === "string" ? tokenDirect : tokenNested;
 
     if (token) {
       const link = `${NF_TOKEN_BASE}?autoLoginToken=${token}`;
@@ -377,9 +393,12 @@ export async function checkCookie(
     // Check for errors
     const errors = data.errors;
     if (errors && Array.isArray(errors) && errors.length > 0) {
+      const errMessage = typeof errors[0] === "string"
+        ? errors[0]
+        : errors[0]?.message || JSON.stringify(errors[0]);
       return {
         success: false,
-        error: errors[0]?.message || "Error en la API de Netflix",
+        error: `API de Netflix: ${errMessage}`,
       };
     }
 
@@ -415,11 +434,11 @@ export async function getMetadata(
     const response = await fetch(NETFLIX_MEMBERSHIP_URL, {
       method: "GET",
       headers: {
-        "User-Agent": ANDROID_USER_AGENT,
+        "User-Agent": DROID_USER_AGENT,
         Cookie: cookieString,
-        "Accept-Language": "en-US,en;q=0.9",
         Accept:
           "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
       },
       signal: controller.signal,
       redirect: "follow",

@@ -640,8 +640,7 @@ export default function Home() {
                   Verificación por Lote
                 </CardTitle>
                 <CardDescription className="text-gray-500 text-sm">
-                  Sube un archivo .txt con una cookie por línea. Máximo 50
-                  cookies por lote.
+                  Sube un archivo <span className="text-white font-medium">.txt</span> o <span className="text-white font-medium">.zip</span> (con archivos .txt dentro). Máximo 50 cookies por lote.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -677,7 +676,7 @@ export default function Home() {
                         Arrastra tu archivo aquí o click para seleccionar
                       </p>
                       <p className="text-gray-600 text-xs">
-                        Formatos: .txt (una cookie por línea)
+                        Formatos aceptados: <span className="text-gray-400">.txt</span> o <span className="text-gray-400">.zip</span>
                       </p>
                     </div>
                   )}
