@@ -428,8 +428,14 @@ export async function getMetadata(
 
         const membership = dig(userInfo, "membership");
         if (membership) {
-          const planName = dig(membership, "planName") || dig(membership, "currentSubscription", "planName");
-          if (planName) metadata.plan = planName;
+          const planName =
+            dig(membership, "planName") ||
+            dig(membership, "plan", "name") ||
+            dig(membership, "plan", "description") ||
+            dig(membership, "currentSubscription", "planName") ||
+            dig(membership, "currentSubscription", "plan", "name") ||
+            dig(membership, "currentSubscription", "plan", "description");
+          if (planName && !planName.startsWith("class=")) metadata.plan = planName;
           const status = dig(membership, "status") || dig(membership, "currentSubscription", "status");
           if (status) metadata.status = status;
           const memberSince = dig(membership, "memberSince") || dig(membership, "memberSinceDate");
@@ -450,7 +456,7 @@ export async function getMetadata(
         if (maxScreens !== undefined) metadata.maxStreams = Number(maxScreens);
 
         const email = dig(userInfo, "email") || dig(userInfo, "userEmail");
-        if (email) metadata.email = email;
+        if (email && !email.includes(".png") && !email.includes(".jpg")) metadata.email = email;
 
         const phone = dig(userInfo, "phone") || dig(userInfo, "phoneNumber");
         if (phone) metadata.phone = phone;
@@ -481,21 +487,50 @@ export async function getMetadata(
       }
     }
 
-    if (!metadata.country && !metadata.plan) {
+    if (!metadata.country) {
       const countryRegex = /countryOfSignup['":\s]+['"]([A-Z]{2})['"]/;
       const countryMatch = html.match(countryRegex);
       if (countryMatch) {
         metadata.country = countryMatch[1];
         metadata.countryName = COUNTRY_NAMES[countryMatch[1]] || countryMatch[1];
       }
+    }
 
-      const planRegex = /(?:plan|subscription)[^"]*?['"]([^'"]+)['"]/i;
-      const planMatch = html.match(planRegex);
-      if (planMatch) metadata.plan = planMatch[1];
+    if (!metadata.plan) {
+      // Try specific JSON key patterns for plan name
+      const planJsonPatterns = [
+        /"planName"\s*:\s*"([^"]+)"/i,
+        /"plan"\s*:\s*"([^"]+)"/i,
+        /"planDescription"\s*:\s*"([^"]+)"/i,
+        /"tier"\s*:\s*"([^"]+)"/i,
+        /"subscriptionPlan"\s*:\s*"([^"]+)"/i,
+      ];
+      for (const pat of planJsonPatterns) {
+        const m = html.match(pat);
+        if (m) {
+          metadata.plan = m[1];
+          break;
+        }
+      }
 
-      const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
-      const emailMatch = html.match(emailRegex);
-      if (emailMatch) metadata.email = emailMatch[1];
+      // Fallback: look for known plan names near "plan" keyword in HTML text
+      if (!metadata.plan) {
+        const knownPlans = /\b(Standard|Premium|Basic|Mobile|With Ads|Estándar|Premium|Básico|Móvil|Con anuncios)\b/i;
+        const planContext = html.match(new RegExp(`plan[^<>]{0,80}?${knownPlans.source}`, "i"));
+        if (planContext) {
+          const planNameMatch = planContext[0].match(knownPlans);
+          if (planNameMatch) metadata.plan = planNameMatch[1];
+        }
+      }
+    }
+
+    if (!metadata.email) {
+      // Match email-like patterns but filter out image/resource file names
+      const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+      const allMatches = html.match(emailRegex) || [];
+      const resourceExts = /\.(png|jpg|jpeg|gif|svg|webp|ico|bmp|woff|woff2|ttf|eot|css|js|mp4|webm)$/i;
+      const realEmail = allMatches.find((e) => !resourceExts.test(e));
+      if (realEmail) metadata.email = realEmail;
     }
   } catch (err: any) {
     console.error("Error fetching metadata:", err.message);
