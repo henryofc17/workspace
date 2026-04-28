@@ -2,12 +2,16 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import {
   Shield,
+  Search,
   Zap,
   Copy,
   LogOut,
@@ -15,13 +19,43 @@ import {
   Loader2,
   Check,
   ExternalLink,
-  AlertTriangle,
   CreditCard,
   Clock,
   TrendingDown,
+  Globe,
+  Tv,
+  Mail,
+  X,
+  Calendar,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+interface NetflixMetadata {
+  country?: string;
+  countryName?: string;
+  plan?: string;
+  price?: string;
+  currency?: string;
+  videoQuality?: string;
+  maxStreams?: number;
+  status?: string;
+  memberSince?: string;
+  nextBilling?: string;
+  email?: string;
+  phone?: string;
+  paymentMethod?: string;
+  profiles?: string;
+  devices?: string;
+}
+
+interface CheckerResult {
+  success: boolean;
+  token?: string;
+  link?: string;
+  metadata?: NetflixMetadata;
+  error?: string;
+}
 
 interface Transaction {
   id: string;
@@ -31,25 +65,44 @@ interface Transaction {
   createdAt: string;
 }
 
+// ─── Metadata Row ────────────────────────────────────────────────────────────
+
+function MetaRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value?: string | number | null }) {
+  if (!value && value !== 0) return null;
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <Icon className="h-4 w-4 text-gray-500 shrink-0" />
+      <span className="text-gray-400">{label}:</span>
+      <span className="text-white font-medium">{value}</span>
+    </div>
+  );
+}
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function Home() {
   const router = useRouter();
 
+  // Auth state
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState("");
   const [credits, setCredits] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
-  // Generate token
+  // Checker state
+  const [cookieText, setCookieText] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [checkerResult, setCheckerResult] = useState<CheckerResult | null>(null);
+
+  // Generate token state
   const [generating, setGenerating] = useState(false);
   const [generatedLink, setGeneratedLink] = useState("");
-  const [generatedToken, setGeneratedToken] = useState("");
+  const [copiedLink, setCopiedLink] = useState(false);
 
-  // Copy cookie
+  // Copy cookie state
   const [copying, setCopying] = useState(false);
   const [copiedCookie, setCopiedCookie] = useState("");
-  const [copiedToClipboard, setCopiedToClipboard] = useState(false);
+  const [copiedCookieClip, setCopiedCookieClip] = useState(false);
 
   // ── Auth Check ──
   useEffect(() => {
@@ -81,27 +134,59 @@ export default function Home() {
     } catch {}
   }, []);
 
+  const refreshCredits = useCallback(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) setCredits(data.user.credits);
+      });
+  }, []);
+
+  // ── Checker: Verify own cookie (free) ──
+  const handleCheck = useCallback(async () => {
+    if (!cookieText.trim()) {
+      toast.error("Pega una cookie para verificar");
+      return;
+    }
+    setChecking(true);
+    setCheckerResult(null);
+    try {
+      const res = await fetch("/api/check-cookie", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cookieText: cookieText.trim() }),
+      });
+      const data = await res.json();
+      setCheckerResult(data);
+      if (data.success) {
+        toast.success("Cookie válida");
+      } else {
+        toast.error(data.error || "Cookie inválida");
+      }
+    } catch {
+      toast.error("Error de conexión");
+    } finally {
+      setChecking(false);
+    }
+  }, [cookieText]);
+
   // ── Generate Token (1 credit) ──
   const handleGenerate = useCallback(async () => {
     if (credits < 1) {
       toast.error("Créditos insuficientes. Pide más al administrador.");
       return;
     }
-
     setGenerating(true);
     setGeneratedLink("");
-    setGeneratedToken("");
-
     try {
       const res = await fetch("/api/user/generate", { method: "POST" });
       const data = await res.json();
-
       if (data.success) {
         setGeneratedLink(data.link);
-        setGeneratedToken(data.token);
         setCredits(data.remainingCredits);
-        toast.success("Token generado exitosamente");
+        refreshCredits();
         loadBalance();
+        toast.success("Token generado exitosamente");
       } else {
         if (data.noCookies) {
           toast.error("No hay cookies disponibles. Se ha notificado al administrador.");
@@ -110,35 +195,32 @@ export default function Home() {
         } else {
           toast.error(data.error || "Error al generar token");
         }
-        // Refresh credits
-        loadBalance();
+        refreshCredits();
       }
     } catch {
       toast.error("Error de conexión");
     } finally {
       setGenerating(false);
     }
-  }, [credits, loadBalance]);
+  }, [credits, loadBalance, refreshCredits]);
 
   // ── Copy Cookie (3 credits) ──
   const handleCopyCookie = useCallback(async () => {
     if (credits < 3) {
-      toast.error("Créditos insuficientes. Necesitas 3 créditos para copiar una cookie.");
+      toast.error("Créditos insuficientes. Necesitas 3 créditos.");
       return;
     }
-
     setCopying(true);
     setCopiedCookie("");
-
     try {
       const res = await fetch("/api/user/copy-cookie", { method: "POST" });
       const data = await res.json();
-
       if (data.success) {
         setCopiedCookie(data.cookie);
         setCredits(data.remainingCredits);
-        toast.success("Cookie copiada exitosamente");
+        refreshCredits();
         loadBalance();
+        toast.success("Cookie obtenida exitosamente");
       } else {
         if (data.noCookies) {
           toast.error("No hay cookies disponibles. Se ha notificado al administrador.");
@@ -147,22 +229,22 @@ export default function Home() {
         } else {
           toast.error(data.error || "Error al copiar cookie");
         }
-        loadBalance();
+        refreshCredits();
       }
     } catch {
       toast.error("Error de conexión");
     } finally {
       setCopying(false);
     }
-  }, [credits, loadBalance]);
+  }, [credits, loadBalance, refreshCredits]);
 
-  // ── Copy to clipboard ──
-  const copyText = useCallback(async (text: string) => {
+  // ── Clipboard helpers ──
+  const copyToClip = useCallback(async (text: string, set: (v: boolean) => void) => {
     try {
       await navigator.clipboard.writeText(text);
-      setCopiedToClipboard(true);
-      toast.success("Copiado al portapapeles");
-      setTimeout(() => setCopiedToClipboard(false), 2000);
+      set(true);
+      toast.success("Copiado");
+      setTimeout(() => set(false), 2000);
     } catch {
       toast.error("No se pudo copiar");
     }
@@ -186,24 +268,24 @@ export default function Home() {
     <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
       {/* Header */}
       <header className="border-b border-white/10 bg-[#141414]/95 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-lg bg-[#E50914] flex items-center justify-center">
               <Shield className="h-5 w-5 text-white" />
             </div>
             <div>
               <h1 className="text-lg font-bold text-white">
-                Netflix Checker
-                <span className="text-[#E50914] ml-1">Pro</span>
+                Netflix Checker<span className="text-[#E50914] ml-1">Pro</span>
               </h1>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Badge variant="outline" className="border-yellow-800 text-yellow-400 text-xs">
-              <Coins className="h-3 w-3 mr-1" />
-              {credits} créditos
-            </Badge>
-            <Button onClick={handleLogout} variant="ghost" size="sm" className="text-gray-400 hover:text-white">
+            <div className="hidden sm:flex items-center gap-1.5 bg-yellow-950/30 border border-yellow-900/20 rounded-full px-3 py-1.5">
+              <Coins className="h-3.5 w-3.5 text-yellow-400" />
+              <span className="text-yellow-400 text-sm font-bold">{credits}</span>
+            </div>
+            <span className="text-gray-500 text-sm hidden sm:inline">{username}</span>
+            <Button onClick={handleLogout} variant="ghost" size="sm" className="text-gray-400 hover:text-white h-8 w-8 p-0">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
@@ -211,149 +293,345 @@ export default function Home() {
       </header>
 
       {/* Main */}
-      <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-8 space-y-6">
-        {/* Welcome */}
-        <div className="text-center">
-          <h2 className="text-xl font-bold text-white">Bienvenido, <span className="text-[#E50914]">{username}</span></h2>
-          <p className="text-gray-500 text-sm mt-1">Genera tokens o copia cookies de Netflix</p>
-        </div>
-
-        {/* Credit Info */}
-        <Card className="border-yellow-900/30 bg-yellow-950/10">
+      <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-6 space-y-6">
+        {/* Credit Banner */}
+        <Card className="border-yellow-900/20 bg-gradient-to-r from-yellow-950/20 to-orange-950/10">
           <CardContent className="p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-yellow-950/50 flex items-center justify-center">
+              <div className="h-11 w-11 rounded-full bg-yellow-950/50 border border-yellow-900/30 flex items-center justify-center">
                 <Coins className="h-5 w-5 text-yellow-400" />
               </div>
               <div>
-                <p className="text-yellow-400 font-bold text-lg">{credits}</p>
-                <p className="text-yellow-600/60 text-xs">Créditos disponibles</p>
+                <p className="text-yellow-400 font-bold text-xl">{credits}</p>
+                <p className="text-yellow-700/60 text-xs">Créditos disponibles</p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-gray-500 text-xs flex items-center gap-1">
-                <Zap className="h-3 w-3" /> Generar Token: <span className="text-white font-semibold">1 crédito</span>
-              </p>
-              <p className="text-gray-500 text-xs flex items-center gap-1 mt-1">
-                <Copy className="h-3 w-3" /> Copiar Cookie: <span className="text-white font-semibold">3 créditos</span>
-              </p>
+            <div className="text-right space-y-1">
+              <div className="flex items-center gap-2 justify-end">
+                <div className="h-2 w-2 rounded-full bg-green-500" />
+                <span className="text-gray-400 text-xs">Generar Token: <span className="text-white font-semibold">1 crédito</span></span>
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <div className="h-2 w-2 rounded-full bg-purple-500" />
+                <span className="text-gray-400 text-xs">Copiar Cookie: <span className="text-white font-semibold">3 créditos</span></span>
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <div className="h-2 w-2 rounded-full bg-blue-500" />
+                <span className="text-gray-400 text-xs">Checker: <span className="text-white font-semibold">Gratis</span></span>
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Actions */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Generate Token */}
-          <Card className="border-green-900/30 bg-[#1F1F1F] hover:border-green-800/50 transition-colors">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-green-400 text-sm flex items-center gap-2">
-                <Zap className="h-4 w-4" />
-                Generar Token
-              </CardTitle>
-              <CardDescription className="text-gray-500 text-xs">
-                Genera un link de acceso a Netflix. Cuesta 1 crédito.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                onClick={handleGenerate}
-                disabled={generating || credits < 1}
-                className="w-full bg-green-700 hover:bg-green-600 text-white font-semibold h-11 disabled:opacity-50"
-              >
-                {generating ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generando...</>
-                ) : (
-                  <><Zap className="h-4 w-4 mr-2" /> Generar Token (1 crédito)</>
-                )}
-              </Button>
+        {/* Tabs */}
+        <Tabs defaultValue="checker" className="space-y-6">
+          <TabsList className="bg-[#1F1F1F] border border-white/10 w-full h-auto p-1">
+            <TabsTrigger
+              value="checker"
+              className="flex-1 py-2.5 text-sm data-[state=active]:bg-blue-600 data-[state=active]:text-white text-gray-400 transition-all"
+            >
+              <Search className="h-4 w-4 mr-2" />
+              Checker
+            </TabsTrigger>
+            <TabsTrigger
+              value="generate"
+              className="flex-1 py-2.5 text-sm data-[state=active]:bg-green-600 data-[state=active]:text-white text-gray-400 transition-all"
+            >
+              <Zap className="h-4 w-4 mr-2" />
+              Generar Token
+            </TabsTrigger>
+            <TabsTrigger
+              value="copy"
+              className="flex-1 py-2.5 text-sm data-[state=active]:bg-purple-600 data-[state=active]:text-white text-gray-400 transition-all"
+            >
+              <Copy className="h-4 w-4 mr-2" />
+              Copiar Cookie
+            </TabsTrigger>
+          </TabsList>
 
-              {generatedLink && (
-                <div className="mt-3 space-y-2">
+          {/* ═══ TAB 1: CHECKER ═══ */}
+          <TabsContent value="checker" className="space-y-4">
+            <Card className="border-white/10 bg-[#1F1F1F]">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-white text-base flex items-center gap-2">
+                  <Search className="h-4 w-4 text-blue-400" />
+                  Verificar Cookie Individual
+                </CardTitle>
+                <CardDescription className="text-gray-500 text-xs">
+                  Pega tu cookie de Netflix para verificarla y extraer metadatos. Completamente gratis.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Textarea
+                  value={cookieText}
+                  onChange={(e) => setCookieText(e.target.value)}
+                  placeholder="Pega tu cookie aquí...&#10;&#10;Ejemplo: NetflixId=v1%3B...; SecureNetflixId=v2%3B...; nfvdid=..."
+                  className="bg-[#0a0a0a] border-white/10 text-white text-sm font-mono placeholder:text-gray-600 min-h-[120px] resize-y focus:border-blue-500/50"
+                />
+                <Button
+                  onClick={handleCheck}
+                  disabled={checking || !cookieText.trim()}
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold h-11 transition-colors disabled:opacity-50"
+                >
+                  {checking ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Verificando...</>
+                  ) : (
+                    <><Search className="h-4 w-4 mr-2" /> Verificar Cookie</>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {checking && (
+              <div className="space-y-3">
+                <Skeleton className="h-28 w-full bg-[#1F1F1F] rounded-xl" />
+                <Skeleton className="h-16 w-full bg-[#1F1F1F] rounded-xl" />
+              </div>
+            )}
+
+            {checkerResult && !checking && (
+              checkerResult.success ? (
+                <Card className="border-green-900/40 bg-[#0d1a0d]">
+                  <CardHeader className="pb-3 px-4 pt-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-10 w-10 rounded-full bg-green-950/50 flex items-center justify-center shrink-0">
+                          <Shield className="h-5 w-5 text-green-400" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-green-400 text-sm">Cookie Válida</CardTitle>
+                          <CardDescription className="text-green-600/60 text-xs">
+                            {checkerResult.metadata?.plan || "Plan Desconocido"}
+                            {checkerResult.metadata?.countryName ? ` • ${checkerResult.metadata.countryName}` : ""}
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="border-green-800 text-green-400 text-[10px]">
+                        {checkerResult.metadata?.status || "Activa"}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4 space-y-3">
+                    {checkerResult.link && (
+                      <div className="bg-black/40 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-green-400 font-semibold flex items-center gap-1">
+                            <Zap className="h-3 w-3" /> NFToken
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => copyToClip(checkerResult.link!, setCopiedLink)}
+                              className="h-6 px-2 text-[10px] text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
+                            >
+                              {copiedLink ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                            </button>
+                            <a href={checkerResult.link} target="_blank" rel="noopener noreferrer"
+                              className="h-6 px-2 text-[10px] text-gray-400 hover:text-white hover:bg-white/10 inline-flex items-center rounded transition-colors">
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-gray-500 font-mono break-all leading-relaxed">{checkerResult.link}</p>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                      <MetaRow icon={Globe} label="País" value={checkerResult.metadata?.countryName || checkerResult.metadata?.country} />
+                      <MetaRow icon={Tv} label="Plan" value={checkerResult.metadata?.plan} />
+                      <MetaRow icon={Mail} label="Email" value={checkerResult.metadata?.email} />
+                      <MetaRow icon={Calendar} label="Desde" value={checkerResult.metadata?.memberSince} />
+                      <MetaRow icon={Calendar} label="Próx. Cobro" value={checkerResult.metadata?.nextBilling} />
+                      <MetaRow icon={CreditCard} label="Pago" value={checkerResult.metadata?.paymentMethod} />
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card className="border-red-900/40 bg-[#1a1010]">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="h-10 w-10 rounded-full bg-red-950/50 flex items-center justify-center shrink-0">
+                        <X className="h-5 w-5 text-red-400" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-red-400 font-semibold text-sm">Cookie Inválida</h4>
+                        <p className="text-red-300/60 text-xs mt-1">{checkerResult.error || "Error desconocido"}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            )}
+          </TabsContent>
+
+          {/* ═══ TAB 2: GENERATE TOKEN ═══ */}
+          <TabsContent value="generate" className="space-y-4">
+            <Card className="border-green-900/30 bg-[#1F1F1F]">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-green-400 text-base flex items-center gap-2">
+                  <Zap className="h-5 w-5" />
+                  Generar Token de Netflix
+                </CardTitle>
+                <CardDescription className="text-gray-500 text-xs">
+                  Se usa una cookie del servidor para generar tu link de acceso. Cuesta <span className="text-white font-semibold">1 crédito</span>.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-[#0a0a0a] border border-white/5">
+                  <div className="flex items-center gap-2">
+                    <Coins className="h-4 w-4 text-yellow-400" />
+                    <span className="text-gray-400 text-sm">Tu saldo:</span>
+                  </div>
+                  <span className={`text-lg font-bold ${credits >= 1 ? "text-green-400" : "text-red-400"}`}>
+                    {credits} <span className="text-xs text-gray-500 font-normal">créditos</span>
+                  </span>
+                </div>
+
+                <Button
+                  onClick={handleGenerate}
+                  disabled={generating || credits < 1}
+                  className="w-full bg-green-600 hover:bg-green-500 text-white font-semibold h-12 transition-colors disabled:opacity-50 text-base"
+                >
+                  {generating ? (
+                    <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Generando Token...</>
+                  ) : (
+                    <><Zap className="h-5 w-5 mr-2" /> Generar Token</>
+                  )}
+                </Button>
+
+                {credits < 1 && (
+                  <p className="text-red-400/60 text-xs text-center">
+                    Créditos insuficientes. Contacta al administrador para obtener más.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            {generatedLink && (
+              <Card className="border-green-900/40 bg-[#0d1a0d]">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-full bg-green-950/50 flex items-center justify-center">
+                      <Check className="h-4 w-4 text-green-400" />
+                    </div>
+                    <div>
+                      <p className="text-green-400 font-semibold text-sm">Token Generado</p>
+                      <p className="text-green-600/60 text-xs">Créditos restantes: {credits}</p>
+                    </div>
+                  </div>
                   <div className="bg-black/40 rounded-lg p-3">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-green-400 font-semibold">NFToken Link</span>
+                      <span className="text-xs text-green-400 font-semibold flex items-center gap-1">
+                        <Zap className="h-3 w-3" /> Tu Link de Netflix
+                      </span>
                       <div className="flex items-center gap-1">
                         <button
-                          onClick={() => copyText(generatedLink)}
-                          className="h-6 px-2 rounded text-[10px] text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                          onClick={() => copyToClip(generatedLink, setCopiedLink)}
+                          className="h-7 px-3 text-xs text-gray-400 hover:text-white hover:bg-white/10 rounded-md transition-colors flex items-center gap-1"
                         >
-                          {copiedToClipboard ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                          {copiedLink ? <><Check className="h-3 w-3" /> Copiado</> : <><Copy className="h-3 w-3" /> Copiar Link</>}
                         </button>
                         <a
                           href={generatedLink}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="h-6 px-2 rounded text-[10px] text-gray-400 hover:text-white hover:bg-white/10 inline-flex items-center transition-colors"
+                          className="h-7 px-3 text-xs text-green-400 hover:text-green-300 hover:bg-green-950/30 rounded-md transition-colors flex items-center gap-1 font-medium"
                         >
-                          <ExternalLink className="h-3 w-3" />
+                          Abrir <ExternalLink className="h-3 w-3" />
                         </a>
                       </div>
                     </div>
                     <p className="text-[10px] text-gray-500 font-mono break-all leading-relaxed">{generatedLink}</p>
                   </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* ═══ TAB 3: COPY COOKIE ═══ */}
+          <TabsContent value="copy" className="space-y-4">
+            <Card className="border-purple-900/30 bg-[#1F1F1F]">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-purple-400 text-base flex items-center gap-2">
+                  <Copy className="h-5 w-5" />
+                  Copiar Cookie de Netflix
+                </CardTitle>
+                <CardDescription className="text-gray-500 text-xs">
+                  Obtén una cookie funcional del servidor. Cuesta <span className="text-white font-semibold">3 créditos</span>.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-[#0a0a0a] border border-white/5">
+                  <div className="flex items-center gap-2">
+                    <Coins className="h-4 w-4 text-yellow-400" />
+                    <span className="text-gray-400 text-sm">Tu saldo:</span>
+                  </div>
+                  <span className={`text-lg font-bold ${credits >= 3 ? "text-green-400" : "text-red-400"}`}>
+                    {credits} <span className="text-xs text-gray-500 font-normal">créditos</span>
+                  </span>
                 </div>
-              )}
-            </CardContent>
-          </Card>
 
-          {/* Copy Cookie */}
-          <Card className="border-purple-900/30 bg-[#1F1F1F] hover:border-purple-800/50 transition-colors">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-purple-400 text-sm flex items-center gap-2">
-                <Copy className="h-4 w-4" />
-                Copiar Cookie
-              </CardTitle>
-              <CardDescription className="text-gray-500 text-xs">
-                Copia una cookie funcional de Netflix. Cuesta 3 créditos.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                onClick={handleCopyCookie}
-                disabled={copying || credits < 3}
-                className="w-full bg-purple-700 hover:bg-purple-600 text-white font-semibold h-11 disabled:opacity-50"
-              >
-                {copying ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Obteniendo...</>
-                ) : (
-                  <><Copy className="h-4 w-4 mr-2" /> Copiar Cookie (3 créditos)</>
+                <Button
+                  onClick={handleCopyCookie}
+                  disabled={copying || credits < 3}
+                  className="w-full bg-purple-600 hover:bg-purple-500 text-white font-semibold h-12 transition-colors disabled:opacity-50 text-base"
+                >
+                  {copying ? (
+                    <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Obteniendo Cookie...</>
+                  ) : (
+                    <><Copy className="h-5 w-5 mr-2" /> Copiar Cookie</>
+                  )}
+                </Button>
+
+                {credits < 3 && (
+                  <p className="text-red-400/60 text-xs text-center">
+                    Necesitas al menos 3 créditos. Contacta al administrador.
+                  </p>
                 )}
-              </Button>
+              </CardContent>
+            </Card>
 
-              {copiedCookie && (
-                <div className="mt-3">
-                  <div className="bg-black/40 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-purple-400 font-semibold">Cookie</span>
-                      <button
-                        onClick={() => copyText(copiedCookie)}
-                        className="h-6 px-2 rounded text-[10px] text-gray-400 hover:text-white hover:bg-white/10 transition-colors flex items-center gap-1"
-                      >
-                        {copiedToClipboard ? <><Check className="h-3 w-3" /> Copiado</> : <><Copy className="h-3 w-3" /> Copiar</>}
-                      </button>
+            {copiedCookie && (
+              <Card className="border-purple-900/40 bg-[#120d1a]">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-8 w-8 rounded-full bg-purple-950/50 flex items-center justify-center">
+                        <Check className="h-4 w-4 text-purple-400" />
+                      </div>
+                      <div>
+                        <p className="text-purple-400 font-semibold text-sm">Cookie Obtenida</p>
+                        <p className="text-purple-600/60 text-xs">Créditos restantes: {credits}</p>
+                      </div>
                     </div>
-                    <p className="text-[10px] text-gray-500 font-mono break-all leading-relaxed max-h-20 overflow-y-auto custom-scrollbar">
+                    <button
+                      onClick={() => copyToClip(copiedCookie, setCopiedCookieClip)}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+                    >
+                      {copiedCookieClip ? <><Check className="h-4 w-4" /> Copiado</> : <><Copy className="h-4 w-4" /> Copiar Cookie</>}
+                    </button>
+                  </div>
+                  <div className="bg-black/40 rounded-lg p-3">
+                    <p className="text-[10px] text-gray-500 font-mono break-all leading-relaxed max-h-24 overflow-y-auto custom-scrollbar">
                       {copiedCookie}
                     </p>
                   </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
 
         {/* Transaction History */}
         <Card className="border-white/10 bg-[#1F1F1F]">
           <CardHeader className="pb-3">
             <CardTitle className="text-white text-sm flex items-center gap-2">
               <CreditCard className="h-4 w-4 text-[#E50914]" />
-              Historial de Créditos
+              Historial
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+            <div className="space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar">
               {transactions.length === 0 ? (
-                <p className="text-gray-600 text-sm text-center py-6">Sin actividad</p>
+                <p className="text-gray-600 text-sm text-center py-6">Sin actividad aún</p>
               ) : (
                 transactions.map((t) => (
                   <div key={t.id} className="flex items-center justify-between p-2.5 rounded-lg bg-[#0a0a0a]">
@@ -384,7 +662,7 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="border-t border-white/5 bg-[#0a0a0a]">
-        <div className="max-w-2xl mx-auto px-4 py-6">
+        <div className="max-w-3xl mx-auto px-4 py-6">
           <div className="flex flex-col items-center gap-3">
             <p className="text-gray-500 text-xs">
               Netflix Cookie Checker Pro — Desarrollado por <span className="text-white font-semibold">HacheJota</span>
@@ -421,6 +699,8 @@ export default function Home() {
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #555; }
+        [role="progressbar"] > div { background-color: #E50914 !important; }
       `}</style>
     </div>
   );
