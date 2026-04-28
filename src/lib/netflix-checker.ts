@@ -328,8 +328,8 @@ export async function checkCookie(
     },
     extensions: {
       persistedQuery: {
-        version: 1,
-        sha256Hash: "76e97129-f4b5-41a0-a73c-12e674896849",
+        version: 102,
+        id: "76e97129-f4b5-41a0-a73c-12e674896849",
       },
     },
   });
