@@ -599,12 +599,17 @@ export async function getMetadata(
         "Sec-Fetch-Mode": "navigate",
       },
       signal: controller.signal,
-      redirect: "follow",
+      redirect: "manual",
     });
 
     clearTimeout(timeoutId);
 
-    if (!response.ok) {
+    // If Netflix redirects (301/302/303/307), cookie doesn't have web access
+    if (response.status >= 300 && response.status < 400) {
+      return {};
+    }
+
+    if (response.status !== 200) {
       return {};
     }
 
