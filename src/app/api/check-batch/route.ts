@@ -57,41 +57,46 @@ async function processCookie(
   };
 }
 
-/** Extract cookie strings from a .txt file content (one cookie per block separated by blank lines or line-by-line) */
+/** Check if a string looks like it contains a Netflix cookie (any format) */
+function looksLikeCookie(text: string): boolean {
+  const t = text.trim();
+  if (!t || t.length < 10) return false;
+  // Must contain at least one Netflix cookie key
+  const hasNetflixKey = /NetflixId|SecureNetflixId|nfvdid/i.test(t);
+  // Must contain = signs (key=value pairs)
+  const hasEquals = t.includes("=");
+  return hasNetflixKey && hasEquals;
+}
+
+/** Extract cookie strings from a .txt file content */
 function parseTxtFile(content: string): string[] {
   const cookies: string[] = [];
 
-  // Strategy 1: Try to find individual cookie blocks separated by blank lines
-  // Each block may contain multiple lines (Netscape format) or a single line (raw string)
+  if (!content || !content.trim()) return cookies;
+
+  // Strategy: Split by double newlines (blank line separator between cookies)
   const blocks = content.split(/\n\s*\n/);
 
   for (const block of blocks) {
     const trimmed = block.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("---")) continue;
 
-    // Try parsing as a single cookie
+    // Check if this block contains a Netflix cookie
+    if (!looksLikeCookie(trimmed)) continue;
+
+    // Try to parse it — if it works, add it
     const dict = extractCookiesFromText(trimmed);
     if (dict && Object.keys(dict).length > 0) {
       cookies.push(trimmed);
       continue;
     }
 
-    // If block didn't parse as cookie, try each line individually
-    const lines = trimmed.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("#"));
+    // If block didn't parse as single cookie, try line-by-line within block
+    const lines = trimmed.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("#") && !l.startsWith("---"));
     for (const line of lines) {
+      if (!looksLikeCookie(line)) continue;
       const lineDict = extractCookiesFromText(line);
       if (lineDict && Object.keys(lineDict).length > 0) {
-        cookies.push(line);
-      }
-    }
-  }
-
-  // If no cookies found with block strategy, try line-by-line
-  if (cookies.length === 0) {
-    const lines = content.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("#"));
-    for (const line of lines) {
-      const dict = extractCookiesFromText(line);
-      if (dict && Object.keys(dict).length > 0) {
         cookies.push(line);
       }
     }
@@ -100,7 +105,7 @@ function parseTxtFile(content: string): string[] {
   return cookies;
 }
 
-/** Extract cookie strings from a .zip file */
+/** Extract cookie strings from a .zip file — reads ALL files inside */
 function parseZipFile(buffer: Buffer): string[] {
   const cookies: string[] = [];
   let zip: AdmZip;
@@ -115,18 +120,23 @@ function parseZipFile(buffer: Buffer): string[] {
   const entries = zip.getEntries();
 
   for (const entry of entries) {
-    // Skip directories and hidden files
+    // Skip directories and hidden/system files
     if (entry.isDirectory) continue;
     if (entry.entryName.startsWith("__MACOSX")) continue;
     if (entry.entryName.endsWith(".DS_Store")) continue;
+    if (entry.entryName.endsWith("/")) continue;
 
-    // Only process .txt files
-    if (!entry.entryName.endsWith(".txt")) continue;
+    // Skip obviously non-text files (images, etc)
+    const name = entry.entryName.toLowerCase();
+    if (/\.(png|jpg|jpeg|gif|bmp|ico|exe|dll|so|dylib|pdf|doc|docx)$/i.test(entry.entryName)) continue;
 
     try {
       const content = entry.getData().toString("utf-8");
       const fileCookies = parseTxtFile(content);
-      cookies.push(...fileCookies);
+      if (fileCookies.length > 0) {
+        console.log(`ZIP: ${entry.entryName} → ${fileCookies.length} cookie(s) encontrada(s)`);
+        cookies.push(...fileCookies);
+      }
     } catch (err) {
       console.error(`Error reading ${entry.entryName}:`, err);
     }

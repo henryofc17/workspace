@@ -419,12 +419,167 @@ export async function checkCookie(
 
 // ─── Metadata Extraction ─────────────────────────────────────────────────────
 
+/** _getv: Netflix wraps values in { value: actualValue }, this unwraps them */
+function _getv(d: any, key: string): any {
+  if (!d || typeof d !== "object") return undefined;
+  const v = d[key];
+  if (v === undefined || v === null) return undefined;
+  if (typeof v === "object" && !Array.isArray(v) && "value" in v) return v.value;
+  return v;
+}
+
+/** Convert timestamp ms to readable date */
+function tsToDate(ts: any): string | undefined {
+  if (!ts || typeof ts !== "number") return undefined;
+  try {
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? undefined : d.toISOString().split("T")[0];
+  } catch {
+    return undefined;
+  }
+}
+
+/** Port of Python parse_metadata_from_json — uses Netflix's actual JSON structure */
+function parseMetadataFromJson(rcData: any): NetflixMetadata {
+  const m: NetflixMetadata = {};
+
+  const models = rcData?.models || {};
+
+  // ── signupContext ──
+  const sc = dig(models, "signupContext", "data") || {};
+  const fields = dig(sc, "flow", "fields") || {};
+  const plan = dig(fields, "currentPlan", "fields") || {};
+
+  m.plan          = _getv(plan, "localizedPlanName") || undefined;
+  m.price         = _getv(plan, "planPrice") || undefined;
+  m.videoQuality  = _getv(plan, "videoQuality") || undefined;
+  m.maxStreams     = _getv(plan, "maxStreams") ?? undefined;
+
+  const nextBilling = _getv(fields, "nextBillingDate");
+  if (nextBilling) m.nextBilling = typeof nextBilling === "number" ? tsToDate(nextBilling) : String(nextBilling);
+
+  const memberSince = _getv(fields, "memberSince");
+  if (memberSince) m.memberSince = typeof memberSince === "number" ? tsToDate(memberSince) : String(memberSince);
+
+  // Country from geo
+  const geoRc = dig(sc, "geo", "requestCountry") || {};
+  if (geoRc.countryName) m.countryName = geoRc.countryName;
+  if (geoRc.id) {
+    m.country = geoRc.id;
+    if (!m.countryName) m.countryName = COUNTRY_NAMES[geoRc.id] || geoRc.id;
+  }
+
+  // userInfo from signupContext
+  const user = sc.userInfo || {};
+  if (user.membershipStatus) m.status = user.membershipStatus;
+  if (user.countryOfSignup) {
+    if (!m.country) m.country = user.countryOfSignup;
+    if (!m.countryName) m.countryName = COUNTRY_NAMES[user.countryOfSignup] || user.countryOfSignup;
+  }
+  if (!m.memberSince && user.memberSince) {
+    m.memberSince = typeof user.memberSince === "number" ? tsToDate(user.memberSince) : String(user.memberSince);
+  }
+
+  // ── Fallbacks from other model paths ──
+  if (!m.status) m.status = dig(models, "userInfo", "data", "membershipStatus");
+  if (!m.country) {
+    const m2 = dig(models, "geo", "data", "requestCountry") || {};
+    if (m2.id) {
+      m.country = m2.id;
+      if (!m.countryName) m.countryName = COUNTRY_NAMES[m2.id] || m2.id;
+    }
+  }
+
+  // ── accountInfo ──
+  const ai = dig(models, "accountInfo", "data") || {};
+  if (!m.email && ai.emailAddress) m.email = ai.emailAddress;
+  if (!m.phone && ai.phoneNumber) m.phone = ai.phoneNumber;
+  if (m.maxStreams === undefined && ai.maxStreams !== undefined) m.maxStreams = Number(ai.maxStreams);
+
+  // ── contentRestrictions ──
+  const cr = dig(models, "contentRestrictions", "data", "profileInfo") || {};
+  if (cr.profileName) {
+    if (!m.profiles) m.profiles = cr.profileName;
+  }
+
+  // ── Payment method ──
+  const pm = _getv(fields, "paymentMethods");
+  if (pm && Array.isArray(pm) && pm.length > 0) {
+    const fv = dig(pm[0], "value") || {};
+    const ct = _getv(fv, "type");
+    const cn = _getv(fv, "displayText");
+    if (ct && cn) m.paymentMethod = `${ct} ****${cn}`;
+  }
+
+  // ── GraphQL ROOT_QUERY ──
+  const rq = dig(rcData, "graphql", "data", "ROOT_QUERY") || {};
+  for (const k of Object.keys(rq)) {
+    if (!k.includes("growthAccount")) continue;
+    const v = rq[k];
+    if (!v || typeof v !== "object") continue;
+
+    // Plan
+    if (!m.plan) {
+      const gp = dig(v, "currentPlan", "plan", "name");
+      if (gp) m.plan = gp;
+    }
+    // Status
+    if (!m.status && v.membershipStatus) m.status = v.membershipStatus;
+    // Member since
+    if (!m.memberSince && v.memberSince) {
+      m.memberSince = typeof v.memberSince === "number" ? tsToDate(v.memberSince) : String(v.memberSince);
+    }
+    // Next billing
+    if (!m.nextBilling && v.nextBillingDate) {
+      const nbd = v.nextBillingDate;
+      if (typeof nbd === "object" && nbd.localDate) m.nextBilling = nbd.localDate;
+      else if (typeof nbd === "string") m.nextBilling = nbd;
+    }
+    // Country of sign up
+    if (!m.country) {
+      const cos = dig(v, "countryOfSignUp");
+      if (cos) {
+        m.country = typeof cos === "object" ? cos.code || cos : cos;
+        if (!m.countryName) m.countryName = COUNTRY_NAMES[m.country] || m.country;
+      }
+    }
+    // Phone
+    if (!m.phone) {
+      const ph = dig(v, "growthLocalizablePhoneNumber", "rawPhoneNumber", "phoneNumberDigits", "value");
+      if (ph) m.phone = ph;
+    }
+    // Profiles
+    const profs = v.profiles;
+    if (profs && Array.isArray(profs) && !m.profiles) {
+      m.profiles = profs.map((p: any) => p.name || "Sin nombre").join(", ");
+    }
+    // Max streams
+    if (m.maxStreams === undefined) {
+      const ms2 = dig(v, "currentPlan", "plan", "streams");
+      if (ms2 !== undefined) m.maxStreams = Number(ms2);
+    }
+    // Video quality
+    if (!m.videoQuality) {
+      const vq = dig(v, "currentPlan", "plan", "videoQuality");
+      if (vq) m.videoQuality = vq;
+    }
+    break; // Only process first growthAccount entry
+  }
+
+  // ── Devices ──
+  const dm = dig(models, "deviceManagementModel", "data") || {};
+  const devs = dm.devices;
+  if (devs && Array.isArray(devs) && devs.length > 0) {
+    m.devices = `${devs.length} dispositivo(s) activo(s)`;
+  }
+
+  return m;
+}
+
 /** Fetch Netflix membership page and extract metadata */
 export async function getMetadata(
   cookieDict: Record<string, string>
 ): Promise<NetflixMetadata> {
-  const metadata: NetflixMetadata = {};
-
   const cookieString = buildCookieString(cookieDict, false);
 
   try {
@@ -434,11 +589,14 @@ export async function getMetadata(
     const response = await fetch(NETFLIX_MEMBERSHIP_URL, {
       method: "GET",
       headers: {
-        "User-Agent": DROID_USER_AGENT,
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         Cookie: cookieString,
         Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
       },
       signal: controller.signal,
       redirect: "follow",
@@ -447,144 +605,27 @@ export async function getMetadata(
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      return metadata;
+      return {};
     }
 
     const html = await response.text();
 
-    // Extract JSON from HTML
-    const jsonData = extractRootJson(html);
+    // Extract JSON from HTML using the bot's exact approach
+    const jsonStr = extractRootJson(html);
+    if (!jsonStr) return {};
 
-    if (jsonData) {
-      // Extract user info
-      const userInfo = dig(jsonData, "data", "userInfo");
-      if (userInfo) {
-        // Country
-        const country = dig(userInfo, "countryOfSignup");
-        if (country) {
-          metadata.country = country;
-          metadata.countryName = COUNTRY_NAMES[country] || country;
-        }
-
-        // Membership info
-        const membership = dig(userInfo, "membership");
-        if (membership) {
-          // Plan
-          const planName = dig(membership, "planName") || dig(membership, "currentSubscription", "planName");
-          if (planName) metadata.plan = planName;
-
-          // Status
-          const status = dig(membership, "status") || dig(membership, "currentSubscription", "status");
-          if (status) metadata.status = status;
-
-          // Member since
-          const memberSince = dig(membership, "memberSince") || dig(membership, "memberSinceDate");
-          if (memberSince) metadata.memberSince = memberSince;
-
-          // Next billing
-          const nextBilling = dig(membership, "nextBillingDate") || dig(membership, "currentSubscription", "nextBillingDate");
-          if (nextBilling) metadata.nextBilling = nextBilling;
-        }
-
-        // Current subscription details
-        const subscription = dig(userInfo, "membership", "currentSubscription");
-        if (subscription) {
-          const price = dig(subscription, "price") || dig(subscription, "amount");
-          if (price !== undefined) {
-            metadata.price = String(price);
-          }
-
-          const currency = dig(subscription, "currency") || dig(subscription, "priceCurrency");
-          if (currency) metadata.currency = currency;
-        }
-
-        // Plan features
-        const planFeatures = dig(userInfo, "membership", "planFeatures") || dig(userInfo, "planFeatures");
-        if (planFeatures) {
-          if (typeof planFeatures === "string") {
-            // Try to extract video quality from the features string
-            const qualityMatch = planFeatures.match(/(\d+p|HD|Ultra HD|4K|HDR|Standard|Basic|Premium|UHD)/i);
-            if (qualityMatch) {
-              metadata.videoQuality = qualityMatch[0];
-            }
-          } else if (Array.isArray(planFeatures)) {
-            const qualityStr = planFeatures.join(", ");
-            const qualityMatch = qualityStr.match(/(\d+p|HD|Ultra HD|4K|HDR|Standard|Basic|Premium|UHD)/i);
-            if (qualityMatch) {
-              metadata.videoQuality = qualityMatch[0];
-            }
-          }
-        }
-
-        // Max streams
-        const maxScreens = dig(userInfo, "maxScreens") || dig(userInfo, "membership", "maxScreens") || dig(userInfo, "membership", "currentSubscription", "maxScreens");
-        if (maxScreens !== undefined) {
-          metadata.maxStreams = Number(maxScreens);
-        }
-
-        // Email
-        const email = dig(userInfo, "email") || dig(userInfo, "userEmail");
-        if (email) metadata.email = email;
-
-        // Phone
-        const phone = dig(userInfo, "phone") || dig(userInfo, "phoneNumber");
-        if (phone) metadata.phone = phone;
-      }
-
-      // Payment method
-      const paymentInfo = dig(jsonData, "data", "paymentInfo") || dig(jsonData, "data", "userInfo", "paymentInfo");
-      if (paymentInfo) {
-        const method = dig(paymentInfo, "paymentMethod") || dig(paymentInfo, "method") || dig(paymentInfo, "description");
-        if (method) metadata.paymentMethod = method;
-      }
-
-      // Profiles
-      const profiles = dig(jsonData, "data", "profiles") || dig(jsonData, "data", "userInfo", "profiles");
-      if (profiles) {
-        if (Array.isArray(profiles)) {
-          metadata.profiles = profiles.map((p: any) => p.name || p.profileName || "Sin nombre").join(", ");
-        } else if (typeof profiles === "string") {
-          metadata.profiles = profiles;
-        }
-      }
-
-      // Devices
-      const devices = dig(jsonData, "data", "devices") || dig(jsonData, "data", "userInfo", "devices");
-      if (devices) {
-        if (Array.isArray(devices)) {
-          metadata.devices = `${devices.length} dispositivo(s) activo(s)`;
-        } else if (typeof devices === "string") {
-          metadata.devices = devices;
-        }
-      }
+    let rcData: any;
+    try {
+      rcData = JSON.parse(jsonStr);
+    } catch {
+      return {};
     }
 
-    // If JSON parsing didn't work well, try regex extraction from HTML
-    if (!metadata.country && !metadata.plan) {
-      // Try to extract from HTML content
-      const countryRegex = /countryOfSignup['":\s]+['"]([A-Z]{2})['"]/;
-      const countryMatch = html.match(countryRegex);
-      if (countryMatch) {
-        metadata.country = countryMatch[1];
-        metadata.countryName = COUNTRY_NAMES[countryMatch[1]] || countryMatch[1];
-      }
-
-      // Try to get plan from the page title or content
-      const planRegex = /(?:plan|subscription)[^"]*?['"]([^'"]+)['"]/i;
-      const planMatch = html.match(planRegex);
-      if (planMatch) metadata.plan = planMatch[1];
-
-      // Try email
-      const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
-      const emailMatch = html.match(emailRegex);
-      if (emailMatch) metadata.email = emailMatch[1];
-    }
+    return parseMetadataFromJson(rcData);
   } catch (err: any) {
-    // Return whatever we managed to get
     console.error("Error fetching metadata:", err.message);
+    return {};
   }
-
-  return metadata;
 }
 
 // ─── Full Check ──────────────────────────────────────────────────────────────
