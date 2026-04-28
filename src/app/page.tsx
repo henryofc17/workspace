@@ -1,720 +1,390 @@
 "use client";
 
-import React, { useState, useCallback, useRef } from "react";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import React, { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import {
-  Search,
-  Upload,
-  Download,
+  Shield,
+  Zap,
   Copy,
+  LogOut,
+  Coins,
+  Loader2,
   Check,
   ExternalLink,
-  Shield,
-  Globe,
+  AlertTriangle,
   CreditCard,
-  Monitor,
-  User,
-  Mail,
-  Phone,
-  Tv,
-  Calendar,
-  Zap,
-  X,
-  FileText,
-  Loader2,
+  Clock,
+  TrendingDown,
 } from "lucide-react";
-import JSZip from "jszip";
-import { saveAs } from "file-saver";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-interface NetflixMetadata {
-  country?: string;
-  countryName?: string;
-  plan?: string;
-  price?: string;
-  currency?: string;
-  videoQuality?: string;
-  maxStreams?: number;
-  status?: string;
-  memberSince?: string;
-  nextBilling?: string;
-  email?: string;
-  phone?: string;
-  paymentMethod?: string;
-  profiles?: string;
-  devices?: string;
-}
-
-interface CheckResult {
-  success: boolean;
-  token?: string;
-  link?: string;
-  metadata?: NetflixMetadata;
-  error?: string;
-  index?: number;
-  rawCookie?: string;
-}
-
-interface BatchStats {
-  total: number;
-  hits: number;
-  fails: number;
-}
-
-// ─── Helper ──────────────────────────────────────────────────────────────────
-
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 6).toUpperCase();
-}
-
-// ─── Metadata Icon Row ───────────────────────────────────────────────────────
-
-function MetaRow({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value?: string | number | null;
-}) {
-  if (!value && value !== 0) return null;
-  return (
-    <div className="flex items-center gap-2 text-sm">
-      <Icon className="h-4 w-4 text-netflix-muted shrink-0" />
-      <span className="text-gray-400">{label}:</span>
-      <span className="text-white font-medium">{value}</span>
-    </div>
-  );
-}
-
-// ─── Result Card ─────────────────────────────────────────────────────────────
-
-function ResultCard({ result }: { result: CheckResult }) {
-  const [copiedToken, setCopiedToken] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
-
-  const copyToClipboard = useCallback(
-    async (text: string, type: "token" | "link") => {
-      try {
-        await navigator.clipboard.writeText(text);
-        if (type === "token") {
-          setCopiedToken(true);
-          setTimeout(() => setCopiedToken(false), 2000);
-        } else {
-          setCopiedLink(true);
-          setTimeout(() => setCopiedLink(false), 2000);
-        }
-        toast.success("¡Copiado al portapapeles!");
-      } catch {
-        toast.error("No se pudo copiar");
-      }
-    },
-    []
-  );
-
-  const m = result.metadata || {};
-  const shortId = generateId();
-
-  if (!result.success) {
-    return (
-      <Card className="border-red-900/40 bg-[#1a1010]">
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <div className="h-10 w-10 rounded-full bg-red-950/50 flex items-center justify-center shrink-0">
-              <X className="h-5 w-5 text-red-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h4 className="text-red-400 font-semibold text-sm">
-                Cookie Inválida
-              </h4>
-              <p className="text-red-300/60 text-xs mt-1 break-words">
-                {result.error || "Error desconocido"}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="border-green-900/40 bg-[#0d1a0d] hover:border-green-800/60 transition-colors">
-      <CardHeader className="pb-3 px-4 pt-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <div className="h-10 w-10 rounded-full bg-green-950/50 flex items-center justify-center shrink-0">
-              <Shield className="h-5 w-5 text-green-400" />
-            </div>
-            <div>
-              <CardTitle className="text-green-400 text-sm">
-                ✓ Cookie Válida — {shortId}
-              </CardTitle>
-              <CardDescription className="text-green-600/60 text-xs">
-                {m.plan || "Plan Desconocido"}
-                {m.countryName ? ` • ${m.countryName}` : ""}
-              </CardDescription>
-            </div>
-          </div>
-          <Badge
-            variant="outline"
-            className="border-green-800 text-green-400 text-[10px] shrink-0"
-          >
-            {m.status || "Activa"}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="px-4 pb-4 space-y-3">
-        {/* NFToken Link */}
-        {result.link && (
-          <div className="bg-black/40 rounded-lg p-3">
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <span className="text-xs text-green-400 font-semibold flex items-center gap-1">
-                <Zap className="h-3 w-3" /> NFToken
-              </span>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-[10px] text-gray-400 hover:text-white hover:bg-white/10"
-                  onClick={() =>
-                    copyToClipboard(result.link || "", "link")
-                  }
-                >
-                  {copiedLink ? (
-                    <Check className="h-3 w-3" />
-                  ) : (
-                    <Copy className="h-3 w-3" />
-                  )}
-                </Button>
-                <a
-                  href={result.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="h-6 px-2 inline-flex items-center justify-center rounded text-[10px] text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              </div>
-            </div>
-            <p className="text-[10px] text-gray-500 font-mono break-all leading-relaxed">
-              {result.link}
-            </p>
-          </div>
-        )}
-
-        {/* Metadata Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-          <MetaRow icon={Globe} label="País" value={m.countryName || m.country} />
-          <MetaRow icon={Tv} label="Plan" value={m.plan} />
-          <MetaRow icon={Monitor} label="Calidad" value={m.videoQuality} />
-          <MetaRow icon={Monitor} label="Pantallas" value={m.maxStreams ? `${m.maxStreams} máximo` : undefined} />
-          <MetaRow icon={Calendar} label="Desde" value={m.memberSince} />
-          <MetaRow icon={Calendar} label="Próx. Cobro" value={m.nextBilling} />
-          <MetaRow icon={Mail} label="Email" value={m.email} />
-          <MetaRow icon={Phone} label="Teléfono" value={m.phone} />
-          <MetaRow icon={CreditCard} label="Pago" value={m.paymentMethod} />
-          <MetaRow icon={User} label="Perfiles" value={m.profiles} />
-          <MetaRow icon={Tv} label="Dispositivos" value={m.devices} />
-          {m.price && (
-            <MetaRow
-              icon={CreditCard}
-              label="Precio"
-              value={`${m.price} ${m.currency || ""}`}
-            />
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ─── Batch Progress ──────────────────────────────────────────────────────────
-
-function BatchProgress({
-  stats,
-  current,
-  total,
-}: {
-  stats?: BatchStats;
-  current: number;
-  total: number;
-}) {
-  const progress = total > 0 ? (current / total) * 100 : 0;
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-[#1F1F1F] rounded-lg p-3 text-center">
-          <div className="text-2xl font-bold text-white">{stats?.total ?? total}</div>
-          <div className="text-xs text-gray-500">Total</div>
-        </div>
-        <div className="bg-[#0d1a0d] rounded-lg p-3 text-center">
-          <div className="text-2xl font-bold text-green-400">
-            {stats?.hits ?? 0}
-          </div>
-          <div className="text-xs text-green-600">Válidas</div>
-        </div>
-        <div className="bg-[#1a1010] rounded-lg p-3 text-center">
-          <div className="text-2xl font-bold text-red-400">
-            {stats?.fails ?? 0}
-          </div>
-          <div className="text-xs text-red-600">Inválidas</div>
-        </div>
-      </div>
-      {(current < total || !stats) && (
-        <div className="space-y-1">
-          <div className="flex justify-between text-xs text-gray-500">
-            <span>Progreso</span>
-            <span>
-              {current}/{total}
-            </span>
-          </div>
-          <Progress value={progress} className="h-2 bg-[#1F1F1F]" />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Batch Result Section with Download ──────────────────────────────────────
-
-function BatchResultsSection({
-  results,
-  stats,
-}: {
-  results: CheckResult[];
-  stats: BatchStats;
-}) {
-  const [downloading, setDownloading] = useState(false);
-
-  const handleDownload = useCallback(async () => {
-    const validResults = results.filter((r) => r.success);
-    if (validResults.length === 0) {
-      toast.error("No hay resultados válidos para descargar");
-      return;
-    }
-
-    setDownloading(true);
-    try {
-      const zip = new JSZip();
-
-      for (const result of validResults) {
-        const m = result.metadata || {};
-        const country = m.countryName || m.country || "UNKNOWN";
-        const plan = m.plan || "NoPlan";
-        const id = generateId();
-
-        const content = [
-          `═════════════════════════════════════════`,
-          `  Netflix Cookie Checker Pro - Resultado`,
-          `═════════════════════════════════════════`,
-          ``,
-          `ID: ${id}`,
-          `Estado: Válido`,
-          `NFToken: ${result.token || "N/A"}`,
-          `Enlace: ${result.link || "N/A"}`,
-          ``,
-          `── Metadatos ──────────────────────────`,
-          `País: ${m.countryName || m.country || "N/A"}`,
-          `Plan: ${m.plan || "N/A"}`,
-          ``,
-          `── Cookie ─────────────────────────────`,
-          `${result.rawCookie || "N/A"}`,
-        ].join("\n");
-
-        // Sanitize filename
-        const safeCountry = country.replace(/[^a-zA-Z0-9]/g, "_");
-        const safePlan = plan.replace(/[^a-zA-Z0-9]/g, "_");
-        const filename = `${safePlan} ${safeCountry} ${id} Netflix.txt`;
-        zip.file(filename, content);
-      }
-
-      const blob = await zip.generateAsync({ type: "blob" });
-      saveAs(blob, `Netflix_Results_${validResults.length}_${Date.now()}.zip`);
-      toast.success(
-        `¡ZIP descargado con ${validResults.length} resultado(s)!`
-      );
-    } catch (err: any) {
-      toast.error(`Error al generar ZIP: ${err.message}`);
-    } finally {
-      setDownloading(false);
-    }
-  }, [results]);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-white font-semibold flex items-center gap-2">
-          <FileText className="h-5 w-5 text-netflix-red" />
-          Resultados del Lote ({stats.total})
-        </h3>
-        {stats.hits > 0 && (
-          <Button
-            onClick={handleDownload}
-            disabled={downloading}
-            className="bg-green-700 hover:bg-green-600 text-white text-sm"
-            size="sm"
-          >
-            {downloading ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4 mr-2" />
-            )}
-            Descargar ZIP ({stats.hits})
-          </Button>
-        )}
-      </div>
-      <BatchProgress stats={stats} current={stats.total} total={stats.total} />
-      <div className="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar pr-1">
-        {results.map((result, idx) => (
-          <ResultCard key={idx} result={result} />
-        ))}
-      </div>
-    </div>
-  );
+interface Transaction {
+  id: string;
+  type: string;
+  credits: number;
+  description: string | null;
+  createdAt: string;
 }
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function Home() {
-  // Single cookie state
-  const [cookieText, setCookieText] = useState("");
-  const [singleLoading, setSingleLoading] = useState(false);
-  const [singleResult, setSingleResult] = useState<CheckResult | null>(null);
+  const router = useRouter();
 
-  // Batch state
-  const [batchFile, setBatchFile] = useState<File | null>(null);
-  const [batchLoading, setBatchLoading] = useState(false);
-  const [batchResults, setBatchResults] = useState<CheckResult[]>([]);
-  const [batchStats, setBatchStats] = useState<BatchStats | null>(null);
-  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+  const [loading, setLoading] = useState(true);
+  const [username, setUsername] = useState("");
+  const [credits, setCredits] = useState(0);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Generate token
+  const [generating, setGenerating] = useState(false);
+  const [generatedLink, setGeneratedLink] = useState("");
+  const [generatedToken, setGeneratedToken] = useState("");
 
-  // ── Single Cookie Check ──
+  // Copy cookie
+  const [copying, setCopying] = useState(false);
+  const [copiedCookie, setCopiedCookie] = useState("");
+  const [copiedToClipboard, setCopiedToClipboard] = useState(false);
 
-  const handleSingleCheck = useCallback(async () => {
-    if (!cookieText.trim()) {
-      toast.error("Por favor, pega una cookie válida");
+  // ── Auth Check ──
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.success) {
+          router.push("/login");
+        } else if (data.user.role === "ADMIN") {
+          router.push("/admin");
+        } else {
+          setUsername(data.user.username);
+          setCredits(data.user.credits);
+          loadBalance();
+          setLoading(false);
+        }
+      })
+      .catch(() => router.push("/login"));
+  }, [router]);
+
+  const loadBalance = useCallback(async () => {
+    try {
+      const res = await fetch("/api/user/balance");
+      const data = await res.json();
+      if (data.success) {
+        setCredits(data.credits);
+        setTransactions(data.transactions || []);
+      }
+    } catch {}
+  }, []);
+
+  // ── Generate Token (1 credit) ──
+  const handleGenerate = useCallback(async () => {
+    if (credits < 1) {
+      toast.error("Créditos insuficientes. Pide más al administrador.");
       return;
     }
 
-    setSingleLoading(true);
-    setSingleResult(null);
+    setGenerating(true);
+    setGeneratedLink("");
+    setGeneratedToken("");
 
     try {
-      const res = await fetch("/api/check-cookie", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cookieText: cookieText.trim() }),
-      });
-
+      const res = await fetch("/api/user/generate", { method: "POST" });
       const data = await res.json();
-
-      if (!res.ok) {
-        toast.error(data.error || "Error al verificar la cookie");
-        setSingleResult({ success: false, error: data.error });
-        return;
-      }
-
-      setSingleResult(data);
 
       if (data.success) {
-        toast.success("¡Cookie válida! NFToken generado exitosamente.");
+        setGeneratedLink(data.link);
+        setGeneratedToken(data.token);
+        setCredits(data.remainingCredits);
+        toast.success("Token generado exitosamente");
+        loadBalance();
       } else {
-        toast.error(data.error || "Cookie inválida");
+        if (data.noCookies) {
+          toast.error("No hay cookies disponibles. Se ha notificado al administrador.");
+        } else if (data.retry) {
+          toast.error("Cookie dañada, intenta de nuevo...");
+        } else {
+          toast.error(data.error || "Error al generar token");
+        }
+        // Refresh credits
+        loadBalance();
       }
-    } catch (err: any) {
-      toast.error("Error de conexión con el servidor");
-      setSingleResult({ success: false, error: "Error de conexión" });
+    } catch {
+      toast.error("Error de conexión");
     } finally {
-      setSingleLoading(false);
+      setGenerating(false);
     }
-  }, [cookieText]);
+  }, [credits, loadBalance]);
 
-  // ── Batch Check ──
-
-  const handleBatchCheck = useCallback(async () => {
-    if (!batchFile) {
-      toast.error("Por favor, selecciona un archivo primero");
+  // ── Copy Cookie (3 credits) ──
+  const handleCopyCookie = useCallback(async () => {
+    if (credits < 3) {
+      toast.error("Créditos insuficientes. Necesitas 3 créditos para copiar una cookie.");
       return;
     }
 
-    setBatchLoading(true);
-    setBatchResults([]);
-    setBatchStats(null);
-    setBatchProgress({ current: 0, total: 0 });
+    setCopying(true);
+    setCopiedCookie("");
 
     try {
-      const formData = new FormData();
-      formData.append("file", batchFile);
-
-      const res = await fetch("/api/check-batch", {
-        method: "POST",
-        body: formData,
-      });
-
+      const res = await fetch("/api/user/copy-cookie", { method: "POST" });
       const data = await res.json();
 
-      if (!res.ok) {
-        toast.error(data.error || "Error al verificar el lote");
-        return;
+      if (data.success) {
+        setCopiedCookie(data.cookie);
+        setCredits(data.remainingCredits);
+        toast.success("Cookie copiada exitosamente");
+        loadBalance();
+      } else {
+        if (data.noCookies) {
+          toast.error("No hay cookies disponibles. Se ha notificado al administrador.");
+        } else if (data.retry) {
+          toast.error("Cookie dañada, intenta de nuevo...");
+        } else {
+          toast.error(data.error || "Error al copiar cookie");
+        }
+        loadBalance();
       }
-
-      setBatchResults(data.results || []);
-      setBatchStats(data.stats || { total: 0, hits: 0, fails: 0 });
-      setBatchProgress({
-        current: data.stats?.total || 0,
-        total: data.stats?.total || 0,
-      });
-
-      toast.success(
-        `Verificación completa: ${data.stats?.hits || 0} válidas, ${data.stats?.fails || 0} inválidas`
-      );
-    } catch (err: any) {
-      toast.error("Error de conexión con el servidor");
+    } catch {
+      toast.error("Error de conexión");
     } finally {
-      setBatchLoading(false);
+      setCopying(false);
     }
-  }, [batchFile]);
+  }, [credits, loadBalance]);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file && (file.name.endsWith(".txt") || file.name.endsWith(".zip"))) {
-      setBatchFile(file);
-      toast.success(`Archivo "${file.name}" seleccionado`);
-    } else {
-      toast.error("Solo se aceptan archivos .txt o .zip");
+  // ── Copy to clipboard ──
+  const copyText = useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedToClipboard(true);
+      toast.success("Copiado al portapapeles");
+      setTimeout(() => setCopiedToClipboard(false), 2000);
+    } catch {
+      toast.error("No se pudo copiar");
     }
   }, []);
 
-  const handleFileSelect = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) {
-        setBatchFile(file);
-        toast.success(`Archivo "${file.name}" seleccionado`);
-      }
-    },
-    []
-  );
+  // ── Logout ──
+  const handleLogout = useCallback(async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  }, [router]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
+        <Loader2 className="h-8 w-8 text-[#E50914] animate-spin" />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
       {/* Header */}
       <header className="border-b border-white/10 bg-[#141414]/95 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-lg bg-[#E50914] flex items-center justify-center">
               <Shield className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-white tracking-tight">
-                Netflix Cookie Checker
+              <h1 className="text-lg font-bold text-white">
+                Netflix Checker
                 <span className="text-[#E50914] ml-1">Pro</span>
               </h1>
-              <p className="text-[10px] text-gray-500">
-                Verifica cookies • Genera NFTokens • Extrae metadatos
-              </p>
             </div>
           </div>
-          <Badge
-            variant="outline"
-            className="border-[#E50914]/30 text-[#E50914] text-[10px]"
-          >
-            v2.0
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Badge variant="outline" className="border-yellow-800 text-yellow-400 text-xs">
+              <Coins className="h-3 w-3 mr-1" />
+              {credits} créditos
+            </Badge>
+            <Button onClick={handleLogout} variant="ghost" size="sm" className="text-gray-400 hover:text-white">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </header>
 
       {/* Main */}
-      <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-8">
-        <Tabs defaultValue="single" className="space-y-6">
-          {/* Tab Navigation */}
-          <TabsList className="bg-[#1F1F1F] border border-white/10 w-full h-auto p-1">
-            <TabsTrigger
-              value="single"
-              className="flex-1 py-2.5 text-sm data-[state=active]:bg-[#E50914] data-[state=active]:text-white text-gray-400 transition-all"
-            >
-              <Search className="h-4 w-4 mr-2" />
-              Cookie Individual
-            </TabsTrigger>
-            <TabsTrigger
-              value="batch"
-              className="flex-1 py-2.5 text-sm data-[state=active]:bg-[#E50914] data-[state=active]:text-white text-gray-400 transition-all"
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Lote / Archivo
-            </TabsTrigger>
-          </TabsList>
+      <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-8 space-y-6">
+        {/* Welcome */}
+        <div className="text-center">
+          <h2 className="text-xl font-bold text-white">Bienvenido, <span className="text-[#E50914]">{username}</span></h2>
+          <p className="text-gray-500 text-sm mt-1">Genera tokens o copia cookies de Netflix</p>
+        </div>
 
-          {/* ─── Tab 1: Single Cookie ─── */}
-          <TabsContent value="single" className="space-y-6">
-            <Card className="border-white/10 bg-[#1F1F1F]">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-white text-base">
-                  Verificar Cookie Individual
-                </CardTitle>
-                <CardDescription className="text-gray-500 text-sm">
-                  Pega tu cookie de Netflix en cualquier formato: texto plano,
-                  Cookie Editor (JSON), o formato Netscape.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Textarea
-                  value={cookieText}
-                  onChange={(e) => setCookieText(e.target.value)}
-                  placeholder={`Pega tu cookie aquí...\n\nEjemplo (texto plano):\nNetflixId=v1%3B...; SecureNetflixId=v2%3B...; nfvdid=...\n\nEjemplo (JSON Cookie Editor):\n[{"name":"NetflixId","value":"...","domain":".netflix.com"}]`}
-                  className="bg-[#0a0a0a] border-white/10 text-white text-sm font-mono placeholder:text-gray-600 min-h-[150px] resize-y focus:border-[#E50914]/50 focus:ring-[#E50914]/20"
-                />
-
-                <Button
-                  onClick={handleSingleCheck}
-                  disabled={singleLoading || !cookieText.trim()}
-                  className="w-full bg-[#E50914] hover:bg-[#b2070f] text-white font-semibold h-11 transition-colors disabled:opacity-50"
-                >
-                  {singleLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Verificando cookie...
-                    </>
-                  ) : (
-                    <>
-                      <Search className="h-4 w-4 mr-2" />
-                      Verificar Cookie
-                    </>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Single Result */}
-            {singleLoading && (
-              <div className="space-y-4">
-                <Skeleton className="h-32 w-full bg-[#1F1F1F] rounded-xl" />
-                <Skeleton className="h-20 w-full bg-[#1F1F1F] rounded-xl" />
+        {/* Credit Info */}
+        <Card className="border-yellow-900/30 bg-yellow-950/10">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-yellow-950/50 flex items-center justify-center">
+                <Coins className="h-5 w-5 text-yellow-400" />
               </div>
-            )}
+              <div>
+                <p className="text-yellow-400 font-bold text-lg">{credits}</p>
+                <p className="text-yellow-600/60 text-xs">Créditos disponibles</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-gray-500 text-xs flex items-center gap-1">
+                <Zap className="h-3 w-3" /> Generar Token: <span className="text-white font-semibold">1 crédito</span>
+              </p>
+              <p className="text-gray-500 text-xs flex items-center gap-1 mt-1">
+                <Copy className="h-3 w-3" /> Copiar Cookie: <span className="text-white font-semibold">3 créditos</span>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
 
-            {singleResult && !singleLoading && (
-              <ResultCard result={singleResult} />
-            )}
-          </TabsContent>
+        {/* Actions */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Generate Token */}
+          <Card className="border-green-900/30 bg-[#1F1F1F] hover:border-green-800/50 transition-colors">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-green-400 text-sm flex items-center gap-2">
+                <Zap className="h-4 w-4" />
+                Generar Token
+              </CardTitle>
+              <CardDescription className="text-gray-500 text-xs">
+                Genera un link de acceso a Netflix. Cuesta 1 crédito.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                onClick={handleGenerate}
+                disabled={generating || credits < 1}
+                className="w-full bg-green-700 hover:bg-green-600 text-white font-semibold h-11 disabled:opacity-50"
+              >
+                {generating ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generando...</>
+                ) : (
+                  <><Zap className="h-4 w-4 mr-2" /> Generar Token (1 crédito)</>
+                )}
+              </Button>
 
-          {/* ─── Tab 2: Batch ─── */}
-          <TabsContent value="batch" className="space-y-6">
-            <Card className="border-white/10 bg-[#1F1F1F]">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-white text-base">
-                  Verificación por Lote
-                </CardTitle>
-                <CardDescription className="text-gray-500 text-sm">
-                  Sube un archivo <span className="text-white font-medium">.txt</span> o <span className="text-white font-medium">.zip</span> (con archivos .txt dentro). Máximo 50 cookies por lote.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Drop Zone */}
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={handleDrop}
-                  className="border-2 border-dashed border-white/10 hover:border-[#E50914]/40 bg-[#0a0a0a] rounded-xl p-8 text-center cursor-pointer transition-colors"
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".txt,.zip"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                  />
-                  {batchFile ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <FileText className="h-10 w-10 text-[#E50914]" />
-                      <p className="text-white font-medium text-sm">
-                        {batchFile.name}
-                      </p>
-                      <p className="text-gray-500 text-xs">
-                        {(batchFile.size / 1024).toFixed(1)} KB • Click para
-                        cambiar
-                      </p>
+              {generatedLink && (
+                <div className="mt-3 space-y-2">
+                  <div className="bg-black/40 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-green-400 font-semibold">NFToken Link</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => copyText(generatedLink)}
+                          className="h-6 px-2 rounded text-[10px] text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                        >
+                          {copiedToClipboard ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                        </button>
+                        <a
+                          href={generatedLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="h-6 px-2 rounded text-[10px] text-gray-400 hover:text-white hover:bg-white/10 inline-flex items-center transition-colors"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-2">
-                      <Upload className="h-10 w-10 text-gray-600" />
-                      <p className="text-gray-400 font-medium text-sm">
-                        Arrastra tu archivo aquí o click para seleccionar
-                      </p>
-                      <p className="text-gray-600 text-xs">
-                        Formatos aceptados: <span className="text-gray-400">.txt</span> o <span className="text-gray-400">.zip</span>
-                      </p>
-                    </div>
-                  )}
+                    <p className="text-[10px] text-gray-500 font-mono break-all leading-relaxed">{generatedLink}</p>
+                  </div>
                 </div>
+              )}
+            </CardContent>
+          </Card>
 
-                <Button
-                  onClick={handleBatchCheck}
-                  disabled={batchLoading || !batchFile}
-                  className="w-full bg-[#E50914] hover:bg-[#b2070f] text-white font-semibold h-11 transition-colors disabled:opacity-50"
-                >
-                  {batchLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Verificando lote... ({batchProgress.current}/
-                      {batchProgress.total})
-                    </>
-                  ) : (
-                    <>
-                      <Search className="h-4 w-4 mr-2" />
-                      Verificar Lote
-                    </>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
+          {/* Copy Cookie */}
+          <Card className="border-purple-900/30 bg-[#1F1F1F] hover:border-purple-800/50 transition-colors">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-purple-400 text-sm flex items-center gap-2">
+                <Copy className="h-4 w-4" />
+                Copiar Cookie
+              </CardTitle>
+              <CardDescription className="text-gray-500 text-xs">
+                Copia una cookie funcional de Netflix. Cuesta 3 créditos.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                onClick={handleCopyCookie}
+                disabled={copying || credits < 3}
+                className="w-full bg-purple-700 hover:bg-purple-600 text-white font-semibold h-11 disabled:opacity-50"
+              >
+                {copying ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Obteniendo...</>
+                ) : (
+                  <><Copy className="h-4 w-4 mr-2" /> Copiar Cookie (3 créditos)</>
+                )}
+              </Button>
 
-            {/* Batch Progress */}
-            {batchLoading && (
-              <BatchProgress
-                stats={batchStats || undefined}
-                current={batchProgress.current}
-                total={batchProgress.total || 1}
-              />
-            )}
+              {copiedCookie && (
+                <div className="mt-3">
+                  <div className="bg-black/40 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-purple-400 font-semibold">Cookie</span>
+                      <button
+                        onClick={() => copyText(copiedCookie)}
+                        className="h-6 px-2 rounded text-[10px] text-gray-400 hover:text-white hover:bg-white/10 transition-colors flex items-center gap-1"
+                      >
+                        {copiedToClipboard ? <><Check className="h-3 w-3" /> Copiado</> : <><Copy className="h-3 w-3" /> Copiar</>}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-gray-500 font-mono break-all leading-relaxed max-h-20 overflow-y-auto custom-scrollbar">
+                      {copiedCookie}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
-            {/* Batch Results */}
-            {batchResults.length > 0 && !batchLoading && batchStats && (
-              <BatchResultsSection
-                results={batchResults}
-                stats={batchStats}
-              />
-            )}
-          </TabsContent>
-        </Tabs>
+        {/* Transaction History */}
+        <Card className="border-white/10 bg-[#1F1F1F]">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-white text-sm flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-[#E50914]" />
+              Historial de Créditos
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+              {transactions.length === 0 ? (
+                <p className="text-gray-600 text-sm text-center py-6">Sin actividad</p>
+              ) : (
+                transactions.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between p-2.5 rounded-lg bg-[#0a0a0a]">
+                    <div className="flex items-center gap-2">
+                      {t.credits >= 0 ? (
+                        <TrendingDown className="h-4 w-4 text-green-400 rotate-180" />
+                      ) : (
+                        <TrendingDown className="h-4 w-4 text-red-400" />
+                      )}
+                      <div>
+                        <p className="text-white text-xs font-medium">{t.description || t.type}</p>
+                        <p className="text-gray-600 text-[10px] flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {new Date(t.createdAt).toLocaleString("es")}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`text-sm font-bold ${t.credits >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {t.credits >= 0 ? "+" : ""}{t.credits}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </main>
 
       {/* Footer */}
       <footer className="border-t border-white/5 bg-[#0a0a0a]">
-        <div className="max-w-4xl mx-auto px-4 py-6">
+        <div className="max-w-2xl mx-auto px-4 py-6">
           <div className="flex flex-col items-center gap-3">
             <p className="text-gray-500 text-xs">
               Netflix Cookie Checker Pro — Desarrollado por <span className="text-white font-semibold">HacheJota</span>
@@ -746,30 +416,11 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* Global Styles for Custom Scrollbar & Progress */}
+      {/* Global Styles */}
       <style jsx global>{`
-        :root {
-          --netflix-red: #E50914;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #333;
-          border-radius: 3px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #555;
-        }
-
-        /* Progress bar override */
-        [role="progressbar"] > div {
-          background-color: #E50914 !important;
-        }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
       `}</style>
     </div>
   );
