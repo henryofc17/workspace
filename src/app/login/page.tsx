@@ -1,5 +1,3 @@
-
-
 "use client";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +10,6 @@ import React, {
   useRef,
 } from "react";
 
-} from "react";
 import Script from "next/script";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,8 +35,7 @@ declare global {
 }
 
 export default function LoginPage() {
-  const widgetId =
-    useRef<any>(null);
+  const widgetId = useRef<any>(null);
 
   const [username, setUsername] =
     useState("");
@@ -53,7 +49,6 @@ export default function LoginPage() {
   const [loading, setLoading] =
     useState(false);
 
-  // VERIFICAR SESIÓN REAL
   useEffect(() => {
     const checkSession =
       async () => {
@@ -87,7 +82,6 @@ export default function LoginPage() {
     checkSession();
   }, []);
 
-  // CAPTCHA
   useEffect(() => {
     let tries = 0;
 
