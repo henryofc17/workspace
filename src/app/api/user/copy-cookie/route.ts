@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -41,7 +40,6 @@ export async function POST() {
       );
     }
 
-    // Buscar varias cookies activas
     const cookies = await prisma.cookie.findMany({
       where: { status: "ACTIVE" },
       orderBy: [
@@ -64,7 +62,6 @@ export async function POST() {
 
     let selectedCookie: any = null;
 
-    // Intentar varias cookies automáticamente
     for (const cookie of cookies) {
       const cookieDict = extractCookiesFromText(cookie.rawCookie);
 
@@ -73,7 +70,7 @@ export async function POST() {
           where: { id: cookie.id },
           data: {
             status: "DEAD",
-            lastError: "No se pudo parsear la cookie",
+            lastError: "Parse error",
             lastUsed: new Date(),
           },
         });
@@ -82,7 +79,6 @@ export async function POST() {
 
       const result = await checkCookie(cookieDict);
 
-      // Si funciona, usarla
       if (result.success) {
         selectedCookie = cookie;
         break;
@@ -90,22 +86,14 @@ export async function POST() {
 
       const errorText = result.error || "";
 
-      // Si sale bloqueo de token, NO matar cookie, solo saltarla
+      // 🔥 SOLO LO QUE PEDISTE
       if (
         errorText.includes("createAutoLoginToken") ||
         errorText.includes("Access denied by SBD")
       ) {
-        await prisma.cookie.update({
-          where: { id: cookie.id },
-          data: {
-            lastError: "Bloqueo temporal token",
-            lastUsed: new Date(),
-          },
-        });
-        continue;
+        continue; // intenta otra cookie sin mostrar error
       }
 
-      // Otros errores sí la matan
       await prisma.cookie.update({
         where: { id: cookie.id },
         data: {
@@ -116,7 +104,6 @@ export async function POST() {
       });
     }
 
-    // Si ninguna funcionó
     if (!selectedCookie) {
       return NextResponse.json({
         success: false,
@@ -124,7 +111,6 @@ export async function POST() {
       });
     }
 
-    // Cobrar SOLO una vez al final
     await prisma.$transaction([
       prisma.user.update({
         where: { id: session.userId },
@@ -146,10 +132,7 @@ export async function POST() {
           userId: session.userId,
           type: "COPY_COOKIE",
           credits: -COPY_COST,
-          description: `Cookie copiada #${selectedCookie.id.slice(
-            0,
-            6
-          )}`,
+          description: `Cookie copiada #${selectedCookie.id.slice(0, 6)}`,
         },
       }),
     ]);
