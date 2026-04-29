@@ -23,8 +23,27 @@ export const metadata: Metadata = {
     "NFToken",
     "Netflix Account Checker",
   ],
+
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
+    shortcut: "/logo.svg",
+    apple: "/logo.svg",
+  },
+
+  openGraph: {
+    title: "Netflix Cookie Checker Pro",
+    description:
+      "Verifica cookies de Netflix, genera NFTokens y extrae metadatos de cuenta.",
+    images: ["/logo.svg"],
+    type: "website",
+  },
+
+  twitter: {
+    card: "summary_large_image",
+    title: "Netflix Cookie Checker Pro",
+    description:
+      "Verifica cookies de Netflix, genera NFTokens y extrae metadatos de cuenta.",
+    images: ["/logo.svg"],
   },
 };
 
@@ -39,6 +58,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#141414] text-white`}
       >
         {children}
+
         <Toaster
           position="top-right"
           richColors
