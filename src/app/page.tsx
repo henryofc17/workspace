@@ -13,7 +13,7 @@ import {
   Shield,
   Search,
   Zap,
-  Copy,
+  RefreshCw,  // 🔥 CAMBIO 1: Copy → RefreshCw
   LogOut,
   Coins,
   Loader2,
@@ -313,7 +313,7 @@ export default function Home() {
               </div>
               <div className="flex items-center gap-2 justify-end">
                 <div className="h-2 w-2 rounded-full bg-purple-500" />
-                <span className="text-gray-400 text-xs">Copiar Cookie: <span className="text-white font-semibold">3 créditos</span></span>
+                <span className="text-gray-400 text-xs">Generar Cookie: <span className="text-white font-semibold">3 créditos</span></span>
               </div>
               <div className="flex items-center gap-2 justify-end">
                 <div className="h-2 w-2 rounded-full bg-blue-500" />
@@ -340,12 +340,12 @@ export default function Home() {
               <Zap className="h-4 w-4 mr-2" />
               Generar Token
             </TabsTrigger>
-            {/* 🔥 CAMBIO 1: TAB */}
+            {/* 🔥 TAB: RefreshCw */}
             <TabsTrigger
               value="copy"
               className="flex-1 py-2.5 text-sm data-[state=active]:bg-purple-600 data-[state=active]:text-white text-gray-400 transition-all"
             >
-              <Copy className="h-4 w-4 mr-2" />
+              <RefreshCw className="h-4 w-4 mr-2" />
               Generar Cookie
             </TabsTrigger>
           </TabsList>
@@ -551,12 +551,11 @@ export default function Home() {
           <TabsContent value="copy" className="space-y-4">
             <Card className="border-purple-900/30 bg-[#1F1F1F]">
               <CardHeader className="pb-3">
-                {/* 🔥 CAMBIO 2: TÍTULO */}
+                {/* 🔥 TÍTULO: RefreshCw */}
                 <CardTitle className="text-purple-400 text-base flex items-center gap-2">
-                  <Copy className="h-5 w-5" />
+                  <RefreshCw className="h-5 w-5" />
                   Generar Cookie de Netflix
                 </CardTitle>
-                {/* 🔥 CAMBIO 3: DESCRIPCIÓN */}
                 <CardDescription className="text-gray-500 text-xs">
                   Genera una cookie funcional del servidor. Cuesta <span className="text-white font-semibold">3 créditos</span>.
                 </CardDescription>
@@ -572,7 +571,7 @@ export default function Home() {
                   </span>
                 </div>
 
-                {/* 🔥 CAMBIO 4: BOTÓN */}
+                {/* 🔥 BOTÓN: RefreshCw con giro opcional */}
                 <Button
                   onClick={handleCopyCookie}
                   disabled={copying || credits < 3}
@@ -581,7 +580,7 @@ export default function Home() {
                   {copying ? (
                     <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Generando Cookie...</>
                   ) : (
-                    <><Copy className="h-5 w-5 mr-2" /> Generar Cookie</>
+                    <><RefreshCw className="h-5 w-5 mr-2" /> Generar Cookie</>
                   )}
                 </Button>
 
@@ -708,4 +707,4 @@ export default function Home() {
       `}</style>
     </div>
   );
-      }
+                                       }
