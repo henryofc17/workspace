@@ -28,6 +28,7 @@ import {
 declare global {
   interface Window {
     turnstile: any;
+    cfToken: string;
   }
 }
 
@@ -91,18 +92,39 @@ export default function LoginPage() {
       ) {
         clearInterval(timer);
 
-        widgetId.current =
-          window.turnstile.render(
-            "#cf-turnstile",
-            {
-              sitekey:
-                process.env
-                  .NEXT_PUBLIC_TURNSTILE_SITE_KEY,
-              size: "invisible",
-            }
-          );
+        try {
+          widgetId.current =
+            window.turnstile.render(
+              "#cf-turnstile",
+              {
+                sitekey:
+                  process.env
+                    .NEXT_PUBLIC_TURNSTILE_SITE_KEY,
 
-        setWidgetReady(true);
+                theme: "dark",
+
+                callback: (
+                  token: string
+                ) => {
+                  window.cfToken =
+                    token;
+                },
+
+                "error-callback":
+                  () => {
+                    toast.error(
+                      "Captcha error"
+                    );
+                  },
+              }
+            );
+
+          setWidgetReady(true);
+        } catch {
+          toast.error(
+            "No cargó captcha"
+          );
+        }
       }
 
       if (tries >= 30) {
@@ -113,43 +135,6 @@ export default function LoginPage() {
     return () =>
       clearInterval(timer);
   }, [widgetReady]);
-
-  const getCaptchaToken =
-    async (): Promise<string> => {
-      return new Promise(
-        (resolve, reject) => {
-          try {
-            window.turnstile.reset(
-              widgetId.current
-            );
-
-            window.turnstile.execute(
-              widgetId.current,
-              {
-                callback: (
-                  token: string
-                ) =>
-                  resolve(token),
-              }
-            );
-
-            setTimeout(() => {
-              reject(
-                new Error(
-                  "Captcha timeout"
-                )
-              );
-            }, 10000);
-          } catch {
-            reject(
-              new Error(
-                "Captcha error"
-              )
-            );
-          }
-        }
-      );
-    };
 
   const handleLogin =
     useCallback(async () => {
@@ -163,12 +148,16 @@ export default function LoginPage() {
         return;
       }
 
+      if (!window.cfToken) {
+        toast.error(
+          "Completa captcha"
+        );
+        return;
+      }
+
       setLoading(true);
 
       try {
-        const token =
-          await getCaptchaToken();
-
         const res = await fetch(
           "/api/auth/login",
           {
@@ -184,7 +173,7 @@ export default function LoginPage() {
                 username.trim(),
               password,
               turnstileToken:
-                token,
+                window.cfToken,
             }),
           }
         );
@@ -194,7 +183,8 @@ export default function LoginPage() {
 
         if (!res.ok) {
           throw new Error(
-            data.error
+            data.error ||
+              "Login fallido"
           );
         }
 
@@ -305,4 +295,4 @@ export default function LoginPage() {
       </div>
     </>
   );
-            }
+}
