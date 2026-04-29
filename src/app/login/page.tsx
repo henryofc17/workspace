@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { Button } from "@/components/ui/button";
@@ -29,88 +34,107 @@ declare global {
 export default function LoginPage() {
   const router = useRouter();
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [captchaToken, setCaptchaToken] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [widgetReady, setWidgetReady] = useState(false);
-
   const widgetId = useRef<any>(null);
+  const loadingCaptcha = useRef(false);
+
+  const [username, setUsername] =
+    useState("");
+  const [password, setPassword] =
+    useState("");
+  const [captchaToken, setCaptchaToken] =
+    useState("");
+  const [widgetReady, setWidgetReady] =
+    useState(false);
+  const [loading, setLoading] =
+    useState(false);
 
   useEffect(() => {
+    let tries = 0;
+
     const timer = setInterval(() => {
+      tries++;
+
       if (
         typeof window !== "undefined" &&
         window.turnstile &&
-        document.getElementById("cf-turnstile") &&
+        document.getElementById(
+          "cf-turnstile"
+        ) &&
         !widgetReady
       ) {
         clearInterval(timer);
 
         try {
-          widgetId.current = window.turnstile.render(
-            "#cf-turnstile",
-            {
-              sitekey:
-                process.env
-                  .NEXT_PUBLIC_TURNSTILE_SITE_KEY,
-              size: "invisible",
+          widgetId.current =
+            window.turnstile.render(
+              "#cf-turnstile",
+              {
+                sitekey:
+                  process.env
+                    .NEXT_PUBLIC_TURNSTILE_SITE_KEY,
 
-              callback: (token: string) => {
-                setCaptchaToken(token);
-              },
+                size: "invisible",
 
-              "expired-callback": () => {
-                setCaptchaToken("");
-              },
+                callback: (
+                  token: string
+                ) => {
+                  setCaptchaToken(
+                    token
+                  );
+                },
 
-              "error-callback": () => {
-                setCaptchaToken("");
-              },
-            }
-          );
+                "expired-callback":
+                  () => {
+                    setCaptchaToken(
+                      ""
+                    );
+                  },
+
+                "error-callback":
+                  () => {
+                    setCaptchaToken(
+                      ""
+                    );
+                  },
+              }
+            );
 
           setWidgetReady(true);
-        } catch (error) {}
+        } catch {}
       }
-    }, 400);
 
-    return () => clearInterval(timer);
+      if (tries >= 30) {
+        clearInterval(timer);
+      }
+    }, 500);
+
+    return () =>
+      clearInterval(timer);
   }, [widgetReady]);
 
-  const waitForCaptchaLoad =
-    async (): Promise<boolean> => {
-      for (let i = 0; i < 12; i++) {
-        if (window.turnstile) {
-          return true;
-        }
-
-        await new Promise((r) =>
-          setTimeout(r, 500)
+  const getCaptchaToken =
+    async (): Promise<string> => {
+      if (
+        !window.turnstile ||
+        widgetId.current === null
+      ) {
+        throw new Error(
+          "Captcha no disponible"
         );
       }
 
-      return false;
-    };
+      if (loadingCaptcha.current) {
+        throw new Error(
+          "Captcha ocupado"
+        );
+      }
 
-  const getInvisibleToken =
-    async (): Promise<string> => {
+      loadingCaptcha.current = true;
+
       return new Promise(
-        async (resolve, reject) => {
+        (resolve, reject) => {
           try {
             setCaptchaToken("");
-
-            if (
-              !window.turnstile ||
-              widgetId.current === null
-            ) {
-              reject(
-                new Error(
-                  "Captcha no disponible"
-                )
-              );
-              return;
-            }
 
             window.turnstile.reset(
               widgetId.current
@@ -122,35 +146,58 @@ export default function LoginPage() {
 
             let tries = 0;
 
-            const check = setInterval(() => {
-              tries++;
+            const checker =
+              setInterval(() => {
+                tries++;
 
-              const token =
-                (
-                  document.querySelector(
-                    '[name="cf-turnstile-response"]'
-                  ) as HTMLInputElement
-                )?.value || captchaToken;
+                const token =
+                  (
+                    document.querySelector(
+                      '[name="cf-turnstile-response"]'
+                    ) as HTMLInputElement
+                  )?.value ||
+                  captchaToken;
 
-              if (token) {
-                clearInterval(check);
-                setCaptchaToken(token);
-                resolve(token);
-              }
+                if (
+                  token &&
+                  token.length >
+                    20
+                ) {
+                  clearInterval(
+                    checker
+                  );
+                  loadingCaptcha.current =
+                    false;
+                  setCaptchaToken(
+                    token
+                  );
+                  resolve(
+                    token
+                  );
+                }
 
-              if (tries >= 20) {
-                clearInterval(check);
-                reject(
-                  new Error(
-                    "Captcha tardó demasiado"
-                  )
-                );
-              }
-            }, 300);
-          } catch (error) {
+                if (
+                  tries >= 25
+                ) {
+                  clearInterval(
+                    checker
+                  );
+                  loadingCaptcha.current =
+                    false;
+                  reject(
+                    new Error(
+                      "Captcha tardó demasiado"
+                    )
+                  );
+                }
+              }, 300);
+          } catch {
+            loadingCaptcha.current =
+              false;
+
             reject(
               new Error(
-                "Error ejecutando captcha"
+                "Error captcha"
               )
             );
           }
@@ -158,114 +205,120 @@ export default function LoginPage() {
       );
     };
 
-  const handleLogin = useCallback(async () => {
-    if (!username.trim() || !password.trim()) {
-      toast.error(
-        "Completa todos los campos"
-      );
-      return;
-    }
-
-    if (loading) return;
-
-    setLoading(true);
-
-    try {
-      if (
-        !window.turnstile ||
-        !widgetReady
-      ) {
-        const loaded =
-          await waitForCaptchaLoad();
-
-        if (!loaded) {
-          throw new Error(
-            "Captcha no cargó"
+  const handleLogin =
+    useCallback(
+      async () => {
+        if (
+          !username.trim() ||
+          !password.trim()
+        ) {
+          toast.error(
+            "Completa todos los campos"
           );
+          return;
         }
-      }
 
-      let token = captchaToken;
+        if (loading) return;
 
-      if (!token) {
-        token =
-          await getInvisibleToken();
-      }
+        setLoading(true);
 
-      const res = await fetch(
-        "/api/auth/login",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          cache: "no-store",
-          body: JSON.stringify({
-            username:
-              username.trim(),
-            password,
-            turnstileToken: token,
-          }),
-        }
-      );
-
-      let data: any = {};
-
-      try {
-        data = await res.json();
-      } catch {}
-
-      if (!res.ok) {
-        throw new Error(
-          data.error ||
-            "Login fallido"
-        );
-      }
-
-      toast.success(
-        `Bienvenido ${data.user.username}`
-      );
-
-      router.push(
-        data.user.role === "ADMIN"
-          ? "/admin"
-          : "/"
-      );
-    } catch (error: any) {
-      toast.error(
-        error.message ||
-          "Error de conexión"
-      );
-    } finally {
-      setLoading(false);
-      setCaptchaToken("");
-
-      if (
-        window.turnstile &&
-        widgetId.current !== null
-      ) {
         try {
-          window.turnstile.reset(
-            widgetId.current
+          if (
+            !window.turnstile ||
+            !widgetReady
+          ) {
+            throw new Error(
+              "Captcha cargando..."
+            );
+          }
+
+          const token =
+            captchaToken ||
+            (await getCaptchaToken());
+
+          const res =
+            await fetch(
+              "/api/auth/login",
+              {
+                method:
+                  "POST",
+                headers:
+                  {
+                    "Content-Type":
+                      "application/json",
+                  },
+                body: JSON.stringify(
+                  {
+                    username:
+                      username.trim(),
+                    password,
+                    turnstileToken:
+                      token,
+                  }
+                ),
+              }
+            );
+
+          const data =
+            await res.json();
+
+          if (!res.ok) {
+            throw new Error(
+              data.error ||
+                "Login fallido"
+            );
+          }
+
+          toast.success(
+            `Bienvenido ${data.user.username}`
           );
-        } catch {}
-      }
-    }
-  }, [
-    username,
-    password,
-    captchaToken,
-    widgetReady,
-    loading,
-    router,
-  ]);
+
+          router.push(
+            data.user
+              .role ===
+              "ADMIN"
+              ? "/admin"
+              : "/"
+          );
+        } catch (
+          error: any
+        ) {
+          toast.error(
+            error.message ||
+              "Error de conexión"
+          );
+        } finally {
+          setLoading(false);
+          setCaptchaToken("");
+
+          try {
+            if (
+              window.turnstile &&
+              widgetId.current !==
+                null
+            ) {
+              window.turnstile.reset(
+                widgetId.current
+              );
+            }
+          } catch {}
+        }
+      },
+      [
+        username,
+        password,
+        captchaToken,
+        widgetReady,
+        loading,
+        router,
+      ]
+    );
 
   return (
     <>
       <Script
         src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-        strategy="afterInteractive"
+        strategy="beforeInteractive"
       />
 
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center px-4 py-8">
@@ -276,7 +329,7 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-1">
-              <h1 className="text-2xl font-bold text-white tracking-tight">
+              <h1 className="text-2xl font-bold text-white">
                 Netflix Checker
                 <span className="text-[#E50914] ml-1">
                   Pro
@@ -290,55 +343,47 @@ export default function LoginPage() {
           </div>
 
           <Card className="border-white/10 bg-[#171717] rounded-2xl shadow-2xl">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-white flex items-center gap-2 text-base">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
                 <LogIn className="h-4 w-4 text-[#E50914]" />
                 Acceso seguro
               </CardTitle>
             </CardHeader>
 
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-xs text-gray-400">
-                  Usuario
-                </label>
+              <Input
+                value={username}
+                onChange={(e) =>
+                  setUsername(
+                    e.target.value
+                  )
+                }
+                placeholder="Usuario"
+                className="h-11 bg-[#0a0a0a] border-white/10 text-white"
+              />
 
-                <Input
-                  value={username}
-                  onChange={(e) =>
-                    setUsername(
-                      e.target.value
-                    )
-                  }
-                  placeholder="Tu usuario"
-                  className="h-11 bg-[#0a0a0a] border-white/10 text-white"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs text-gray-400">
-                  Contraseña
-                </label>
-
-                <Input
-                  type="password"
-                  value={password}
-                  onChange={(e) =>
-                    setPassword(
-                      e.target.value
-                    )
-                  }
-                  placeholder="Tu contraseña"
-                  className="h-11 bg-[#0a0a0a] border-white/10 text-white"
-                />
-              </div>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) =>
+                  setPassword(
+                    e.target.value
+                  )
+                }
+                placeholder="Contraseña"
+                className="h-11 bg-[#0a0a0a] border-white/10 text-white"
+              />
 
               <div id="cf-turnstile"></div>
 
               <Button
-                onClick={handleLogin}
-                disabled={loading}
-                className="w-full h-11 bg-[#E50914] hover:bg-[#b2070f] text-white rounded-xl"
+                onClick={
+                  handleLogin
+                }
+                disabled={
+                  loading
+                }
+                className="w-full h-11 bg-[#E50914] hover:bg-[#b2070f] rounded-xl text-white"
               >
                 {loading ? (
                   <>
@@ -350,38 +395,27 @@ export default function LoginPage() {
                 )}
               </Button>
 
-              <p className="text-center text-xs text-gray-500">
-                ¿Necesitas ayuda?
-                Contáctame
-              </p>
+              <a
+                href="https://wa.me/524437863111"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-green-600 text-white"
+              >
+                <MessageCircle className="h-4 w-4" />
+                WhatsApp
+              </a>
 
-              <div className="space-y-3">
-                <a
-                  href="https://wa.me/524437863111"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-green-600 text-white"
-                >
-                  <MessageCircle className="h-4 w-4" />
-                  WhatsApp
-                </a>
-
-                <a
-                  href="https://t.me/HcheJotaA_Bot"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-sky-600 text-white"
-                >
-                  <Send className="h-4 w-4" />
-                  Telegram
-                </a>
-              </div>
+              <a
+                href="https://t.me/HcheJotaA_Bot"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-sky-600 text-white"
+              >
+                <Send className="h-4 w-4" />
+                Telegram
+              </a>
             </CardContent>
           </Card>
-
-          <p className="text-center text-[10px] text-gray-700">
-            Netflix Cookie Checker Pro
-          </p>
         </div>
       </div>
     </>
