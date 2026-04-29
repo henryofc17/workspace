@@ -102,6 +102,7 @@ export default function LoginPage() {
                     .NEXT_PUBLIC_TURNSTILE_SITE_KEY,
 
                 theme: "dark",
+                size: "normal",
 
                 callback: (
                   token: string
@@ -251,7 +252,10 @@ export default function LoginPage() {
               }
             />
 
-            <div id="cf-turnstile"></div>
+            <div
+              id="cf-turnstile"
+              className="flex justify-center min-h-[65px]"
+            ></div>
 
             <Button
               onClick={
