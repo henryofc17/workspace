@@ -2,9 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { createToken } from "@/lib/auth";
+import { loginRatelimit } from "@/lib/ratelimit";
 
 export async function POST(request: NextRequest) {
   try {
+    const ip =
+      request.headers.get("x-forwarded-for")?.split(",")[0] ||
+      "unknown";
+
+    const { success } = await loginRatelimit.limit(ip);
+
+    if (!success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Demasiados intentos. Espera 10 minutos.",
+        },
+        { status: 429 }
+      );
+    }
+
     const { username, password } = await request.json();
 
     if (!username || !password) {
@@ -26,6 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     const valid = await bcrypt.compare(password, user.password);
+
     if (!valid) {
       return NextResponse.json(
         { success: false, error: "Credenciales incorrectas" },
@@ -53,13 +71,14 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      maxAge: 60 * 60 * 24 * 7,
       path: "/",
     });
 
     return response;
   } catch (err: any) {
     console.error("Login error:", err);
+
     return NextResponse.json(
       { success: false, error: "Error del servidor" },
       { status: 500 }
