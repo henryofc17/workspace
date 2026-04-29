@@ -31,7 +31,8 @@ declare global {
 }
 
 export default function LoginPage() {
-  const widgetId = useRef<any>(null);
+  const widgetId =
+    useRef<any>(null);
 
   const [username, setUsername] =
     useState("");
@@ -45,8 +46,16 @@ export default function LoginPage() {
   const [loading, setLoading] =
     useState(false);
 
-  // AUTO REDIRECT SI YA ESTÁ LOGUEADO
+  // SOLO REDIRECT SI EXISTE COOKIE
   useEffect(() => {
+    if (
+      !document.cookie.includes(
+        "auth-token"
+      )
+    ) {
+      return;
+    }
+
     const checkSession =
       async () => {
         try {
@@ -78,7 +87,7 @@ export default function LoginPage() {
     checkSession();
   }, []);
 
-  // CARGAR CAPTCHA
+  // CAPTCHA
   useEffect(() => {
     let tries = 0;
 
@@ -269,7 +278,7 @@ export default function LoginPage() {
                   ? "/admin"
                   : "/";
             },
-            300
+            600
           );
         } catch (
           error: any
@@ -333,9 +342,7 @@ export default function LoginPage() {
                 value={
                   username
                 }
-                onChange={(
-                  e
-                ) =>
+                onChange={(e) =>
                   setUsername(
                     e.target
                       .value
@@ -349,9 +356,7 @@ export default function LoginPage() {
                 value={
                   password
                 }
-                onChange={(
-                  e
-                ) =>
+                onChange={(e) =>
                   setPassword(
                     e.target
                       .value
