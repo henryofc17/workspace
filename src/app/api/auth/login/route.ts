@@ -122,8 +122,7 @@ export async function POST(
     const user =
       await prisma.user.findUnique({
         where: {
-          username:
-            username,
+          username,
         },
       });
 
@@ -165,20 +164,32 @@ export async function POST(
       });
 
     const response =
-      NextResponse.json({
-        success: true,
-        user: {
-          id: user.id,
-          username:
-            user.username,
-          role:
-            user.role,
-          credits:
-            user.credits,
+      NextResponse.json(
+        {
+          success: true,
+          user: {
+            id: user.id,
+            username:
+              user.username,
+            role:
+              user.role,
+            credits:
+              user.credits,
+          },
         },
-      });
+        {
+          status: 200,
+          headers: {
+            "Cache-Control":
+              "no-store, no-cache, must-revalidate, proxy-revalidate",
+            Pragma:
+              "no-cache",
+            Expires: "0",
+          },
+        }
+      );
 
-    // COOKIE DEFINITIVA
+    // COOKIE DEFINITIVA VERCEL + ANDROID
     response.cookies.set(
       "auth-token",
       token,
@@ -196,7 +207,7 @@ export async function POST(
     );
 
     return response;
-  } catch (err: any) {
+  } catch (err) {
     console.error(
       "LOGIN ERROR:",
       err
