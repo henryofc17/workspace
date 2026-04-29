@@ -41,8 +41,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { username, password, captchaToken } =
-      await request.json();
+    const {
+      username,
+      password,
+      turnstileToken: captchaToken,
+    } = await request.json();
 
     // VALIDACIONES
     if (!username || !password) {
@@ -109,7 +112,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // TOKEN
+    // CREAR TOKEN
     const token = await createToken({
       userId: user.id,
       username: user.username,
