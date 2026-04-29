@@ -12,17 +12,18 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+
 import {
   Shield,
   Loader2,
   LogIn,
   MessageCircle,
   Send,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 declare global {
@@ -40,6 +41,9 @@ export default function LoginPage() {
 
   const [password, setPassword] =
     useState("");
+
+  const [showPass, setShowPass] =
+    useState(false);
 
   const [widgetReady, setWidgetReady] =
     useState(false);
@@ -204,7 +208,7 @@ export default function LoginPage() {
       } catch (e: any) {
         toast.error(
           e.message ||
-            "Error login"
+            "Error de conexión"
         );
       } finally {
         setLoading(false);
@@ -222,80 +226,145 @@ export default function LoginPage() {
       />
 
       <div className="min-h-screen bg-black flex items-center justify-center px-4">
-        <Card className="w-full max-w-sm bg-zinc-900 border-zinc-800">
-          <CardHeader>
-            <CardTitle className="text-white flex gap-2 items-center">
-              <Shield className="w-5 h-5 text-red-500" />
-              Login
-            </CardTitle>
-          </CardHeader>
 
-          <CardContent className="space-y-4">
-            <Input
-              placeholder="Usuario"
-              value={username}
-              onChange={(e) =>
-                setUsername(
-                  e.target.value
-                )
-              }
-            />
+        <Card className="w-full max-w-md bg-zinc-950 border-zinc-800 rounded-3xl shadow-2xl">
 
-            <Input
-              type="password"
-              placeholder="Contraseña"
-              value={password}
-              onChange={(e) =>
-                setPassword(
-                  e.target.value
-                )
-              }
-            />
+          <CardContent className="p-7 space-y-6">
 
-            <div
-              id="cf-turnstile"
-              className="flex justify-center min-h-[65px]"
-            ></div>
+            <div className="text-center space-y-3">
 
-            <Button
-              onClick={
-                handleLogin
-              }
-              disabled={loading}
-              className="w-full bg-red-600"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Entrando...
-                </>
-              ) : (
-                <>
-                  <LogIn className="w-4 h-4 mr-2" />
-                  Ingresar
-                </>
-              )}
-            </Button>
+              <div className="mx-auto w-16 h-16 rounded-2xl bg-red-600 flex items-center justify-center shadow-lg shadow-red-600/30">
+                <Shield className="w-8 h-8 text-white" />
+              </div>
 
-            <a
-              href="https://wa.me/524437863111"
-              target="_blank"
-              className="w-full flex justify-center bg-green-600 rounded-md py-2 text-white"
-            >
-              <MessageCircle className="w-4 h-4 mr-2" />
-              WhatsApp
-            </a>
+              <h1 className="text-4xl font-bold text-white">
+                Netflix Checker{" "}
+                <span className="text-red-500">
+                  Pro
+                </span>
+              </h1>
 
-            <a
-              href="https://t.me/HcheJotaA_Bot"
-              target="_blank"
-              className="w-full flex justify-center bg-sky-600 rounded-md py-2 text-white"
-            >
-              <Send className="w-4 h-4 mr-2" />
-              Telegram
-            </a>
+              <p className="text-zinc-400 text-sm">
+                Inicia sesión para continuar
+              </p>
+
+            </div>
+
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-5">
+
+              <div className="flex items-center gap-2 text-white font-semibold text-xl">
+                <LogIn className="w-5 h-5 text-red-500" />
+                Acceso seguro
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-zinc-400 text-sm">
+                  Usuario
+                </label>
+
+                <Input
+                  value={username}
+                  placeholder="UserTest"
+                  onChange={(e) =>
+                    setUsername(
+                      e.target.value
+                    )
+                  }
+                  className="h-14 bg-zinc-950 border-zinc-700 text-white text-xl rounded-xl"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-zinc-400 text-sm">
+                  Contraseña
+                </label>
+
+                <div className="relative">
+
+                  <Input
+                    type={
+                      showPass
+                        ? "text"
+                        : "password"
+                    }
+                    value={password}
+                    placeholder="••••••••"
+                    onChange={(e) =>
+                      setPassword(
+                        e.target.value
+                      )
+                    }
+                    className="h-14 bg-zinc-950 border-zinc-700 text-white text-xl rounded-xl pr-12"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowPass(
+                        !showPass
+                      )
+                    }
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400"
+                  >
+                    {showPass ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
+                  </button>
+
+                </div>
+              </div>
+
+              <div
+                id="cf-turnstile"
+                className="flex justify-center min-h-[65px]"
+              />
+
+              <Button
+                onClick={
+                  handleLogin
+                }
+                disabled={loading}
+                className="w-full h-14 bg-red-600 hover:bg-red-700 text-xl rounded-2xl font-bold"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Entrando...
+                  </>
+                ) : (
+                  "Iniciar Sesión"
+                )}
+              </Button>
+
+              <p className="text-center text-zinc-500 text-sm">
+                ¿Necesitas ayuda? Contáctame
+              </p>
+
+              <a
+                href="https://wa.me/524437863111"
+                target="_blank"
+                className="w-full flex justify-center items-center gap-2 bg-green-600 hover:bg-green-700 rounded-2xl py-4 text-white text-xl font-semibold"
+              >
+                <MessageCircle className="w-5 h-5" />
+                WhatsApp
+              </a>
+
+              <a
+                href="https://t.me/HcheJotaA_Bot"
+                target="_blank"
+                className="w-full flex justify-center items-center gap-2 bg-sky-600 hover:bg-sky-700 rounded-2xl py-4 text-white text-xl font-semibold"
+              >
+                <Send className="w-5 h-5" />
+                Telegram
+              </a>
+
+            </div>
+
           </CardContent>
         </Card>
+
       </div>
     </>
   );
