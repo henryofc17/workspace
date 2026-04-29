@@ -1,13 +1,10 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
 import React, {
   useState,
-  useCallback,
   useEffect,
   useRef,
+  useCallback,
 } from "react";
 
 import Script from "next/script";
@@ -27,6 +24,9 @@ import {
   MessageCircle,
   Send,
 } from "lucide-react";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 declare global {
   interface Window {
@@ -50,34 +50,29 @@ export default function LoginPage() {
     useState(false);
 
   useEffect(() => {
-    const checkSession =
-      async () => {
-        try {
-          const res =
-            await fetch(
-              "/api/auth/me",
-              {
-                credentials:
-                  "include",
-                cache:
-                  "no-store",
-              }
-            );
-
-          if (res.ok) {
-            const data =
-              await res.json();
-
-            window.location.replace(
-              data.user
-                ?.role ===
-                "ADMIN"
-                ? "/admin"
-                : "/"
-            );
+    const checkSession = async () => {
+      try {
+        const res = await fetch(
+          "/api/auth/me",
+          {
+            credentials: "include",
+            cache: "no-store",
           }
-        } catch {}
-      };
+        );
+
+        if (res.ok) {
+          const data =
+            await res.json();
+
+          window.location.replace(
+            data.user?.role ===
+              "ADMIN"
+              ? "/admin"
+              : "/"
+          );
+        }
+      } catch {}
+    };
 
     checkSession();
   }, []);
@@ -85,75 +80,47 @@ export default function LoginPage() {
   useEffect(() => {
     let tries = 0;
 
-    const timer =
-      setInterval(() => {
-        tries++;
+    const timer = setInterval(() => {
+      tries++;
 
-        if (
-          typeof window !==
-            "undefined" &&
-          window.turnstile &&
-          document.getElementById(
-            "cf-turnstile"
-          ) &&
-          !widgetReady
-        ) {
-          clearInterval(
-            timer
+      if (
+        typeof window !==
+          "undefined" &&
+        window.turnstile &&
+        document.getElementById(
+          "cf-turnstile"
+        ) &&
+        !widgetReady
+      ) {
+        clearInterval(timer);
+
+        widgetId.current =
+          window.turnstile.render(
+            "#cf-turnstile",
+            {
+              sitekey:
+                process.env
+                  .NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+              size: "invisible",
+            }
           );
 
-          try {
-            widgetId.current =
-              window.turnstile.render(
-                "#cf-turnstile",
-                {
-                  sitekey:
-                    process.env
-                      .NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+        setWidgetReady(true);
+      }
 
-                  size:
-                    "invisible",
-
-                  callback:
-                    () => {},
-
-                  "error-callback":
-                    () => {
-                      toast.error(
-                        "Captcha error"
-                      );
-                    },
-                }
-              );
-
-            setWidgetReady(
-              true
-            );
-          } catch {}
-        }
-
-        if (
-          tries >= 30
-        ) {
-          clearInterval(
-            timer
-          );
-        }
-      }, 500);
+      if (tries >= 30) {
+        clearInterval(timer);
+      }
+    }, 500);
 
     return () =>
-      clearInterval(
-        timer
-      );
+      clearInterval(timer);
   }, [widgetReady]);
 
   const getCaptchaToken =
     async (): Promise<string> => {
       return new Promise(
-        (
-          resolve,
-          reject
-        ) => {
+        (resolve, reject) => {
           try {
             window.turnstile.reset(
               widgetId.current
@@ -164,27 +131,22 @@ export default function LoginPage() {
               {
                 callback: (
                   token: string
-                ) => {
-                  resolve(
-                    token
-                  );
-                },
+                ) =>
+                  resolve(token),
               }
             );
 
-            setTimeout(
-              () =>
-                reject(
-                  new Error(
-                    "Captcha timeout"
-                  )
-                ),
-              10000
-            );
+            setTimeout(() => {
+              reject(
+                new Error(
+                  "Captcha timeout"
+                )
+              );
+            }, 10000);
           } catch {
             reject(
               new Error(
-                "Captcha no disponible"
+                "Captcha error"
               )
             );
           }
@@ -193,108 +155,76 @@ export default function LoginPage() {
     };
 
   const handleLogin =
-    useCallback(
-      async () => {
-        if (
-          !username.trim() ||
-          !password.trim()
-        ) {
-          toast.error(
-            "Completa todos los campos"
-          );
-          return;
-        }
+    useCallback(async () => {
+      if (
+        !username.trim() ||
+        !password.trim()
+      ) {
+        toast.error(
+          "Completa campos"
+        );
+        return;
+      }
 
-        if (loading)
-          return;
+      setLoading(true);
 
-        setLoading(
-          true
+      try {
+        const token =
+          await getCaptchaToken();
+
+        const res = await fetch(
+          "/api/auth/login",
+          {
+            method: "POST",
+            credentials:
+              "include",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              username:
+                username.trim(),
+              password,
+              turnstileToken:
+                token,
+            }),
+          }
         );
 
-        try {
-          if (
-            !widgetReady
-          ) {
-            throw new Error(
-              "Captcha cargando..."
-            );
-          }
+        const data =
+          await res.json();
 
-          const token =
-            await getCaptchaToken();
-
-          const res =
-            await fetch(
-              "/api/auth/login",
-              {
-                method:
-                  "POST",
-                credentials:
-                  "include",
-                headers:
-                  {
-                    "Content-Type":
-                      "application/json",
-                  },
-                body: JSON.stringify(
-                  {
-                    username:
-                      username.trim(),
-                    password,
-                    turnstileToken:
-                      token,
-                  }
-                ),
-              }
-            );
-
-          const data =
-            await res.json();
-
-          if (!res.ok) {
-            throw new Error(
-              data.error ||
-                "Login fallido"
-            );
-          }
-
-          toast.success(
-            `Bienvenido ${data.user.username}`
-          );
-
-          setTimeout(
-            () => {
-              window.location.replace(
-                data.user
-                  .role ===
-                  "ADMIN"
-                  ? "/admin"
-                  : "/"
-              );
-            },
-            800
-          );
-        } catch (
-          error: any
-        ) {
-          toast.error(
-            error.message ||
-              "Error"
-          );
-        } finally {
-          setLoading(
-            false
+        if (!res.ok) {
+          throw new Error(
+            data.error
           );
         }
-      },
-      [
-        username,
-        password,
-        widgetReady,
-        loading,
-      ]
-    );
+
+        toast.success(
+          "Bienvenido"
+        );
+
+        setTimeout(() => {
+          window.location.replace(
+            data.user.role ===
+              "ADMIN"
+              ? "/admin"
+              : "/"
+          );
+        }, 800);
+      } catch (e: any) {
+        toast.error(
+          e.message ||
+            "Error login"
+        );
+      } finally {
+        setLoading(false);
+      }
+    }, [
+      username,
+      password,
+    ]);
 
   return (
     <>
@@ -303,98 +233,78 @@ export default function LoginPage() {
         strategy="afterInteractive"
       />
 
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center px-4 py-8">
-        <div className="w-full max-w-sm space-y-6">
-          <div className="text-center space-y-4">
-            <div className="mx-auto h-16 w-16 rounded-2xl bg-[#E50914] flex items-center justify-center">
-              <Shield className="h-8 w-8 text-white" />
-            </div>
+      <div className="min-h-screen bg-black flex items-center justify-center px-4">
+        <Card className="w-full max-w-sm bg-zinc-900 border-zinc-800">
+          <CardHeader>
+            <CardTitle className="text-white flex gap-2 items-center">
+              <Shield className="w-5 h-5 text-red-500" />
+              Login
+            </CardTitle>
+          </CardHeader>
 
-            <div>
-              <h1 className="text-2xl font-bold text-white">
-                Netflix Checker
-                <span className="text-[#E50914] ml-1">
-                  Pro
-                </span>
-              </h1>
+          <CardContent className="space-y-4">
+            <Input
+              placeholder="Usuario"
+              value={username}
+              onChange={(e) =>
+                setUsername(
+                  e.target.value
+                )
+              }
+            />
 
-              <p className="text-sm text-gray-400">
-                Inicia sesión para continuar
-              </p>
-            </div>
-          </div>
+            <Input
+              type="password"
+              placeholder="Contraseña"
+              value={password}
+              onChange={(e) =>
+                setPassword(
+                  e.target.value
+                )
+              }
+            />
 
-          <Card className="border-white/10 bg-[#171717] rounded-2xl">
-            <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
-                <LogIn className="h-4 w-4 text-[#E50914]" />
-                Acceso seguro
-              </CardTitle>
-            </CardHeader>
+            <div id="cf-turnstile"></div>
 
-            <CardContent className="space-y-4">
-              <Input
-                value={username}
-                onChange={(e) =>
-                  setUsername(
-                    e.target.value
-                  )
-                }
-                placeholder="Usuario"
-              />
+            <Button
+              onClick={
+                handleLogin
+              }
+              disabled={loading}
+              className="w-full bg-red-600"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Entrando...
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-4 h-4 mr-2" />
+                  Ingresar
+                </>
+              )}
+            </Button>
 
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) =>
-                  setPassword(
-                    e.target.value
-                  )
-                }
-                placeholder="Contraseña"
-              />
+            <a
+              href="https://wa.me/524437863111"
+              target="_blank"
+              className="w-full flex justify-center bg-green-600 rounded-md py-2 text-white"
+            >
+              <MessageCircle className="w-4 h-4 mr-2" />
+              WhatsApp
+            </a>
 
-              <div id="cf-turnstile"></div>
-
-              <Button
-                onClick={
-                  handleLogin
-                }
-                disabled={
-                  loading
-                }
-                className="w-full h-11 bg-[#E50914]"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Ingresando...
-                  </>
-                ) : (
-                  "Iniciar Sesión"
-                )}
-              </Button>
-
-              <a
-                href="https://wa.me/524437863111"
-                target="_blank"
-                className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-green-600 text-white"
-              >
-                <MessageCircle className="h-4 w-4" />
-                WhatsApp
-              </a>
-
-              <a
-                href="https://t.me/HcheJotaA_Bot"
-                target="_blank"
-                className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-sky-600 text-white"
-              >
-                <Send className="h-4 w-4" />
-                Telegram
-              </a>
-            </CardContent>
-          </Card>
-        </div>
+            <a
+              href="https://t.me/HcheJotaA_Bot"
+              target="_blank"
+              className="w-full flex justify-center bg-sky-600 rounded-md py-2 text-white"
+            >
+              <Send className="w-4 h-4 mr-2" />
+              Telegram
+            </a>
+          </CardContent>
+        </Card>
       </div>
     </>
   );
