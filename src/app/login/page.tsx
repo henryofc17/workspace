@@ -38,30 +38,74 @@ export default function LoginPage() {
   useEffect(() => {
     const timer = setInterval(() => {
       if (
+        typeof window !== "undefined" &&
         window.turnstile &&
         document.getElementById("cf-turnstile") &&
         !widgetReady
       ) {
         clearInterval(timer);
 
-        window.turnstile.render("#cf-turnstile", {
-          sitekey:
-            process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
-          size: "invisible",
-          callback: function (token: string) {
-            setCaptchaToken(token);
-          },
-          "expired-callback": function () {
-            setCaptchaToken("");
-          },
-        });
+        try {
+          window.turnstile.render("#cf-turnstile", {
+            sitekey:
+              process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+            size: "invisible",
 
-        setWidgetReady(true);
+            callback: (token: string) => {
+              setCaptchaToken(token);
+            },
+
+            "expired-callback": () => {
+              setCaptchaToken("");
+            },
+
+            "error-callback": () => {
+              setCaptchaToken("");
+            },
+          });
+
+          setWidgetReady(true);
+        } catch (error) {}
       }
-    }, 500);
+    }, 400);
 
     return () => clearInterval(timer);
   }, [widgetReady]);
+
+  const waitForCaptchaLoad = async () => {
+    for (let i = 0; i < 10; i++) {
+      if (window.turnstile) return true;
+
+      await new Promise((r) =>
+        setTimeout(r, 500)
+      );
+    }
+
+    return false;
+  };
+
+  const getInvisibleToken = async () => {
+    return new Promise<string>((resolve, reject) => {
+      let tries = 0;
+
+      window.turnstile.reset("#cf-turnstile");
+      window.turnstile.execute("#cf-turnstile");
+
+      const check = setInterval(() => {
+        tries++;
+
+        if (captchaToken) {
+          clearInterval(check);
+          resolve(captchaToken);
+        }
+
+        if (tries >= 20) {
+          clearInterval(check);
+          reject();
+        }
+      }, 300);
+    });
+  };
 
   const handleLogin = useCallback(async () => {
     if (!username.trim() || !password.trim()) {
@@ -69,51 +113,65 @@ export default function LoginPage() {
       return;
     }
 
-    if (!window.turnstile || !widgetReady) {
-      toast.error("Captcha no cargó");
-      return;
-    }
-
     setLoading(true);
 
     try {
+      if (!window.turnstile || !widgetReady) {
+        toast.loading("Cargando...");
+
+        const loaded =
+          await waitForCaptchaLoad();
+
+        toast.dismiss();
+
+        if (!loaded) {
+          toast.error(
+            "No cargó."
+          );
+          setLoading(false);
+          return;
+        }
+      }
+
       let token = captchaToken;
 
       if (!token) {
-        token = await new Promise((resolve) => {
-          window.turnstile.reset("#cf-turnstile");
-
-          window.turnstile.execute("#cf-turnstile");
-
-          const check = setInterval(() => {
-            if (captchaToken) {
-              clearInterval(check);
-              resolve(captchaToken);
-            }
-          }, 300);
-        });
+        token = await getInvisibleToken();
       }
 
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          username: username.trim(),
-          password,
-          turnstileToken: token,
-        }),
-      });
+      const res = await fetch(
+        "/api/auth/login",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            username:
+              username.trim(),
+            password,
+            turnstileToken: token,
+          }),
+        }
+      );
 
       const data = await res.json();
 
       if (!res.ok) {
         toast.error(
-          data.error || "Error al iniciar sesión"
+          data.error ||
+            "Error al iniciar sesión"
         );
+
         setCaptchaToken("");
-        window.turnstile.reset("#cf-turnstile");
+
+        if (window.turnstile) {
+          window.turnstile.reset(
+            "#cf-turnstile"
+          );
+        }
+
         return;
       }
 
@@ -143,8 +201,7 @@ export default function LoginPage() {
     <>
       <Script
         src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-        async
-        defer
+        strategy="afterInteractive"
       />
 
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center px-4 py-8">
@@ -185,7 +242,9 @@ export default function LoginPage() {
                 <Input
                   value={username}
                   onChange={(e) =>
-                    setUsername(e.target.value)
+                    setUsername(
+                      e.target.value
+                    )
                   }
                   placeholder="Tu usuario"
                   className="h-11 bg-[#0a0a0a] border-white/10 text-white"
@@ -201,7 +260,9 @@ export default function LoginPage() {
                   type="password"
                   value={password}
                   onChange={(e) =>
-                    setPassword(e.target.value)
+                    setPassword(
+                      e.target.value
+                    )
                   }
                   placeholder="Tu contraseña"
                   className="h-11 bg-[#0a0a0a] border-white/10 text-white"
