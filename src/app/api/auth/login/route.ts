@@ -53,7 +53,6 @@ export async function POST(
       request.headers.get("x-real-ip") ||
       "unknown";
 
-    // RATE LIMIT
     try {
       const rate =
         await loginRatelimit.limit(ip);
@@ -81,7 +80,6 @@ export async function POST(
     const captchaToken =
       body.turnstileToken || "";
 
-    // VALIDACIONES
     if (!username || !password) {
       return NextResponse.json(
         {
@@ -104,7 +102,6 @@ export async function POST(
       );
     }
 
-    // CAPTCHA
     const captcha =
       await verifyTurnstile(
         captchaToken,
@@ -122,7 +119,6 @@ export async function POST(
       );
     }
 
-    // USER
     const user =
       await prisma.user.findUnique({
         where: {
@@ -141,7 +137,6 @@ export async function POST(
       );
     }
 
-    // PASSWORD
     const valid =
       await bcrypt.compare(
         password,
@@ -159,7 +154,6 @@ export async function POST(
       );
     }
 
-    // TOKEN
     const token =
       await createToken({
         userId: user.id,
@@ -186,11 +180,8 @@ export async function POST(
       token,
       {
         httpOnly: true,
-        secure:
-          process.env
-            .NODE_ENV ===
-          "production",
-        sameSite: "lax",
+        secure: true,
+        sameSite: "none",
         path: "/",
         maxAge:
           60 *
