@@ -35,19 +35,52 @@ export default function LoginPage() {
   const router = useRouter();
 
   const widgetId = useRef<any>(null);
-  const loadingCaptcha = useRef(false);
 
   const [username, setUsername] =
     useState("");
+
   const [password, setPassword] =
     useState("");
-  const [captchaToken, setCaptchaToken] =
-    useState("");
+
   const [widgetReady, setWidgetReady] =
     useState(false);
+
   const [loading, setLoading] =
     useState(false);
 
+  // AUTO REDIRECT SI YA TIENE COOKIE
+  useEffect(() => {
+    async function checkSession() {
+      try {
+        const res = await fetch(
+          "/api/auth/me",
+          {
+            credentials:
+              "include",
+            cache:
+              "no-store",
+          }
+        );
+
+        if (res.ok) {
+          const data =
+            await res.json();
+
+          router.replace(
+            data.user
+              ?.role ===
+              "ADMIN"
+              ? "/admin"
+              : "/"
+          );
+        }
+      } catch {}
+    }
+
+    checkSession();
+  }, [router]);
+
+  // CARGAR CAPTCHA
   useEffect(() => {
     let tries = 0;
 
@@ -55,7 +88,8 @@ export default function LoginPage() {
       tries++;
 
       if (
-        typeof window !== "undefined" &&
+        typeof window !==
+          "undefined" &&
         window.turnstile &&
         document.getElementById(
           "cf-turnstile"
@@ -73,27 +107,15 @@ export default function LoginPage() {
                   process.env
                     .NEXT_PUBLIC_TURNSTILE_SITE_KEY,
 
-                size: "invisible",
+                size:
+                  "invisible",
 
-                callback: (
-                  token: string
-                ) => {
-                  setCaptchaToken(
-                    token
-                  );
-                },
-
-                "expired-callback":
-                  () => {
-                    setCaptchaToken(
-                      ""
-                    );
-                  },
+                callback: () => {},
 
                 "error-callback":
                   () => {
-                    setCaptchaToken(
-                      ""
+                    toast.error(
+                      "Captcha error"
                     );
                   },
               }
@@ -114,90 +136,42 @@ export default function LoginPage() {
 
   const getCaptchaToken =
     async (): Promise<string> => {
-      if (
-        !window.turnstile ||
-        widgetId.current === null
-      ) {
-        throw new Error(
-          "Captcha no disponible"
-        );
-      }
-
-      if (loadingCaptcha.current) {
-        throw new Error(
-          "Captcha ocupado"
-        );
-      }
-
-      loadingCaptcha.current = true;
-
       return new Promise(
-        (resolve, reject) => {
+        (
+          resolve,
+          reject
+        ) => {
           try {
-            setCaptchaToken("");
-
             window.turnstile.reset(
               widgetId.current
             );
 
             window.turnstile.execute(
-              widgetId.current
-            );
-
-            let tries = 0;
-
-            const checker =
-              setInterval(() => {
-                tries++;
-
-                const token =
-                  (
-                    document.querySelector(
-                      '[name="cf-turnstile-response"]'
-                    ) as HTMLInputElement
-                  )?.value ||
-                  captchaToken;
-
-                if (
-                  token &&
-                  token.length >
-                    20
-                ) {
-                  clearInterval(
-                    checker
-                  );
-                  loadingCaptcha.current =
-                    false;
-                  setCaptchaToken(
-                    token
-                  );
+              widgetId.current,
+              {
+                callback: (
+                  token: string
+                ) => {
                   resolve(
                     token
                   );
-                }
+                },
+              }
+            );
 
-                if (
-                  tries >= 25
-                ) {
-                  clearInterval(
-                    checker
-                  );
-                  loadingCaptcha.current =
-                    false;
-                  reject(
-                    new Error(
-                      "Captcha tardó demasiado"
-                    )
-                  );
-                }
-              }, 300);
+            setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    "Captcha timeout"
+                  )
+                ),
+              10000
+            );
           } catch {
-            loadingCaptcha.current =
-              false;
-
             reject(
               new Error(
-                "Error captcha"
+                "Captcha no disponible"
               )
             );
           }
@@ -224,7 +198,6 @@ export default function LoginPage() {
 
         try {
           if (
-            !window.turnstile ||
             !widgetReady
           ) {
             throw new Error(
@@ -233,8 +206,7 @@ export default function LoginPage() {
           }
 
           const token =
-            captchaToken ||
-            (await getCaptchaToken());
+            await getCaptchaToken();
 
           const res =
             await fetch(
@@ -242,6 +214,8 @@ export default function LoginPage() {
               {
                 method:
                   "POST",
+                credentials:
+                  "include",
                 headers:
                   {
                     "Content-Type":
@@ -273,41 +247,35 @@ export default function LoginPage() {
             `Bienvenido ${data.user.username}`
           );
 
-          router.push(
-            data.user
-              .role ===
-              "ADMIN"
-              ? "/admin"
-              : "/"
+          // ESPERAR COOKIE
+          setTimeout(
+            () => {
+              router.replace(
+                data.user
+                  .role ===
+                  "ADMIN"
+                  ? "/admin"
+                  : "/"
+              );
+
+              router.refresh();
+            },
+            300
           );
         } catch (
           error: any
         ) {
           toast.error(
             error.message ||
-              "Error de conexión"
+              "Error"
           );
         } finally {
           setLoading(false);
-          setCaptchaToken("");
-
-          try {
-            if (
-              window.turnstile &&
-              widgetId.current !==
-                null
-            ) {
-              window.turnstile.reset(
-                widgetId.current
-              );
-            }
-          } catch {}
         }
       },
       [
         username,
         password,
-        captchaToken,
         widgetReady,
         loading,
         router,
@@ -318,17 +286,17 @@ export default function LoginPage() {
     <>
       <Script
         src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-        strategy="beforeInteractive"
+        strategy="afterInteractive"
       />
 
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-sm space-y-6">
           <div className="text-center space-y-4">
-            <div className="mx-auto h-16 w-16 rounded-2xl bg-[#E50914] flex items-center justify-center shadow-xl shadow-red-900/30">
+            <div className="mx-auto h-16 w-16 rounded-2xl bg-[#E50914] flex items-center justify-center">
               <Shield className="h-8 w-8 text-white" />
             </div>
 
-            <div className="space-y-1">
+            <div>
               <h1 className="text-2xl font-bold text-white">
                 Netflix Checker
                 <span className="text-[#E50914] ml-1">
@@ -342,7 +310,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <Card className="border-white/10 bg-[#171717] rounded-2xl shadow-2xl">
+          <Card className="border-white/10 bg-[#171717] rounded-2xl">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
                 <LogIn className="h-4 w-4 text-[#E50914]" />
@@ -359,7 +327,6 @@ export default function LoginPage() {
                   )
                 }
                 placeholder="Usuario"
-                className="h-11 bg-[#0a0a0a] border-white/10 text-white"
               />
 
               <Input
@@ -371,7 +338,6 @@ export default function LoginPage() {
                   )
                 }
                 placeholder="Contraseña"
-                className="h-11 bg-[#0a0a0a] border-white/10 text-white"
               />
 
               <div id="cf-turnstile"></div>
@@ -383,7 +349,7 @@ export default function LoginPage() {
                 disabled={
                   loading
                 }
-                className="w-full h-11 bg-[#E50914] hover:bg-[#b2070f] rounded-xl text-white"
+                className="w-full h-11 bg-[#E50914]"
               >
                 {loading ? (
                   <>
@@ -398,7 +364,6 @@ export default function LoginPage() {
               <a
                 href="https://wa.me/524437863111"
                 target="_blank"
-                rel="noopener noreferrer"
                 className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-green-600 text-white"
               >
                 <MessageCircle className="h-4 w-4" />
@@ -408,7 +373,6 @@ export default function LoginPage() {
               <a
                 href="https://t.me/HcheJotaA_Bot"
                 target="_blank"
-                rel="noopener noreferrer"
                 className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-sky-600 text-white"
               >
                 <Send className="h-4 w-4" />
