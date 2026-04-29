@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 "use client";
 
 import React, {
@@ -46,16 +49,8 @@ export default function LoginPage() {
   const [loading, setLoading] =
     useState(false);
 
-  // SOLO REDIRECT SI EXISTE COOKIE
+  // VERIFICAR SESIÓN REAL
   useEffect(() => {
-    if (
-      !document.cookie.includes(
-        "auth-token"
-      )
-    ) {
-      return;
-    }
-
     const checkSession =
       async () => {
         try {
@@ -74,12 +69,13 @@ export default function LoginPage() {
             const data =
               await res.json();
 
-            window.location.href =
+            window.location.replace(
               data.user
                 ?.role ===
-              "ADMIN"
+                "ADMIN"
                 ? "/admin"
-                : "/";
+                : "/"
+            );
           }
         } catch {}
       };
@@ -271,14 +267,15 @@ export default function LoginPage() {
 
           setTimeout(
             () => {
-              window.location.href =
+              window.location.replace(
                 data.user
                   .role ===
-                "ADMIN"
+                  "ADMIN"
                   ? "/admin"
-                  : "/";
+                  : "/"
+              );
             },
-            600
+            800
           );
         } catch (
           error: any
@@ -339,13 +336,10 @@ export default function LoginPage() {
 
             <CardContent className="space-y-4">
               <Input
-                value={
-                  username
-                }
+                value={username}
                 onChange={(e) =>
                   setUsername(
-                    e.target
-                      .value
+                    e.target.value
                   )
                 }
                 placeholder="Usuario"
@@ -353,13 +347,10 @@ export default function LoginPage() {
 
               <Input
                 type="password"
-                value={
-                  password
-                }
+                value={password}
                 onChange={(e) =>
                   setPassword(
-                    e.target
-                      .value
+                    e.target.value
                   )
                 }
                 placeholder="Contraseña"
