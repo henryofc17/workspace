@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [widgetReady, setWidgetReady] = useState(false);
 
+  const widgetId = useRef<any>(null);
+
   useEffect(() => {
     const timer = setInterval(() => {
       if (
@@ -46,23 +48,27 @@ export default function LoginPage() {
         clearInterval(timer);
 
         try {
-          window.turnstile.render("#cf-turnstile", {
-            sitekey:
-              process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
-            size: "invisible",
+          widgetId.current = window.turnstile.render(
+            "#cf-turnstile",
+            {
+              sitekey:
+                process.env
+                  .NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+              size: "invisible",
 
-            callback: (token: string) => {
-              setCaptchaToken(token);
-            },
+              callback: (token: string) => {
+                setCaptchaToken(token);
+              },
 
-            "expired-callback": () => {
-              setCaptchaToken("");
-            },
+              "expired-callback": () => {
+                setCaptchaToken("");
+              },
 
-            "error-callback": () => {
-              setCaptchaToken("");
-            },
-          });
+              "error-callback": () => {
+                setCaptchaToken("");
+              },
+            }
+          );
 
           setWidgetReady(true);
         } catch (error) {}
@@ -72,71 +78,118 @@ export default function LoginPage() {
     return () => clearInterval(timer);
   }, [widgetReady]);
 
-  const waitForCaptchaLoad = async () => {
-    for (let i = 0; i < 10; i++) {
-      if (window.turnstile) return true;
+  const waitForCaptchaLoad =
+    async (): Promise<boolean> => {
+      for (let i = 0; i < 12; i++) {
+        if (window.turnstile) {
+          return true;
+        }
 
-      await new Promise((r) =>
-        setTimeout(r, 500)
+        await new Promise((r) =>
+          setTimeout(r, 500)
+        );
+      }
+
+      return false;
+    };
+
+  const getInvisibleToken =
+    async (): Promise<string> => {
+      return new Promise(
+        async (resolve, reject) => {
+          try {
+            setCaptchaToken("");
+
+            if (
+              !window.turnstile ||
+              widgetId.current === null
+            ) {
+              reject(
+                new Error(
+                  "Captcha no disponible"
+                )
+              );
+              return;
+            }
+
+            window.turnstile.reset(
+              widgetId.current
+            );
+
+            window.turnstile.execute(
+              widgetId.current
+            );
+
+            let tries = 0;
+
+            const check = setInterval(() => {
+              tries++;
+
+              const token =
+                (
+                  document.querySelector(
+                    '[name="cf-turnstile-response"]'
+                  ) as HTMLInputElement
+                )?.value || captchaToken;
+
+              if (token) {
+                clearInterval(check);
+                setCaptchaToken(token);
+                resolve(token);
+              }
+
+              if (tries >= 20) {
+                clearInterval(check);
+                reject(
+                  new Error(
+                    "Captcha tardó demasiado"
+                  )
+                );
+              }
+            }, 300);
+          } catch (error) {
+            reject(
+              new Error(
+                "Error ejecutando captcha"
+              )
+            );
+          }
+        }
       );
-    }
-
-    return false;
-  };
-
-  const getInvisibleToken = async () => {
-    return new Promise<string>((resolve, reject) => {
-      let tries = 0;
-
-      window.turnstile.reset("#cf-turnstile");
-      window.turnstile.execute("#cf-turnstile");
-
-      const check = setInterval(() => {
-        tries++;
-
-        if (captchaToken) {
-          clearInterval(check);
-          resolve(captchaToken);
-        }
-
-        if (tries >= 20) {
-          clearInterval(check);
-          reject();
-        }
-      }, 300);
-    });
-  };
+    };
 
   const handleLogin = useCallback(async () => {
     if (!username.trim() || !password.trim()) {
-      toast.error("Completa todos los campos");
+      toast.error(
+        "Completa todos los campos"
+      );
       return;
     }
+
+    if (loading) return;
 
     setLoading(true);
 
     try {
-      if (!window.turnstile || !widgetReady) {
-        toast.loading("Cargando...");
-
+      if (
+        !window.turnstile ||
+        !widgetReady
+      ) {
         const loaded =
           await waitForCaptchaLoad();
 
-        toast.dismiss();
-
         if (!loaded) {
-          toast.error(
-            "No cargó."
+          throw new Error(
+            "Captcha no cargó"
           );
-          setLoading(false);
-          return;
         }
       }
 
       let token = captchaToken;
 
       if (!token) {
-        token = await getInvisibleToken();
+        token =
+          await getInvisibleToken();
       }
 
       const res = await fetch(
@@ -147,6 +200,7 @@ export default function LoginPage() {
             "Content-Type":
               "application/json",
           },
+          cache: "no-store",
           body: JSON.stringify({
             username:
               username.trim(),
@@ -156,51 +210,61 @@ export default function LoginPage() {
         }
       );
 
-      const data = await res.json();
+      let data: any = {};
+
+      try {
+        data = await res.json();
+      } catch {}
 
       if (!res.ok) {
-        toast.error(
+        throw new Error(
           data.error ||
-            "Error al iniciar sesión"
+            "Login fallido"
         );
-
-        setCaptchaToken("");
-
-        if (window.turnstile) {
-          window.turnstile.reset(
-            "#cf-turnstile"
-          );
-        }
-
-        return;
       }
 
       toast.success(
-        `Bienvenido, ${data.user.username}`
+        `Bienvenido ${data.user.username}`
       );
 
-      if (data.user.role === "ADMIN") {
-        router.push("/admin");
-      } else {
-        router.push("/");
-      }
-    } catch (error) {
-      toast.error("Error de conexión");
+      router.push(
+        data.user.role === "ADMIN"
+          ? "/admin"
+          : "/"
+      );
+    } catch (error: any) {
+      toast.error(
+        error.message ||
+          "Error de conexión"
+      );
     } finally {
       setLoading(false);
+      setCaptchaToken("");
+
+      if (
+        window.turnstile &&
+        widgetId.current !== null
+      ) {
+        try {
+          window.turnstile.reset(
+            widgetId.current
+          );
+        } catch {}
+      }
     }
   }, [
     username,
     password,
     captchaToken,
     widgetReady,
+    loading,
     router,
   ]);
 
   return (
     <>
       <Script
-        src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+        src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
         strategy="afterInteractive"
       />
 
@@ -287,7 +351,8 @@ export default function LoginPage() {
               </Button>
 
               <p className="text-center text-xs text-gray-500">
-                ¿Necesitas ayuda? Contáctame
+                ¿Necesitas ayuda?
+                Contáctame
               </p>
 
               <div className="space-y-3">
