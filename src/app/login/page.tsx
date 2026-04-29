@@ -33,24 +33,35 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
   const [loading, setLoading] = useState(false);
+  const [widgetReady, setWidgetReady] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
-      if (window.turnstile && document.getElementById("cf-turnstile")) {
+      if (
+        window.turnstile &&
+        document.getElementById("cf-turnstile") &&
+        !widgetReady
+      ) {
         clearInterval(timer);
 
         window.turnstile.render("#cf-turnstile", {
-          sitekey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+          sitekey:
+            process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
           size: "invisible",
           callback: function (token: string) {
             setCaptchaToken(token);
           },
+          "expired-callback": function () {
+            setCaptchaToken("");
+          },
         });
+
+        setWidgetReady(true);
       }
     }, 500);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [widgetReady]);
 
   const handleLogin = useCallback(async () => {
     if (!username.trim() || !password.trim()) {
@@ -58,7 +69,7 @@ export default function LoginPage() {
       return;
     }
 
-    if (!window.turnstile) {
+    if (!window.turnstile || !widgetReady) {
       toast.error("Captcha no cargó");
       return;
     }
@@ -66,14 +77,21 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const widget = document.querySelector(
-        "#cf-turnstile iframe"
-      );
+      let token = captchaToken;
 
-      if (widget && !captchaToken) {
-        await window.turnstile.execute("#cf-turnstile");
-        setLoading(false);
-        return;
+      if (!token) {
+        token = await new Promise((resolve) => {
+          window.turnstile.reset("#cf-turnstile");
+
+          window.turnstile.execute("#cf-turnstile");
+
+          const check = setInterval(() => {
+            if (captchaToken) {
+              clearInterval(check);
+              resolve(captchaToken);
+            }
+          }, 300);
+        });
       }
 
       const res = await fetch("/api/auth/login", {
@@ -84,32 +102,42 @@ export default function LoginPage() {
         body: JSON.stringify({
           username: username.trim(),
           password,
-          turnstileToken: captchaToken,
+          turnstileToken: token,
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.error || "Error al iniciar sesión");
+        toast.error(
+          data.error || "Error al iniciar sesión"
+        );
         setCaptchaToken("");
         window.turnstile.reset("#cf-turnstile");
         return;
       }
 
-      toast.success(`Bienvenido, ${data.user.username}`);
+      toast.success(
+        `Bienvenido, ${data.user.username}`
+      );
 
       if (data.user.role === "ADMIN") {
         router.push("/admin");
       } else {
         router.push("/");
       }
-    } catch {
+    } catch (error) {
       toast.error("Error de conexión");
     } finally {
       setLoading(false);
     }
-  }, [username, password, captchaToken, router]);
+  }, [
+    username,
+    password,
+    captchaToken,
+    widgetReady,
+    router,
+  ]);
 
   return (
     <>
@@ -129,7 +157,9 @@ export default function LoginPage() {
             <div className="space-y-1">
               <h1 className="text-2xl font-bold text-white tracking-tight">
                 Netflix Checker
-                <span className="text-[#E50914] ml-1">Pro</span>
+                <span className="text-[#E50914] ml-1">
+                  Pro
+                </span>
               </h1>
 
               <p className="text-sm text-gray-400">
@@ -203,6 +233,7 @@ export default function LoginPage() {
                 <a
                   href="https://wa.me/524437863111"
                   target="_blank"
+                  rel="noopener noreferrer"
                   className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-green-600 text-white"
                 >
                   <MessageCircle className="h-4 w-4" />
@@ -212,6 +243,7 @@ export default function LoginPage() {
                 <a
                   href="https://t.me/HcheJotaA_Bot"
                   target="_blank"
+                  rel="noopener noreferrer"
                   className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-sky-600 text-white"
                 >
                   <Send className="h-4 w-4" />
