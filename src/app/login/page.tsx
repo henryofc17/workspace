@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Turnstile from "react-turnstile";
+import Script from "next/script";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,6 +20,12 @@ import {
   Send,
 } from "lucide-react";
 
+declare global {
+  interface Window {
+    turnstile: any;
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -28,20 +34,48 @@ export default function LoginPage() {
   const [captchaToken, setCaptchaToken] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (window.turnstile && document.getElementById("cf-turnstile")) {
+        clearInterval(timer);
+
+        window.turnstile.render("#cf-turnstile", {
+          sitekey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+          size: "invisible",
+          callback: function (token: string) {
+            setCaptchaToken(token);
+          },
+        });
+      }
+    }, 500);
+
+    return () => clearInterval(timer);
+  }, []);
+
   const handleLogin = useCallback(async () => {
     if (!username.trim() || !password.trim()) {
       toast.error("Completa todos los campos");
       return;
     }
 
-    if (!captchaToken) {
-      toast.error("Completa la verificación");
+    if (!window.turnstile) {
+      toast.error("Captcha no cargó");
       return;
     }
 
     setLoading(true);
 
     try {
+      const widget = document.querySelector(
+        "#cf-turnstile iframe"
+      );
+
+      if (widget && !captchaToken) {
+        await window.turnstile.execute("#cf-turnstile");
+        setLoading(false);
+        return;
+      }
+
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: {
@@ -50,7 +84,7 @@ export default function LoginPage() {
         body: JSON.stringify({
           username: username.trim(),
           password,
-          captchaToken,
+          turnstileToken: captchaToken,
         }),
       });
 
@@ -58,7 +92,8 @@ export default function LoginPage() {
 
       if (!res.ok) {
         toast.error(data.error || "Error al iniciar sesión");
-        setLoading(false);
+        setCaptchaToken("");
+        window.turnstile.reset("#cf-turnstile");
         return;
       }
 
@@ -77,143 +112,120 @@ export default function LoginPage() {
   }, [username, password, captchaToken, router]);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center px-4 py-8">
-      <div className="w-full max-w-sm space-y-6">
-        {/* Header */}
-        <div className="text-center space-y-4">
-          <div className="mx-auto h-16 w-16 rounded-2xl bg-[#E50914] flex items-center justify-center shadow-xl shadow-red-900/30">
-            <Shield className="h-8 w-8 text-white" />
+    <>
+      <Script
+        src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+        async
+        defer
+      />
+
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center px-4 py-8">
+        <div className="w-full max-w-sm space-y-6">
+          <div className="text-center space-y-4">
+            <div className="mx-auto h-16 w-16 rounded-2xl bg-[#E50914] flex items-center justify-center shadow-xl shadow-red-900/30">
+              <Shield className="h-8 w-8 text-white" />
+            </div>
+
+            <div className="space-y-1">
+              <h1 className="text-2xl font-bold text-white tracking-tight">
+                Netflix Checker
+                <span className="text-[#E50914] ml-1">Pro</span>
+              </h1>
+
+              <p className="text-sm text-gray-400">
+                Inicia sesión para continuar
+              </p>
+            </div>
           </div>
 
-          <div className="space-y-1">
-            <h1 className="text-2xl font-bold text-white tracking-tight">
-              Netflix Checker
-              <span className="text-[#E50914] ml-1">Pro</span>
-            </h1>
+          <Card className="border-white/10 bg-[#171717] rounded-2xl shadow-2xl">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-white flex items-center gap-2 text-base">
+                <LogIn className="h-4 w-4 text-[#E50914]" />
+                Acceso seguro
+              </CardTitle>
+            </CardHeader>
 
-            <p className="text-sm text-gray-400">
-              Inicia sesión para continuar
-            </p>
-          </div>
-        </div>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs text-gray-400">
+                  Usuario
+                </label>
 
-        {/* Card */}
-        <Card className="border-white/10 bg-[#171717] backdrop-blur-xl shadow-2xl rounded-2xl">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-white flex items-center gap-2 text-base">
-              <LogIn className="h-4 w-4 text-[#E50914]" />
-              Acceso seguro
-            </CardTitle>
-          </CardHeader>
+                <Input
+                  value={username}
+                  onChange={(e) =>
+                    setUsername(e.target.value)
+                  }
+                  placeholder="Tu usuario"
+                  className="h-11 bg-[#0a0a0a] border-white/10 text-white"
+                />
+              </div>
 
-          <CardContent className="space-y-4">
-            {/* Usuario */}
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-400">
-                Usuario
-              </label>
+              <div className="space-y-2">
+                <label className="text-xs text-gray-400">
+                  Contraseña
+                </label>
 
-              <Input
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Tu usuario"
-                className="h-11 bg-[#0a0a0a] border-white/10 text-white placeholder:text-gray-600 focus:border-[#E50914]/50"
-                onKeyDown={(e) =>
-                  e.key === "Enter" && handleLogin()
-                }
-              />
-            </div>
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) =>
+                    setPassword(e.target.value)
+                  }
+                  placeholder="Tu contraseña"
+                  className="h-11 bg-[#0a0a0a] border-white/10 text-white"
+                />
+              </div>
 
-            {/* Password */}
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-400">
-                Contraseña
-              </label>
+              <div id="cf-turnstile"></div>
 
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Tu contraseña"
-                className="h-11 bg-[#0a0a0a] border-white/10 text-white placeholder:text-gray-600 focus:border-[#E50914]/50"
-                onKeyDown={(e) =>
-                  e.key === "Enter" && handleLogin()
-                }
-              />
-            </div>
+              <Button
+                onClick={handleLogin}
+                disabled={loading}
+                className="w-full h-11 bg-[#E50914] hover:bg-[#b2070f] text-white rounded-xl"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Ingresando...
+                  </>
+                ) : (
+                  "Iniciar Sesión"
+                )}
+              </Button>
 
-            {/* CAPTCHA */}
-            <div className="flex justify-center">
-              <Turnstile
-                sitekey={
-                  process.env
-                    .NEXT_PUBLIC_TURNSTILE_SITE_KEY!
-                }
-                onVerify={(token) =>
-                  setCaptchaToken(token)
-                }
-                onExpire={() => setCaptchaToken("")}
-                theme="dark"
-              />
-            </div>
-
-            {/* Login button */}
-            <Button
-              onClick={handleLogin}
-              disabled={
-                loading ||
-                !username.trim() ||
-                !password.trim()
-              }
-              className="w-full h-11 bg-[#E50914] hover:bg-[#b2070f] text-white font-semibold rounded-xl transition-all"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Ingresando...
-                </>
-              ) : (
-                "Iniciar Sesión"
-              )}
-            </Button>
-
-            {/* Divider */}
-            <div className="pt-2">
               <p className="text-center text-xs text-gray-500">
                 ¿Necesitas ayuda? Contáctame
               </p>
-            </div>
 
-            {/* Contact buttons */}
-            <div className="space-y-3">
-              <a
-                href="https://wa.me/524437863111"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-green-600 hover:bg-green-500 transition-all text-white font-medium shadow-lg"
-              >
-                <MessageCircle className="h-4 w-4" />
-                WhatsApp
-              </a>
+              <div className="space-y-3">
+                <a
+                  href="https://wa.me/524437863111"
+                  target="_blank"
+                  className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-green-600 text-white"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  WhatsApp
+                </a>
 
-              <a
-                href="https://t.me/HcheJotaA_Bot"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-sky-600 hover:bg-sky-500 transition-all text-white font-medium shadow-lg"
-              >
-                <Send className="h-4 w-4" />
-                Telegram
-              </a>
-            </div>
-          </CardContent>
-        </Card>
+                <a
+                  href="https://t.me/HcheJotaA_Bot"
+                  target="_blank"
+                  className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-sky-600 text-white"
+                >
+                  <Send className="h-4 w-4" />
+                  Telegram
+                </a>
+              </div>
+            </CardContent>
+          </Card>
 
-        {/* Footer */}
-        <p className="text-center text-[10px] text-gray-700 px-2">
-          Netflix Cookie Checker Pro — Desarrollado por HacheJota
-        </p>
+          <p className="text-center text-[10px] text-gray-700">
+            Netflix Cookie Checker Pro
+          </p>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
