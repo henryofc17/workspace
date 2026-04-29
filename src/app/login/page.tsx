@@ -25,9 +25,6 @@ import {
   Send,
 } from "lucide-react";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
 declare global {
   interface Window {
     turnstile: any;
@@ -308,4 +305,4 @@ export default function LoginPage() {
       </div>
     </>
   );
-}
+            }
