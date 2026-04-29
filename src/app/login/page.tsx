@@ -2,11 +2,16 @@
 
 "use client";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import React, {
   useState,
   useCallback,
   useEffect,
   useRef,
+} from "react";
+
 } from "react";
 import Script from "next/script";
 import { Button } from "@/components/ui/button";
