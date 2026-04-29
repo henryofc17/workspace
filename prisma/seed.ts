@@ -4,32 +4,27 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  // Create admin if not exists
-  const existingAdmin = await prisma.user.findUnique({
+  const hashedPassword = await bcrypt.hash("HacheAdmin", 10);
+
+  await prisma.user.upsert({
     where: { username: "HacheJota" },
+    update: {
+      password: hashedPassword,
+      role: "ADMIN",
+      credits: 9999
+    },
+    create: {
+      username: "HacheJota",
+      password: hashedPassword,
+      role: "ADMIN",
+      credits: 9999
+    }
   });
 
-  if (!existingAdmin) {
-    const hashedPassword = await bcrypt.hash("HacheAdmin", 10);
-    await prisma.user.create({
-      data: {
-        username: "HacheJota",
-        password: hashedPassword,
-        role: "ADMIN",
-        credits: 9999,
-      },
-    });
-    console.log("✅ Admin HacheJota created");
-  } else {
-    console.log("ℹ️  Admin already exists");
-  }
+  console.log("✅ Admin listo");
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
   .finally(async () => {
     await prisma.$disconnect();
   });
