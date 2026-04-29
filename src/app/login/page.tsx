@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Turnstile from "react-turnstile";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,11 +25,17 @@ export default function LoginPage() {
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = useCallback(async () => {
     if (!username.trim() || !password.trim()) {
       toast.error("Completa todos los campos");
+      return;
+    }
+
+    if (!captchaToken) {
+      toast.error("Completa la verificación");
       return;
     }
 
@@ -43,6 +50,7 @@ export default function LoginPage() {
         body: JSON.stringify({
           username: username.trim(),
           password,
+          captchaToken,
         }),
       });
 
@@ -50,6 +58,7 @@ export default function LoginPage() {
 
       if (!res.ok) {
         toast.error(data.error || "Error al iniciar sesión");
+        setLoading(false);
         return;
       }
 
@@ -65,7 +74,7 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
-  }, [username, password, router]);
+  }, [username, password, captchaToken, router]);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center px-4 py-8">
@@ -130,6 +139,21 @@ export default function LoginPage() {
                 onKeyDown={(e) =>
                   e.key === "Enter" && handleLogin()
                 }
+              />
+            </div>
+
+            {/* CAPTCHA */}
+            <div className="flex justify-center">
+              <Turnstile
+                sitekey={
+                  process.env
+                    .NEXT_PUBLIC_TURNSTILE_SITE_KEY!
+                }
+                onVerify={(token) =>
+                  setCaptchaToken(token)
+                }
+                onExpire={() => setCaptchaToken("")}
+                theme="dark"
               />
             </div>
 
