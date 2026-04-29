@@ -122,7 +122,8 @@ export async function POST(
     const user =
       await prisma.user.findUnique({
         where: {
-          username: username,
+          username:
+            username,
         },
       });
 
@@ -159,7 +160,8 @@ export async function POST(
         userId: user.id,
         username:
           user.username,
-        role: user.role,
+        role:
+          user.role,
       });
 
     const response =
@@ -169,19 +171,21 @@ export async function POST(
           id: user.id,
           username:
             user.username,
-          role: user.role,
+          role:
+            user.role,
           credits:
             user.credits,
         },
       });
 
+    // COOKIE DEFINITIVA
     response.cookies.set(
       "auth-token",
       token,
       {
         httpOnly: true,
         secure: true,
-        sameSite: "none",
+        sameSite: "lax",
         path: "/",
         maxAge:
           60 *
