@@ -13,11 +13,12 @@ import {
   Shield,
   Search,
   Zap,
-  RefreshCw,  // 🔥 CAMBIO 1: Copy → RefreshCw
+  RefreshCw,
   LogOut,
   Coins,
   Loader2,
   Check,
+  Copy, // 👈 ESTA LÍNEA FALTABA
   ExternalLink,
   CreditCard,
   Clock,
