@@ -6,7 +6,6 @@ import React, {
   useEffect,
   useRef,
 } from "react";
-import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,8 +31,6 @@ declare global {
 }
 
 export default function LoginPage() {
-  const router = useRouter();
-
   const widgetId = useRef<any>(null);
 
   const [username, setUsername] =
@@ -48,90 +45,103 @@ export default function LoginPage() {
   const [loading, setLoading] =
     useState(false);
 
-  // AUTO REDIRECT SI YA TIENE COOKIE
+  // AUTO REDIRECT SI YA ESTÁ LOGUEADO
   useEffect(() => {
-    async function checkSession() {
-      try {
-        const res = await fetch(
-          "/api/auth/me",
-          {
-            credentials:
-              "include",
-            cache:
-              "no-store",
-          }
-        );
+    const checkSession =
+      async () => {
+        try {
+          const res =
+            await fetch(
+              "/api/auth/me",
+              {
+                credentials:
+                  "include",
+                cache:
+                  "no-store",
+              }
+            );
 
-        if (res.ok) {
-          const data =
-            await res.json();
+          if (res.ok) {
+            const data =
+              await res.json();
 
-          router.replace(
-            data.user
-              ?.role ===
+            window.location.href =
+              data.user
+                ?.role ===
               "ADMIN"
-              ? "/admin"
-              : "/"
-          );
-        }
-      } catch {}
-    }
+                ? "/admin"
+                : "/";
+          }
+        } catch {}
+      };
 
     checkSession();
-  }, [router]);
+  }, []);
 
   // CARGAR CAPTCHA
   useEffect(() => {
     let tries = 0;
 
-    const timer = setInterval(() => {
-      tries++;
+    const timer =
+      setInterval(() => {
+        tries++;
 
-      if (
-        typeof window !==
-          "undefined" &&
-        window.turnstile &&
-        document.getElementById(
-          "cf-turnstile"
-        ) &&
-        !widgetReady
-      ) {
-        clearInterval(timer);
+        if (
+          typeof window !==
+            "undefined" &&
+          window.turnstile &&
+          document.getElementById(
+            "cf-turnstile"
+          ) &&
+          !widgetReady
+        ) {
+          clearInterval(
+            timer
+          );
 
-        try {
-          widgetId.current =
-            window.turnstile.render(
-              "#cf-turnstile",
-              {
-                sitekey:
-                  process.env
-                    .NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+          try {
+            widgetId.current =
+              window.turnstile.render(
+                "#cf-turnstile",
+                {
+                  sitekey:
+                    process.env
+                      .NEXT_PUBLIC_TURNSTILE_SITE_KEY,
 
-                size:
-                  "invisible",
+                  size:
+                    "invisible",
 
-                callback: () => {},
+                  callback:
+                    () => {},
 
-                "error-callback":
-                  () => {
-                    toast.error(
-                      "Captcha error"
-                    );
-                  },
-              }
+                  "error-callback":
+                    () => {
+                      toast.error(
+                        "Captcha error"
+                      );
+                    },
+                }
+              );
+
+            setWidgetReady(
+              true
             );
+          } catch {}
+        }
 
-          setWidgetReady(true);
-        } catch {}
-      }
-
-      if (tries >= 30) {
-        clearInterval(timer);
-      }
-    }, 500);
+        if (
+          tries >= 30
+        ) {
+          clearInterval(
+            timer
+          );
+        }
+      }, 500);
 
     return () =>
-      clearInterval(timer);
+      clearInterval(
+        timer
+      );
   }, [widgetReady]);
 
   const getCaptchaToken =
@@ -192,9 +202,12 @@ export default function LoginPage() {
           return;
         }
 
-        if (loading) return;
+        if (loading)
+          return;
 
-        setLoading(true);
+        setLoading(
+          true
+        );
 
         try {
           if (
@@ -247,18 +260,14 @@ export default function LoginPage() {
             `Bienvenido ${data.user.username}`
           );
 
-          // ESPERAR COOKIE
           setTimeout(
             () => {
-              router.replace(
+              window.location.href =
                 data.user
                   .role ===
-                  "ADMIN"
+                "ADMIN"
                   ? "/admin"
-                  : "/"
-              );
-
-              router.refresh();
+                  : "/";
             },
             300
           );
@@ -270,7 +279,9 @@ export default function LoginPage() {
               "Error"
           );
         } finally {
-          setLoading(false);
+          setLoading(
+            false
+          );
         }
       },
       [
@@ -278,7 +289,6 @@ export default function LoginPage() {
         password,
         widgetReady,
         loading,
-        router,
       ]
     );
 
@@ -320,10 +330,15 @@ export default function LoginPage() {
 
             <CardContent className="space-y-4">
               <Input
-                value={username}
-                onChange={(e) =>
+                value={
+                  username
+                }
+                onChange={(
+                  e
+                ) =>
                   setUsername(
-                    e.target.value
+                    e.target
+                      .value
                   )
                 }
                 placeholder="Usuario"
@@ -331,10 +346,15 @@ export default function LoginPage() {
 
               <Input
                 type="password"
-                value={password}
-                onChange={(e) =>
+                value={
+                  password
+                }
+                onChange={(
+                  e
+                ) =>
                   setPassword(
-                    e.target.value
+                    e.target
+                      .value
                   )
                 }
                 placeholder="Contraseña"
