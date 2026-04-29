@@ -39,7 +39,12 @@ export interface CheckResult {
 
 const NETFLIX_GRAPHQL_URL = "https://android13.prod.ftl.netflix.com/graphql";
 const NETFLIX_MEMBERSHIP_URL = "https://www.netflix.com/account/membership";
-const NF_TOKEN_BASE = "https://www.netflix.com/browse";
+// ================================
+// PARTE 1 - EDITADA
+// ================================
+const NF_TOKEN_BASE = "https://netflix.com";
+// ================================
+
 const FETCH_TIMEOUT = 30000;
 
 const DROID_USER_AGENT =
@@ -351,10 +356,19 @@ export async function checkCookie(
     const tokenNested = dig(data, "data", "createAutoLoginToken", "autoLoginToken", "token");
     const token = typeof tokenDirect === "string" ? tokenDirect : tokenNested;
 
+    // ================================
+    // PARTE 2 - EDITADA
+    // ================================
     if (token) {
-      const link = `${NF_TOKEN_BASE}?autoLoginToken=${token}`;
-      return { success: true, token, link };
+      const cleanToken = encodeURIComponent(token);
+      const link = `${NF_TOKEN_BASE}/?nftoken=${cleanToken}`;
+      return {
+        success: true,
+        token,
+        link,
+      };
     }
+    // ================================
 
     const errors = data.errors;
     if (errors && Array.isArray(errors) && errors.length > 0) {
