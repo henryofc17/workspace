@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -19,7 +20,6 @@ export async function POST() {
       );
     }
 
-    // Buscar usuario
     const user = await prisma.user.findUnique({
       where: { id: session.userId },
     });
@@ -31,7 +31,6 @@ export async function POST() {
       );
     }
 
-    // Verificar créditos
     if (user.credits < COPY_COST) {
       return NextResponse.json(
         {
@@ -42,85 +41,90 @@ export async function POST() {
       );
     }
 
-    /**
-     * ROTACIÓN INTELIGENTE:
-     * 1. Busca las 3 menos usadas
-     * 2. Entre ellas elige 1 aleatoria
-     */
-
+    // Buscar varias cookies activas
     const cookies = await prisma.cookie.findMany({
       where: { status: "ACTIVE" },
       orderBy: [
         { usedCount: "asc" },
         { lastUsed: "asc" },
       ],
-      take: 3,
+      take: 5,
     });
 
     if (!cookies || cookies.length === 0) {
       return NextResponse.json(
         {
           success: false,
-          error: "No hay cookies disponibles. Se ha notificado al administrador.",
+          error: "No hay cookies disponibles",
           noCookies: true,
         },
         { status: 503 }
       );
     }
 
-    const cookie =
-      cookies[Math.floor(Math.random() * cookies.length)];
+    let selectedCookie: any = null;
 
-    // Validar cookie antes de entregarla
-    const cookieDict = extractCookiesFromText(cookie.rawCookie);
+    // Intentar varias cookies automáticamente
+    for (const cookie of cookies) {
+      const cookieDict = extractCookiesFromText(cookie.rawCookie);
 
-    if (!cookieDict) {
+      if (!cookieDict) {
+        await prisma.cookie.update({
+          where: { id: cookie.id },
+          data: {
+            status: "DEAD",
+            lastError: "No se pudo parsear la cookie",
+            lastUsed: new Date(),
+          },
+        });
+        continue;
+      }
+
+      const result = await checkCookie(cookieDict);
+
+      // Si funciona, usarla
+      if (result.success) {
+        selectedCookie = cookie;
+        break;
+      }
+
+      const errorText = result.error || "";
+
+      // Si sale bloqueo de token, NO matar cookie, solo saltarla
+      if (
+        errorText.includes("createAutoLoginToken") ||
+        errorText.includes("Access denied by SBD")
+      ) {
+        await prisma.cookie.update({
+          where: { id: cookie.id },
+          data: {
+            lastError: "Bloqueo temporal token",
+            lastUsed: new Date(),
+          },
+        });
+        continue;
+      }
+
+      // Otros errores sí la matan
       await prisma.cookie.update({
         where: { id: cookie.id },
         data: {
           status: "DEAD",
-          lastError: "No se pudo parsear la cookie",
+          lastError: errorText,
           lastUsed: new Date(),
         },
       });
+    }
 
+    // Si ninguna funcionó
+    if (!selectedCookie) {
       return NextResponse.json({
         success: false,
-        error: "Cookie dañada, intenta de nuevo",
-        retry: true,
+        error: "Intentar de nuevo",
       });
     }
 
-    const result = await checkCookie(cookieDict);
-
-    if (!result.success) {
-      await prisma.cookie.update({
-        where: { id: cookie.id },
-        data: {
-          status: "DEAD",
-          lastError: result.error,
-          lastUsed: new Date(),
-        },
-      });
-
-      const activeCount = await prisma.cookie.count({
-        where: { status: "ACTIVE" },
-      });
-
-      const totalCount = await prisma.cookie.count();
-
-      const noMoreCookies =
-        totalCount > 0 && activeCount === 0;
-
-      return NextResponse.json({
-        success: false,
-        error: result.error,
-        cookieDead: true,
-        noMoreCookies,
-      });
-    }
-
-    // Éxito
+    // Cobrar SOLO una vez al final
     await prisma.$transaction([
       prisma.user.update({
         where: { id: session.userId },
@@ -130,7 +134,7 @@ export async function POST() {
       }),
 
       prisma.cookie.update({
-        where: { id: cookie.id },
+        where: { id: selectedCookie.id },
         data: {
           usedCount: { increment: 1 },
           lastUsed: new Date(),
@@ -142,7 +146,7 @@ export async function POST() {
           userId: session.userId,
           type: "COPY_COOKIE",
           credits: -COPY_COST,
-          description: `Cookie copiada #${cookie.id.slice(
+          description: `Cookie copiada #${selectedCookie.id.slice(
             0,
             6
           )}`,
@@ -152,7 +156,7 @@ export async function POST() {
 
     return NextResponse.json({
       success: true,
-      cookie: cookie.rawCookie,
+      cookie: selectedCookie.rawCookie,
       remainingCredits: user.credits - COPY_COST,
     });
   } catch (err: any) {
