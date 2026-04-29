@@ -46,68 +46,68 @@ export async function POST() {
         { usedCount: "asc" },
         { lastUsed: "asc" },
       ],
-      take: 5,
+      take: 3,
     });
 
     if (!cookies || cookies.length === 0) {
       return NextResponse.json(
         {
           success: false,
-          error: "No hay cookies disponibles",
+          error: "No hay cookies disponibles. Se ha notificado al administrador.",
           noCookies: true,
         },
         { status: 503 }
       );
     }
 
-    let selectedCookie: any = null;
+    const cookie =
+      cookies[Math.floor(Math.random() * cookies.length)];
 
-    for (const cookie of cookies) {
-      const cookieDict = extractCookiesFromText(cookie.rawCookie);
+    const cookieDict = extractCookiesFromText(cookie.rawCookie);
 
-      if (!cookieDict) {
-        await prisma.cookie.update({
-          where: { id: cookie.id },
-          data: {
-            status: "DEAD",
-            lastError: "Parse error",
-            lastUsed: new Date(),
-          },
-        });
-        continue;
-      }
-
-      const result = await checkCookie(cookieDict);
-
-      if (result.success) {
-        selectedCookie = cookie;
-        break;
-      }
-
-      const errorText = result.error || "";
-
-      // 🔥 SOLO LO QUE PEDISTE
-      if (
-        errorText.includes("createAutoLoginToken") ||
-        errorText.includes("Access denied by SBD")
-      ) {
-        continue; // intenta otra cookie sin mostrar error
-      }
-
+    if (!cookieDict) {
       await prisma.cookie.update({
         where: { id: cookie.id },
         data: {
           status: "DEAD",
-          lastError: errorText,
+          lastError: "No se pudo parsear la cookie",
           lastUsed: new Date(),
         },
       });
-    }
 
-    if (!selectedCookie) {
       return NextResponse.json({
         success: false,
-        error: "Intentar de nuevo",
+        error: "Cookie dañada, intenta de nuevo",
+        retry: true,
+      });
+    }
+
+    const result = await checkCookie(cookieDict);
+
+    if (!result.success) {
+      await prisma.cookie.update({
+        where: { id: cookie.id },
+        data: {
+          status: "DEAD",
+          lastError: result.error,
+          lastUsed: new Date(),
+        },
+      });
+
+      const activeCount = await prisma.cookie.count({
+        where: { status: "ACTIVE" },
+      });
+
+      const totalCount = await prisma.cookie.count();
+
+      const noMoreCookies =
+        totalCount > 0 && activeCount === 0;
+
+      return NextResponse.json({
+        success: false,
+        error: "Intentar de nuevo", // 🔥 SOLO CAMBIO
+        cookieDead: true,
+        noMoreCookies,
       });
     }
 
@@ -120,7 +120,7 @@ export async function POST() {
       }),
 
       prisma.cookie.update({
-        where: { id: selectedCookie.id },
+        where: { id: cookie.id },
         data: {
           usedCount: { increment: 1 },
           lastUsed: new Date(),
@@ -132,14 +132,14 @@ export async function POST() {
           userId: session.userId,
           type: "COPY_COOKIE",
           credits: -COPY_COST,
-          description: `Cookie copiada #${selectedCookie.id.slice(0, 6)}`,
+          description: `Cookie copiada #${cookie.id.slice(0, 6)}`,
         },
       }),
     ]);
 
     return NextResponse.json({
       success: true,
-      cookie: selectedCookie.rawCookie,
+      cookie: cookie.rawCookie,
       remainingCredits: user.credits - COPY_COST,
     });
   } catch (err: any) {
