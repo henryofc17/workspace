@@ -5,9 +5,14 @@ import { checkCookie, extractCookiesFromText } from "@/lib/netflix-checker";
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSession();
+    // 🔥 FIX CLAVE
+    const session = await getSession(request);
+
     if (!session || session.role !== "ADMIN") {
-      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 403 });
+      return NextResponse.json(
+        { success: false, error: "No autorizado" },
+        { status: 403 }
+      );
     }
 
     const { searchParams } = new URL(request.url);
@@ -17,7 +22,11 @@ export async function POST(request: NextRequest) {
     const cookies = await prisma.cookie.findMany({ where });
 
     if (cookies.length === 0) {
-      return NextResponse.json({ success: true, message: "No hay cookies para validar", results: { checked: 0, alive: 0, dead: 0 } });
+      return NextResponse.json({
+        success: true,
+        message: "No hay cookies para validar",
+        results: { checked: 0, alive: 0, dead: 0 },
+      });
     }
 
     let alive = 0;
@@ -47,14 +56,21 @@ export async function POST(request: NextRequest) {
         } else {
           await prisma.cookie.update({
             where: { id: cookie.id },
-            data: { status: "DEAD", lastError: result.error || "Cookie inválida", lastUsed: new Date() },
+            data: {
+              status: "DEAD",
+              lastError: result.error || "Cookie inválida",
+              lastUsed: new Date(),
+            },
           });
           dead++;
         }
       } catch (err: any) {
         await prisma.cookie.update({
           where: { id: cookie.id },
-          data: { status: "DEAD", lastError: err.message || "Error de conexión" },
+          data: {
+            status: "DEAD",
+            lastError: err.message || "Error de conexión",
+          },
         });
         dead++;
       }
@@ -66,6 +82,9 @@ export async function POST(request: NextRequest) {
       results: { checked: cookies.length, alive, dead },
     });
   } catch (err: any) {
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: err.message },
+      { status: 500 }
+    );
   }
 }
