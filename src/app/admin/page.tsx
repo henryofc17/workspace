@@ -77,7 +77,6 @@ export default function AdminPage() {
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [cookies, setCookies] = useState<CookieRecord[]>([]);
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
 
   // Create user form
   const [newUsername, setNewUsername] = useState("");
@@ -93,6 +92,7 @@ export default function AdminPage() {
 
   // Upload
   const [uploadingCookies, setUploadingCookies] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Active tab
@@ -240,24 +240,17 @@ export default function AdminPage() {
     }
   }, [loadData]);
 
-  // ── Refresh Cookies (CORREGIDO) ──
-  const handleRefreshCookies = async () => {
-    if (!confirm("¿Refrescar cookies activas?")) return;
-
+  // ── Refresh Cookies ──
+  const handleRefreshCookies = useCallback(async () => {
+    if (!confirm("¿Validar todas las cookies activas? Esto puede tardar varios minutos.")) return;
+    setRefreshing(true);
     try {
-      setRefreshing(true);
-
-      const res = await fetch("/api/admin/cookies/refresh-cookies?active=true", {
-        method: "POST",
-      });
-
+      const res = await fetch("/api/admin/refresh-cookies?active=true", { method: "POST" });
       const data = await res.json();
-
       if (data.success) {
-        toast.success(
-          `Validación: ${data.alive} vivas, ${data.dead} muertas (${data.total})`
-        );
-        loadData(); // ✅ CORREGIDO: antes era fetchCookies()
+        const r = data.results;
+        toast.success(`Validación: ${r.alive} vivas, ${r.dead} muertas (${r.checked} revisadas)`);
+        loadData();
       } else {
         toast.error(data.error);
       }
@@ -266,7 +259,7 @@ export default function AdminPage() {
     } finally {
       setRefreshing(false);
     }
-  };
+  }, [loadData]);
 
   // ── Clean Dead Cookies ──
   const handleCleanDead = useCallback(async () => {
@@ -569,7 +562,7 @@ export default function AdminPage() {
                 <div className="flex gap-2">
                   <Button
                     onClick={handleUploadCookies}
-                    disabled={uploadingCookies}
+                    disabled={uploadingCookies || refreshing}
                     className="bg-[#E50914] hover:bg-[#b2070f] text-white"
                   >
                     {uploadingCookies ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
@@ -577,20 +570,12 @@ export default function AdminPage() {
                   </Button>
                   <Button
                     onClick={handleRefreshCookies}
-                    disabled={refreshing}
-                    className="bg-green-600 hover:bg-green-700"
+                    disabled={refreshing || uploadingCookies}
+                    variant="outline"
+                    className="border-green-800/30 text-green-400 hover:bg-green-950/30"
                   >
-                    {refreshing ? (
-                      <>
-                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                        Refrescando...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        Refrescar Cookies
-                      </>
-                    )}
+                    {refreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                    Refrescar Cookies
                   </Button>
                   <Button onClick={handleCleanDead} variant="outline" className="border-red-800/30 text-red-400 hover:bg-red-950/30">
                     <Trash2 className="h-4 w-4 mr-2" />
@@ -686,4 +671,4 @@ function StatCard({ icon: Icon, label, value, color }: { icon: React.ElementType
       <div className="text-2xl font-bold text-white">{value}</div>
     </div>
   );
-      }
+}
