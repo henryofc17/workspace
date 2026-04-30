@@ -77,7 +77,6 @@ export default function AdminPage() {
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [cookies, setCookies] = useState<CookieRecord[]>([]);
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
-  // --- NUEVO STATE ---
   const [refreshing, setRefreshing] = useState(false);
 
   // Create user form
@@ -241,6 +240,34 @@ export default function AdminPage() {
     }
   }, [loadData]);
 
+  // ── Refresh Cookies (CORREGIDO) ──
+  const handleRefreshCookies = async () => {
+    if (!confirm("¿Refrescar cookies activas?")) return;
+
+    try {
+      setRefreshing(true);
+
+      const res = await fetch("/api/admin/cookies/refresh-cookies?active=true", {
+        method: "POST",
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        toast.success(
+          `Validación: ${data.alive} vivas, ${data.dead} muertas (${data.total})`
+        );
+        loadData(); // ✅ CORREGIDO: antes era fetchCookies()
+      } else {
+        toast.error(data.error);
+      }
+    } catch {
+      toast.error("Error al refrescar cookies");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   // ── Clean Dead Cookies ──
   const handleCleanDead = useCallback(async () => {
     if (!confirm("¿Eliminar todas las cookies muertas?")) return;
@@ -255,35 +282,6 @@ export default function AdminPage() {
       toast.error("Error");
     }
   }, [loadData]);
-
-  // --- NUEVO HANDLER (ANTES DE handleCleanDead) ---
-  const handleRefreshCookies = async () => {
-    if (!confirm("¿Refrescar cookies activas?")) return;
-
-    try {
-      setRefreshing(true);
-
-      const res = await fetch("/api/admin/refresh-cookies?active=true", {
-        method: "POST",
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        toast.success(
-          `Validación: ${data.alive} vivas, ${data.dead} muertas (${data.total})`
-        );
-        fetchCookies(); // refresca la tabla
-      } else {
-        toast.error(data.error);
-      }
-    } catch {
-      toast.error("Error al refrescar cookies");
-    } finally {
-      setRefreshing(false);
-    }
-  };
-  // --- FIN NUEVO HANDLER ---
 
   // ── Logout ──
   const handleLogout = useCallback(async () => {
@@ -577,7 +575,6 @@ export default function AdminPage() {
                     {uploadingCookies ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
                     Subir
                   </Button>
-                  {/* --- NUEVO BOTÓN --- */}
                   <Button
                     onClick={handleRefreshCookies}
                     disabled={refreshing}
@@ -595,7 +592,6 @@ export default function AdminPage() {
                       </>
                     )}
                   </Button>
-                  {/* --- FIN NUEVO BOTÓN --- */}
                   <Button onClick={handleCleanDead} variant="outline" className="border-red-800/30 text-red-400 hover:bg-red-950/30">
                     <Trash2 className="h-4 w-4 mr-2" />
                     Limpiar Muertas
@@ -690,4 +686,4 @@ function StatCard({ icon: Icon, label, value, color }: { icon: React.ElementType
       <div className="text-2xl font-bold text-white">{value}</div>
     </div>
   );
-                    }
+      }
