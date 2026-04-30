@@ -539,51 +539,72 @@ export default function AdminPage() {
         )}
 
         {/* ── COOKIES ── */}
-        {tab === "cookies" && (
-          <div className="space-y-6">
-            {/* Upload */}
-            <Card className="border-white/10 bg-[#1F1F1F]">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-white text-sm flex items-center gap-2">
-                  <Upload className="h-4 w-4 text-purple-400" />
-                  Subir Cookies
-                </CardTitle>
-                <CardDescription className="text-gray-500 text-xs">
-                  Sube un archivo .txt o .zip con cookies de Netflix. Se detectan duplicados automáticamente.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".txt,.zip"
-                  className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#E50914] file:text-white hover:file:bg-[#b2070f] file:cursor-pointer file:transition-colors"
-                />
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleUploadCookies}
-                    disabled={uploadingCookies || refreshing}
-                    className="bg-[#E50914] hover:bg-[#b2070f] text-white"
-                  >
-                    {uploadingCookies ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-                    Subir
-                  </Button>
-                  <Button
-                    onClick={handleRefreshCookies}
-                    disabled={refreshing || uploadingCookies}
-                    variant="outline"
-                    className="border-green-800/30 text-green-400 hover:bg-green-950/30"
-                  >
-                    {refreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                    Refrescar Cookies
-                  </Button>
-                  <Button onClick={handleCleanDead} variant="outline" className="border-red-800/30 text-red-400 hover:bg-red-950/30">
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Limpiar Muertas
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+{tab === "cookies" && (
+  <div className="space-y-6">
+    {/* Upload */}
+    <Card className="border-white/10 bg-[#1F1F1F]">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-white text-sm flex items-center gap-2">
+          <Upload className="h-4 w-4 text-purple-400" />
+          Subir Cookies
+        </CardTitle>
+        <CardDescription className="text-gray-500 text-xs">
+          Sube un archivo .txt o .zip con cookies de Netflix. Se detectan duplicados automáticamente.
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="space-y-3">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".txt,.zip"
+          className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#E50914] file:text-white hover:file:bg-[#b2070f] file:cursor-pointer file:transition-colors"
+        />
+
+        {/* 🔥 BOTONES */}
+        <div className="space-y-2">
+          {/* fila 1 */}
+          <div className="flex gap-2">
+            <Button
+              onClick={handleUploadCookies}
+              disabled={uploadingCookies || refreshing}
+              className="bg-[#E50914] hover:bg-[#b2070f] text-white"
+            >
+              {uploadingCookies ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4 mr-2" />
+              )}
+              Subir
+            </Button>
+
+            <Button
+              onClick={handleRefreshCookies}
+              disabled={refreshing || uploadingCookies}
+              variant="outline"
+              className="border-green-800/30 text-green-400 hover:bg-green-950/30"
+            >
+              {refreshing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Refrescar Cookies
+            </Button>
+          </div>
+
+          {/* fila 2 */}
+          <Button
+            onClick={handleCleanDead}
+            variant="outline"
+            className="w-full border-red-800/30 text-red-400 hover:bg-red-950/30"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Limpiar Muertas
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
 
             {/* Cookies List */}
             <Card className="border-white/10 bg-[#1F1F1F]">
@@ -672,3 +693,5 @@ function StatCard({ icon: Icon, label, value, color }: { icon: React.ElementType
     </div>
   );
 }
+
+
