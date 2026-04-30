@@ -42,12 +42,7 @@ export async function POST() {
       );
     }
 
-    /**
-     * ROTACIÓN INTELIGENTE:
-     * 1. Busca las 3 menos usadas
-     * 2. Entre ellas elige 1 aleatoria
-     */
-
+    // ROTACIÓN INTELIGENTE
     const cookies = await prisma.cookie.findMany({
       where: { status: "ACTIVE" },
       orderBy: [
@@ -94,12 +89,19 @@ export async function POST() {
     // Revisar cookie
     const result = await checkCookie(cookieDict);
 
+    // 👇 PARSEO DEL ERROR ESPECÍFICO
     if (!result.success) {
+      const errorMsg = result.error || "";
+
+      const isNetflixAccessError = errorMsg.includes(
+        "DetailedAccessDeniedException"
+      ) && errorMsg.includes("createAutoLoginToken");
+
       await prisma.cookie.update({
         where: { id: cookie.id },
         data: {
           status: "DEAD",
-          lastError: result.error,
+          lastError: errorMsg,
           lastUsed: new Date(),
         },
       });
@@ -115,7 +117,9 @@ export async function POST() {
 
       return NextResponse.json({
         success: false,
-        error: result.error,
+        error: isNetflixAccessError
+          ? "intenta de nuevo"
+          : errorMsg,
         cookieDead: true,
         noMoreCookies,
       });
