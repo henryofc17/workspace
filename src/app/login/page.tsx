@@ -150,7 +150,7 @@ export default function LoginPage() {
 
       <div className="relative min-h-screen overflow-hidden bg-[#050505] px-4 py-10 text-white">
 
-        {/* Fondo pro */}
+        {/* Fondo */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(239,68,68,0.18),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(99,102,241,0.12),_transparent_28%),linear-gradient(to_bottom,_#050505,_#09090b)]" />
         <div className="absolute left-[-120px] top-[-120px] h-72 w-72 rounded-full bg-red-600/15 blur-3xl" />
         <div className="absolute bottom-[-120px] right-[-120px] h-80 w-80 rounded-full bg-fuchsia-500/10 blur-3xl" />
@@ -164,23 +164,15 @@ export default function LoginPage() {
               {/* HEADER */}
               <div className="mb-7 text-center">
 
-                {/* 🔥 LOGO PRO */}
+                {/* 🔥 LOGO PRO SIN CAJA */}
                 <div className="relative mx-auto mb-6 w-24 h-24">
+                  <div className="absolute inset-0 rounded-full bg-red-600/20 blur-2xl"></div>
 
-                  <div className="absolute inset-0 rounded-[30px] bg-red-600/20 blur-2xl"></div>
-
-                  <div className="relative w-full h-full rounded-[28px] border border-white/10 bg-white/[0.04] backdrop-blur-xl flex items-center justify-center shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
-
-                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center shadow-lg shadow-red-600/40 overflow-hidden">
-
-                      <img
-                        src="https://i.ibb.co/x8cY6YVZ/1777494330745.png"
-                        alt="logo"
-                        className="w-14 h-14 object-contain drop-shadow-[0_0_10px_rgba(0,0,0,0.6)]"
-                      />
-
-                    </div>
-                  </div>
+                  <img
+                    src="https://i.ibb.co/x8cY6YVZ/1777494330745.png"
+                    alt="logo"
+                    className="relative w-full h-full object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)]"
+                  />
                 </div>
 
                 <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-zinc-300">
