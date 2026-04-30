@@ -222,7 +222,7 @@ export default function LoginPage() {
                     <Input
                       type={showPass ? "text" : "password"}
                       value={password}
-                      placeholder="••••••••"
+                      placeholder="Contraseña"
                       onChange={(e) => setPassword(e.target.value)}
                       className="h-14 rounded-2xl bg-zinc-950/70 border-white/10 text-white pr-12"
                     />
