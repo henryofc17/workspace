@@ -43,7 +43,6 @@ export default function LoginPage() {
 
         if (res.ok) {
           const data = await res.json();
-
           window.location.replace(
             data.user?.role === "ADMIN" ? "/admin" : "/"
           );
@@ -131,7 +130,9 @@ export default function LoginPage() {
       toast.success("Bienvenido");
 
       setTimeout(() => {
-        window.location.replace(data.user.role === "ADMIN" ? "/admin" : "/");
+        window.location.replace(
+          data.user.role === "ADMIN" ? "/admin" : "/"
+        );
       }, 800);
     } catch (e: any) {
       toast.error(e.message || "Error de conexión");
@@ -148,21 +149,37 @@ export default function LoginPage() {
       />
 
       <div className="relative min-h-screen overflow-hidden bg-[#050505] px-4 py-10 text-white">
+
+        {/* Fondo pro */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(239,68,68,0.18),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(99,102,241,0.12),_transparent_28%),linear-gradient(to_bottom,_#050505,_#09090b)]" />
         <div className="absolute left-[-120px] top-[-120px] h-72 w-72 rounded-full bg-red-600/15 blur-3xl" />
         <div className="absolute bottom-[-120px] right-[-120px] h-80 w-80 rounded-full bg-fuchsia-500/10 blur-3xl" />
 
         <div className="relative mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md items-center justify-center">
-          <Card className="w-full border border-white/10 bg-zinc-950/80 shadow-[0_20px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl rounded-[28px]">
+
+          <Card className="w-full border border-white/10 bg-zinc-950/80 backdrop-blur-xl rounded-[28px] shadow-[0_20px_80px_rgba(0,0,0,0.6)]">
+
             <CardContent className="p-6 sm:p-8">
+
+              {/* HEADER */}
               <div className="mb-7 text-center">
-                <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl border border-white/10 bg-white/5 shadow-[0_0_35px_rgba(239,68,68,0.25)]">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/90 shadow-lg shadow-red-500/30 overflow-hidden">
-                    <img
-                      src="https://i.ibb.co/x8cY6YVZ/1777494330745.png"
-                      alt="logo"
-                      className="h-12 w-12 object-contain"
-                    />
+
+                {/* 🔥 LOGO PRO */}
+                <div className="relative mx-auto mb-6 w-24 h-24">
+
+                  <div className="absolute inset-0 rounded-[30px] bg-red-600/20 blur-2xl"></div>
+
+                  <div className="relative w-full h-full rounded-[28px] border border-white/10 bg-white/[0.04] backdrop-blur-xl flex items-center justify-center shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
+
+                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center shadow-lg shadow-red-600/40 overflow-hidden">
+
+                      <img
+                        src="https://i.ibb.co/x8cY6YVZ/1777494330745.png"
+                        alt="logo"
+                        className="w-14 h-14 object-contain drop-shadow-[0_0_10px_rgba(0,0,0,0.6)]"
+                      />
+
+                    </div>
                   </div>
                 </div>
 
@@ -174,6 +191,7 @@ export default function LoginPage() {
                 <h1 className="text-4xl font-black tracking-tight sm:text-5xl">
                   Netflix Checker
                 </h1>
+
                 <div className="mt-2 text-2xl font-extrabold text-red-500">
                   Pro
                 </div>
@@ -183,105 +201,84 @@ export default function LoginPage() {
                 </p>
               </div>
 
+              {/* FORM */}
               <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-inner shadow-black/20">
-                <div className="mb-5 flex items-center gap-2 text-lg font-semibold text-white">
+
+                <div className="mb-5 flex items-center gap-2 text-lg font-semibold">
                   <ShieldCheck className="h-5 w-5 text-red-500" />
                   Acceso seguro
                 </div>
 
                 <div className="space-y-5">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-zinc-400">
-                      Usuario
-                    </label>
+
+                  <Input
+                    value={username}
+                    placeholder="Usuario"
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="h-14 rounded-2xl bg-zinc-950/70 border-white/10 text-white"
+                  />
+
+                  <div className="relative">
                     <Input
-                      value={username}
-                      placeholder="Usuario"
-                      onChange={(e) => setUsername(e.target.value)}
-                      autoComplete="username"
-                      className="h-14 rounded-2xl border-white/10 bg-zinc-950/70 px-4 text-[15px] text-white placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-red-500/60"
+                      type={showPass ? "text" : "password"}
+                      value={password}
+                      placeholder="••••••••"
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="h-14 rounded-2xl bg-zinc-950/70 border-white/10 text-white pr-12"
                     />
+
+                    <button
+                      type="button"
+                      onClick={() => setShowPass(!showPass)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400"
+                    >
+                      {showPass ? <EyeOff /> : <Eye />}
+                    </button>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-zinc-400">
-                      Contraseña
-                    </label>
-                    <div className="relative">
-                      <Input
-                        type={showPass ? "text" : "password"}
-                        value={password}
-                        placeholder="••••••••"
-                        onChange={(e) => setPassword(e.target.value)}
-                        autoComplete="current-password"
-                        className="h-14 rounded-2xl border-white/10 bg-zinc-950/70 px-4 pr-12 text-[15px] text-white placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-red-500/60"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPass((v) => !v)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 transition hover:text-white"
-                      >
-                        {showPass ? (
-                          <EyeOff className="h-5 w-5" />
-                        ) : (
-                          <Eye className="h-5 w-5" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                    <div
-                      id="cf-turnstile"
-                      className="flex min-h-[65px] justify-center"
-                    />
-                  </div>
+                  <div id="cf-turnstile" className="flex justify-center min-h-[65px]" />
 
                   <Button
                     onClick={handleLogin}
                     disabled={loading}
-                    className="h-14 w-full rounded-2xl bg-red-600 text-[15px] font-bold text-white shadow-lg shadow-red-600/25 transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="h-14 w-full rounded-2xl bg-red-600 hover:bg-red-500 font-bold"
                   >
                     {loading ? (
                       <>
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        <Loader2 className="animate-spin mr-2" />
                         Entrando...
                       </>
                     ) : (
                       <>
-                        <LogIn className="mr-2 h-5 w-5" />
+                        <LogIn className="mr-2" />
                         Iniciar sesión
                       </>
                     )}
                   </Button>
 
-                  <p className="pt-1 text-center text-sm text-zinc-500">
+                  <p className="text-center text-sm text-zinc-500">
                     ¿Necesitas ayuda? Contáctame
                   </p>
 
-                  <div className="grid gap-3">
-                    <a
-                      href="https://wa.me/524437863111"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex h-13 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-4 text-sm font-semibold text-white transition hover:bg-emerald-500"
-                    >
-                      <MessageCircle className="h-5 w-5" />
-                      WhatsApp
-                    </a>
+                  <a
+                    href="https://wa.me/524437863111"
+                    target="_blank"
+                    className="flex justify-center items-center gap-2 bg-green-600 hover:bg-green-500 rounded-2xl py-3"
+                  >
+                    <MessageCircle /> WhatsApp
+                  </a>
 
-                    <a
-                      href="https://t.me/HcheJotaA_Bot"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex h-13 items-center justify-center gap-2 rounded-2xl bg-sky-600 px-4 py-4 text-sm font-semibold text-white transition hover:bg-sky-500"
-                    >
-                      <Send className="h-5 w-5" />
-                      Telegram
-                    </a>
-                  </div>
+                  <a
+                    href="https://t.me/HcheJotaA_Bot"
+                    target="_blank"
+                    className="flex justify-center items-center gap-2 bg-sky-600 hover:bg-sky-500 rounded-2xl py-3"
+                  >
+                    <Send /> Telegram
+                  </a>
+
                 </div>
               </div>
+
             </CardContent>
           </Card>
         </div>
