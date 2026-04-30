@@ -86,9 +86,7 @@ export default function LoginPage() {
         }
       }
 
-      if (tries >= 30) {
-        clearInterval(timer);
-      }
+      if (tries >= 30) clearInterval(timer);
     }, 500);
 
     return () => clearInterval(timer);
@@ -123,9 +121,7 @@ export default function LoginPage() {
 
       const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.error || "Login fallido");
-      }
+      if (!res.ok) throw new Error(data.error || "Login fallido");
 
       toast.success("Bienvenido");
 
@@ -152,8 +148,6 @@ export default function LoginPage() {
 
         {/* Fondo */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(239,68,68,0.18),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(99,102,241,0.12),_transparent_28%),linear-gradient(to_bottom,_#050505,_#09090b)]" />
-        <div className="absolute left-[-120px] top-[-120px] h-72 w-72 rounded-full bg-red-600/15 blur-3xl" />
-        <div className="absolute bottom-[-120px] right-[-120px] h-80 w-80 rounded-full bg-fuchsia-500/10 blur-3xl" />
 
         <div className="relative mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md items-center justify-center">
 
@@ -164,15 +158,29 @@ export default function LoginPage() {
               {/* HEADER */}
               <div className="mb-7 text-center">
 
-                {/* 🔥 LOGO PRO SIN CAJA */}
-                <div className="relative mx-auto mb-6 w-24 h-24">
-                  <div className="absolute inset-0 rounded-full bg-red-600/20 blur-2xl"></div>
+                {/* 🔥 LOGO PRO HORIZONTAL */}
+                <div className="relative mx-auto mb-8 w-56 h-20 flex items-center justify-center">
+
+                  {/* glow */}
+                  <div className="absolute inset-0 bg-red-600/20 blur-3xl opacity-70 animate-pulse"></div>
 
                   <img
-                    src="https://i.ibb.co/x8cY6YVZ/1777494330745.png"
+                    src="https://i.ibb.co/BKy3LKzL/AISelect-20260430-120048-Google.jpg"
                     alt="logo"
-                    className="relative w-full h-full object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)]"
+                    className="
+                      relative
+                      w-full
+                      h-full
+                      object-contain
+                      drop-shadow-[0_10px_30px_rgba(0,0,0,0.9)]
+                      transition-all
+                      duration-500
+                      hover:scale-105
+                      hover:drop-shadow-[0_15px_40px_rgba(239,68,68,0.6)]
+                      animate-[fadeIn_0.8s_ease]
+                    "
                   />
+
                 </div>
 
                 <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-zinc-300">
@@ -277,4 +285,4 @@ export default function LoginPage() {
       </div>
     </>
   );
-}
+                }
