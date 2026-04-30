@@ -187,7 +187,7 @@ strategy="afterInteractive"
           {/* 🔥 LOGO EXTERNO */}
           <div className="mx-auto w-16 h-16 rounded-2xl bg-red-600 flex items-center justify-center shadow-lg shadow-red-600/30 overflow-hidden">
             <img
-              src="https://i.ibb.co/8D0p0FSC"
+              src="https://i.ibb.co/x8cY6YVZ/1777494330745.png"
               alt="logo"
               className="w-12 h-12 object-contain"
             />
