@@ -94,9 +94,6 @@ export default function AdminPage() {
   const [uploadingCookies, setUploadingCookies] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Recheck cookies
-  const [checkingCookies, setCheckingCookies] = useState(false);
-
   // Active tab
   const [tab, setTab] = useState<"dashboard" | "users" | "cookies">("dashboard");
 
@@ -239,34 +236,6 @@ export default function AdminPage() {
     } finally {
       setUploadingCookies(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }, [loadData]);
-
-  // ── Recheck Cookies ──
-  const handleRecheckCookies = useCallback(async () => {
-    if (!confirm("¿Verificar todas las cookies?")) return;
-
-    setCheckingCookies(true);
-
-    try {
-      const res = await fetch("/api/admin/cookies/recheck", {
-        method: "POST",
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        toast.error(data.error);
-        return;
-      }
-
-      toast.success(data.message);
-
-      loadData(); // 🔥 refresca todo
-    } catch {
-      toast.error("Error verificando cookies");
-    } finally {
-      setCheckingCookies(false);
     }
   }, [loadData]);
 
@@ -588,43 +557,18 @@ export default function AdminPage() {
             {/* Cookies List */}
             <Card className="border-white/10 bg-[#1F1F1F]">
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-white text-sm flex items-center gap-2">
-                    <Cookie className="h-4 w-4 text-orange-400" />
-                    Cookies ({cookies.length})
-                    <Badge variant="outline" className="border-green-800 text-green-400 text-[10px]">
-                      {stats?.activeCookies} activas
-                    </Badge>
-                    <Badge variant="outline" className="border-red-800 text-red-400 text-[10px]">
-                      {stats?.deadCookies} muertas
-                    </Badge>
-                  </CardTitle>
-                </div>
+                <CardTitle className="text-white text-sm flex items-center gap-2">
+                  <Cookie className="h-4 w-4 text-orange-400" />
+                  Cookies ({cookies.length})
+                  <Badge variant="outline" className="border-green-800 text-green-400 text-[10px]">
+                    {stats?.activeCookies} activas
+                  </Badge>
+                  <Badge variant="outline" className="border-red-800 text-red-400 text-[10px]">
+                    {stats?.deadCookies} muertas
+                  </Badge>
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex gap-2 mb-4">
-                  <Button
-                    onClick={handleRecheckCookies}
-                    disabled={checkingCookies}
-                    className="bg-blue-700 hover:bg-blue-600 text-white"
-                  >
-                    {checkingCookies ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                    )}
-                    Verificar Cookies
-                  </Button>
-
-                  <Button
-                    onClick={handleCleanDead}
-                    variant="outline"
-                    className="border-red-800/30 text-red-400 hover:bg-red-950/30"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Limpiar Muertas
-                  </Button>
-                </div>
                 <div className="space-y-2 max-h-[500px] overflow-y-auto custom-scrollbar">
                   {cookies.length === 0 ? (
                     <p className="text-gray-600 text-sm text-center py-8">Sin cookies subidas</p>
@@ -696,4 +640,4 @@ function StatCard({ icon: Icon, label, value, color }: { icon: React.ElementType
       <div className="text-2xl font-bold text-white">{value}</div>
     </div>
   );
-    }
+}
