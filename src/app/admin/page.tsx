@@ -553,7 +553,8 @@ export default function AdminPage() {
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
+        {/* input */}
         <input
           ref={fileInputRef}
           type="file"
@@ -561,14 +562,14 @@ export default function AdminPage() {
           className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#E50914] file:text-white hover:file:bg-[#b2070f] file:cursor-pointer file:transition-colors"
         />
 
-        {/* 🔥 BOTONES */}
-        <div className="space-y-2">
+        {/* botones */}
+        <div className="flex flex-col gap-2">
           {/* fila 1 */}
           <div className="flex gap-2">
             <Button
               onClick={handleUploadCookies}
               disabled={uploadingCookies || refreshing}
-              className="bg-[#E50914] hover:bg-[#b2070f] text-white"
+              className="flex-1 bg-[#E50914] hover:bg-[#b2070f] text-white"
             >
               {uploadingCookies ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -582,14 +583,14 @@ export default function AdminPage() {
               onClick={handleRefreshCookies}
               disabled={refreshing || uploadingCookies}
               variant="outline"
-              className="border-green-800/30 text-green-400 hover:bg-green-950/30"
+              className="flex-1 border-green-800/30 text-green-400 hover:bg-green-950/30"
             >
               {refreshing ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
                 <RefreshCw className="h-4 w-4 mr-2" />
               )}
-              Refrescar Cookies
+              Refrescar
             </Button>
           </div>
 
@@ -600,11 +601,13 @@ export default function AdminPage() {
             className="w-full border-red-800/30 text-red-400 hover:bg-red-950/30"
           >
             <Trash2 className="h-4 w-4 mr-2" />
-            Limpiar Muertas
+            Limpiar Cookies Muertas
           </Button>
         </div>
       </CardContent>
     </Card>
+  </div>
+)}
 
             {/* Cookies List */}
             <Card className="border-white/10 bg-[#1F1F1F]">
@@ -693,5 +696,3 @@ function StatCard({ icon: Icon, label, value, color }: { icon: React.ElementType
     </div>
   );
 }
-
-
