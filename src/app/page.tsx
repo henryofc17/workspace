@@ -27,6 +27,7 @@ import {
   Mail,
   X,
   Calendar,
+  RefreshCw,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -204,7 +205,7 @@ export default function Home() {
     }
   }, [credits, loadBalance, refreshCredits]);
 
-  // ── Copy Cookie (3 credits) ──
+  // ── Generate Cookie (3 credits) ──
   const handleCopyCookie = useCallback(async () => {
     if (credits < 3) {
       toast.error("Créditos insuficientes. Necesitas 3 créditos.");
@@ -220,14 +221,14 @@ export default function Home() {
         setCredits(data.remainingCredits);
         refreshCredits();
         loadBalance();
-        toast.success("Cookie obtenida exitosamente");
+        toast.success("Cookie generada exitosamente");
       } else {
         if (data.noCookies) {
           toast.error("No hay cookies disponibles. Se ha notificado al administrador.");
         } else if (data.retry) {
           toast.error("Cookie dañada, intenta de nuevo...");
         } else {
-          toast.error(data.error || "Error al copiar cookie");
+          toast.error(data.error || "Error al generar cookie");
         }
         refreshCredits();
       }
@@ -313,7 +314,7 @@ export default function Home() {
               </div>
               <div className="flex items-center gap-2 justify-end">
                 <div className="h-2 w-2 rounded-full bg-purple-500" />
-                <span className="text-gray-400 text-xs">Copiar Cookie: <span className="text-white font-semibold">3 créditos</span></span>
+                <span className="text-gray-400 text-xs">Generar Cookie: <span className="text-white font-semibold">3 créditos</span></span>
               </div>
               <div className="flex items-center gap-2 justify-end">
                 <div className="h-2 w-2 rounded-full bg-blue-500" />
@@ -344,8 +345,8 @@ export default function Home() {
               value="copy"
               className="flex-1 py-2.5 text-sm data-[state=active]:bg-purple-600 data-[state=active]:text-white text-gray-400 transition-all"
             >
-              <Copy className="h-4 w-4 mr-2" />
-              Copiar Cookie
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Generar Cookie
             </TabsTrigger>
           </TabsList>
 
@@ -546,13 +547,13 @@ export default function Home() {
             )}
           </TabsContent>
 
-          {/* ═══ TAB 3: COPY COOKIE ═══ */}
+          {/* ═══ TAB 3: GENERATE COOKIE ═══ */}
           <TabsContent value="copy" className="space-y-4">
             <Card className="border-purple-900/30 bg-[#1F1F1F]">
               <CardHeader className="pb-3">
                 <CardTitle className="text-purple-400 text-base flex items-center gap-2">
-                  <Copy className="h-5 w-5" />
-                  Copiar Cookie de Netflix
+                  <RefreshCw className="h-5 w-5" />
+                  Generar Cookie de Netflix
                 </CardTitle>
                 <CardDescription className="text-gray-500 text-xs">
                   Obtén una cookie funcional del servidor. Cuesta <span className="text-white font-semibold">3 créditos</span>.
@@ -575,9 +576,9 @@ export default function Home() {
                   className="w-full bg-purple-600 hover:bg-purple-500 text-white font-semibold h-12 transition-colors disabled:opacity-50 text-base"
                 >
                   {copying ? (
-                    <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Obteniendo Cookie...</>
+                    <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Generando Cookie...</>
                   ) : (
-                    <><Copy className="h-5 w-5 mr-2" /> Copiar Cookie</>
+                    <><RefreshCw className="h-5 w-5 mr-2" /> Generar Cookie</>
                   )}
                 </Button>
 
@@ -598,7 +599,7 @@ export default function Home() {
                         <Check className="h-4 w-4 text-purple-400" />
                       </div>
                       <div>
-                        <p className="text-purple-400 font-semibold text-sm">Cookie Obtenida</p>
+                        <p className="text-purple-400 font-semibold text-sm">Cookie Generada</p>
                         <p className="text-purple-600/60 text-xs">Créditos restantes: {credits}</p>
                       </div>
                     </div>
@@ -704,4 +705,4 @@ export default function Home() {
       `}</style>
     </div>
   );
-}
+                    }
