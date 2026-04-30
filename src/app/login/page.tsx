@@ -1,371 +1,316 @@
+
 "use client";
 
 import React, {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
+useState,
+useEffect,
+useRef,
+useCallback,
 } from "react";
 
 import Script from "next/script";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
+Card,
+CardContent,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
 import {
-  Shield,
-  Loader2,
-  LogIn,
-  MessageCircle,
-  Send,
-  Eye,
-  EyeOff,
+Loader2,
+LogIn,
+MessageCircle,
+Send,
+Eye,
+EyeOff,
 } from "lucide-react";
 
 declare global {
-  interface Window {
-    turnstile: any;
-    cfToken: string;
-  }
+interface Window {
+turnstile: any;
+cfToken: string;
+}
 }
 
 export default function LoginPage() {
-  const widgetId = useRef<any>(null);
+const widgetId = useRef<any>(null);
 
-  const [username, setUsername] =
-    useState("");
+const [username, setUsername] = useState("");
+const [password, setPassword] = useState("");
+const [showPass, setShowPass] = useState(false);
+const [widgetReady, setWidgetReady] = useState(false);
+const [loading, setLoading] = useState(false);
 
-  const [password, setPassword] =
-    useState("");
+useEffect(() => {
+const checkSession = async () => {
+try {
+const res = await fetch("/api/auth/me", {
+credentials: "include",
+cache: "no-store",
+});
 
-  const [showPass, setShowPass] =
-    useState(false);
+    if (res.ok) {
+      const data = await res.json();
 
-  const [widgetReady, setWidgetReady] =
-    useState(false);
+      window.location.replace(
+        data.user?.role === "ADMIN"
+          ? "/admin"
+          : "/"
+      );
+    }
+  } catch {}
+};
 
-  const [loading, setLoading] =
-    useState(false);
+checkSession();
 
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const res = await fetch(
-          "/api/auth/me",
-          {
-            credentials: "include",
-            cache: "no-store",
-          }
-        );
+}, []);
 
-        if (res.ok) {
-          const data =
-            await res.json();
+useEffect(() => {
+let tries = 0;
 
-          window.location.replace(
-            data.user?.role ===
-              "ADMIN"
-              ? "/admin"
-              : "/"
-          );
+const timer = setInterval(() => {
+  tries++;
+
+  if (
+    typeof window !== "undefined" &&
+    window.turnstile &&
+    document.getElementById("cf-turnstile") &&
+    !widgetReady
+  ) {
+    clearInterval(timer);
+
+    try {
+      widgetId.current = window.turnstile.render(
+        "#cf-turnstile",
+        {
+          sitekey:
+            process.env
+              .NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+          theme: "dark",
+          size: "normal",
+
+          callback: (token: string) => {
+            window.cfToken = token;
+          },
+
+          "error-callback": () => {
+            toast.error("Captcha error");
+          },
         }
-      } catch {}
-    };
+      );
 
-    checkSession();
-  }, []);
+      setWidgetReady(true);
+    } catch {
+      toast.error("No cargó captcha");
+    }
+  }
 
-  useEffect(() => {
-    let tries = 0;
+  if (tries >= 30) {
+    clearInterval(timer);
+  }
+}, 500);
 
-    const timer = setInterval(() => {
-      tries++;
+return () => clearInterval(timer);
 
-      if (
-        typeof window !==
-          "undefined" &&
-        window.turnstile &&
-        document.getElementById(
-          "cf-turnstile"
-        ) &&
-        !widgetReady
-      ) {
-        clearInterval(timer);
+}, [widgetReady]);
 
-        try {
-          widgetId.current =
-            window.turnstile.render(
-              "#cf-turnstile",
-              {
-                sitekey:
-                  process.env
-                    .NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+const handleLogin = useCallback(async () => {
+if (!username.trim() || !password.trim()) {
+toast.error("Completa campos");
+return;
+}
 
-                theme: "dark",
-                size: "normal",
+if (!window.cfToken) {
+  toast.error("Completa captcha");
+  return;
+}
 
-                callback: (
-                  token: string
-                ) => {
-                  window.cfToken =
-                    token;
-                },
+setLoading(true);
 
-                "error-callback":
-                  () => {
-                    toast.error(
-                      "Captcha error"
-                    );
-                  },
-              }
-            );
-
-          setWidgetReady(true);
-        } catch {
-          toast.error(
-            "No cargó captcha"
-          );
-        }
-      }
-
-      if (tries >= 30) {
-        clearInterval(timer);
-      }
-    }, 500);
-
-    return () =>
-      clearInterval(timer);
-  }, [widgetReady]);
-
-  const handleLogin =
-    useCallback(async () => {
-      if (
-        !username.trim() ||
-        !password.trim()
-      ) {
-        toast.error(
-          "Completa campos"
-        );
-        return;
-      }
-
-      if (!window.cfToken) {
-        toast.error(
-          "Completa captcha"
-        );
-        return;
-      }
-
-      setLoading(true);
-
-      try {
-        const res = await fetch(
-          "/api/auth/login",
-          {
-            method: "POST",
-            credentials:
-              "include",
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-            body: JSON.stringify({
-              username:
-                username.trim(),
-              password,
-              turnstileToken:
-                window.cfToken,
-            }),
-          }
-        );
-
-        const data =
-          await res.json();
-
-        if (!res.ok) {
-          throw new Error(
-            data.error ||
-              "Login fallido"
-          );
-        }
-
-        toast.success(
-          "Bienvenido"
-        );
-
-        setTimeout(() => {
-          window.location.replace(
-            data.user.role ===
-              "ADMIN"
-              ? "/admin"
-              : "/"
-          );
-        }, 800);
-      } catch (e: any) {
-        toast.error(
-          e.message ||
-            "Error de conexión"
-        );
-      } finally {
-        setLoading(false);
-      }
-    }, [
-      username,
+try {
+  const res = await fetch("/api/auth/login", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      username: username.trim(),
       password,
-    ]);
+      turnstileToken: window.cfToken,
+    }),
+  });
 
-  return (
-    <>
-      <Script
-        src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-        strategy="afterInteractive"
-      />
+  const data = await res.json();
 
-      <div className="min-h-screen bg-black flex items-center justify-center px-4">
+  if (!res.ok) {
+    throw new Error(
+      data.error || "Login fallido"
+    );
+  }
 
-        <Card className="w-full max-w-md bg-zinc-950 border-zinc-800 rounded-3xl shadow-2xl">
+  toast.success("Bienvenido");
 
-          <CardContent className="p-7 space-y-6">
+  setTimeout(() => {
+    window.location.replace(
+      data.user.role === "ADMIN"
+        ? "/admin"
+        : "/"
+    );
+  }, 800);
+} catch (e: any) {
+  toast.error(
+    e.message || "Error de conexión"
+  );
+} finally {
+  setLoading(false);
+}
 
-            <div className="text-center space-y-3">
+}, [username, password]);
 
-              <div className="mx-auto w-16 h-16 rounded-2xl bg-red-600 flex items-center justify-center shadow-lg shadow-red-600/30">
-                <Shield className="w-8 h-8 text-white" />
-              </div>
+return (
+<>
+<Script
+src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+strategy="afterInteractive"
+/>
 
-              <h1 className="text-4xl font-bold text-white">
-                Netflix Checker{" "}
-                <span className="text-red-500">
-                  Pro
-                </span>
-              </h1>
+  <div className="min-h-screen bg-black flex items-center justify-center px-4">
 
-              <p className="text-zinc-400 text-sm">
-                Inicia sesión para continuar
-              </p>
+    <Card className="w-full max-w-md bg-zinc-950 border-zinc-800 rounded-3xl shadow-2xl">
 
-            </div>
+      <CardContent className="p-7 space-y-6">
 
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-5">
+        <div className="text-center space-y-3">
 
-              <div className="flex items-center gap-2 text-white font-semibold text-xl">
-                <LogIn className="w-5 h-5 text-red-500" />
-                Acceso seguro
-              </div>
+          {/* 🔥 LOGO EXTERNO */}
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-red-600 flex items-center justify-center shadow-lg shadow-red-600/30 overflow-hidden">
+            <img
+              src="https://i.ibb.co/8D0p0FSC"
+              alt="logo"
+              className="w-12 h-12 object-contain"
+            />
+          </div>
 
-              <div className="space-y-2">
-                <label className="text-zinc-400 text-sm">
-                  Usuario
-                </label>
+          <h1 className="text-4xl font-bold text-white">
+            Netflix Checker{" "}
+            <span className="text-red-500">
+              Pro
+            </span>
+          </h1>
 
-                <Input
-                  value={username}
-                  placeholder="Usuario"
-                  onChange={(e) =>
-                    setUsername(
-                      e.target.value
-                    )
-                  }
-                  className="h-14 bg-zinc-950 border-zinc-700 text-white text-xl rounded-xl"
-                />
-              </div>
+          <p className="text-zinc-400 text-sm">
+            Inicia sesión para continuar
+          </p>
 
-              <div className="space-y-2">
-                <label className="text-zinc-400 text-sm">
-                  Contraseña
-                </label>
+        </div>
 
-                <div className="relative">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-5">
 
-                  <Input
-                    type={
-                      showPass
-                        ? "text"
-                        : "password"
-                    }
-                    value={password}
-                    placeholder="••••••••"
-                    onChange={(e) =>
-                      setPassword(
-                        e.target.value
-                      )
-                    }
-                    className="h-14 bg-zinc-950 border-zinc-700 text-white text-xl rounded-xl pr-12"
-                  />
+          <div className="flex items-center gap-2 text-white font-semibold text-xl">
+            <LogIn className="w-5 h-5 text-red-500" />
+            Acceso seguro
+          </div>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setShowPass(
-                        !showPass
-                      )
-                    }
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400"
-                  >
-                    {showPass ? (
-                      <EyeOff className="w-5 h-5" />
-                    ) : (
-                      <Eye className="w-5 h-5" />
-                    )}
-                  </button>
+          <div className="space-y-2">
+            <label className="text-zinc-400 text-sm">
+              Usuario
+            </label>
 
-                </div>
-              </div>
+            <Input
+              value={username}
+              placeholder="Usuario"
+              onChange={(e) =>
+                setUsername(e.target.value)
+              }
+              className="h-14 bg-zinc-950 border-zinc-700 text-white text-xl rounded-xl"
+            />
+          </div>
 
-              <div
-                id="cf-turnstile"
-                className="flex justify-center min-h-[65px]"
+          <div className="space-y-2">
+            <label className="text-zinc-400 text-sm">
+              Contraseña
+            </label>
+
+            <div className="relative">
+
+              <Input
+                type={showPass ? "text" : "password"}
+                value={password}
+                placeholder="••••••••"
+                onChange={(e) =>
+                  setPassword(e.target.value)
+                }
+                className="h-14 bg-zinc-950 border-zinc-700 text-white text-xl rounded-xl pr-12"
               />
 
-              <Button
-                onClick={
-                  handleLogin
+              <button
+                type="button"
+                onClick={() =>
+                  setShowPass(!showPass)
                 }
-                disabled={loading}
-                className="w-full h-14 bg-red-600 hover:bg-red-700 text-xl rounded-2xl font-bold"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400"
               >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Entrando...
-                  </>
+                {showPass ? (
+                  <EyeOff className="w-5 h-5" />
                 ) : (
-                  "Iniciar Sesión"
+                  <Eye className="w-5 h-5" />
                 )}
-              </Button>
-
-              <p className="text-center text-zinc-500 text-sm">
-                ¿Necesitas ayuda? Contáctame
-              </p>
-
-              <a
-                href="https://wa.me/524437863111"
-                target="_blank"
-                className="w-full flex justify-center items-center gap-2 bg-green-600 hover:bg-green-700 rounded-2xl py-4 text-white text-xl font-semibold"
-              >
-                <MessageCircle className="w-5 h-5" />
-                WhatsApp
-              </a>
-
-              <a
-                href="https://t.me/HcheJotaA_Bot"
-                target="_blank"
-                className="w-full flex justify-center items-center gap-2 bg-sky-600 hover:bg-sky-700 rounded-2xl py-4 text-white text-xl font-semibold"
-              >
-                <Send className="w-5 h-5" />
-                Telegram
-              </a>
+              </button>
 
             </div>
+          </div>
 
-          </CardContent>
-        </Card>
+          <div
+            id="cf-turnstile"
+            className="flex justify-center min-h-[65px]"
+          />
 
-      </div>
-    </>
-  );
+          <Button
+            onClick={handleLogin}
+            disabled={loading}
+            className="w-full h-14 bg-red-600 hover:bg-red-700 text-xl rounded-2xl font-bold"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Entrando...
+              </>
+            ) : (
+              "Iniciar Sesión"
+            )}
+          </Button>
+
+          <p className="text-center text-zinc-500 text-sm">
+            ¿Necesitas ayuda? Contáctame
+          </p>
+
+          <a
+            href="https://wa.me/524437863111"
+            target="_blank"
+            className="w-full flex justify-center items-center gap-2 bg-green-600 hover:bg-green-700 rounded-2xl py-4 text-white text-xl font-semibold"
+          >
+            <MessageCircle className="w-5 h-5" />
+            WhatsApp
+          </a>
+
+          <a
+            href="https://t.me/HcheJotaA_Bot"
+            target="_blank"
+            className="w-full flex justify-center items-center gap-2 bg-sky-600 hover:bg-sky-700 rounded-2xl py-4 text-white text-xl font-semibold"
+          >
+            <Send className="w-5 h-5" />
+            Telegram
+          </a>
+
+        </div>
+
+      </CardContent>
+    </Card>
+
+  </div>
+</>
+
+);
 }
