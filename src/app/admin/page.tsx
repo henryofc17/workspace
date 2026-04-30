@@ -579,7 +579,7 @@ export default function AdminPage() {
                   </Button>
                   <Button onClick={handleCleanDead} variant="outline" className="border-red-800/30 text-red-400 hover:bg-red-950/30">
                     <Trash2 className="h-4 w-4 mr-2" />
-                    Limpiar Muertas
+                    .
                   </Button>
                 </div>
               </CardContent>
