@@ -31,7 +31,7 @@ export async function verifyToken(
       JWT_SECRET
     );
 
-    return payload as JWTPayload;
+    return payload as unknown as JWTPayload;
   } catch {
     return null;
   }

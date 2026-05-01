@@ -91,17 +91,23 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Validate referral code if provided ──
-    let referrer = null;
+    let referrer: {
+      id: string;
+      createdAt: Date;
+      ipAddress: string | null;
+      fingerprint: string | null;
+      username: string;
+    } | null = null;
     let referralCodeUsed: string | null = null;
 
     if (referralCode && referralCode.trim()) {
       const code = referralCode.trim().toUpperCase();
 
-      referrer = await prisma.user.findUnique({
+      const foundReferrer = await prisma.user.findUnique({
         where: { referralCode: code },
       });
 
-      if (!referrer) {
+      if (!foundReferrer) {
         return NextResponse.json(
           { success: false, error: "Código de referido inválido" },
           { status: 400 }
@@ -109,7 +115,7 @@ export async function POST(request: NextRequest) {
       }
 
       // ── ANTI-ABUSE: Referrer account must be at least 1 hour old ──
-      const referrerAge = Date.now() - referrer.createdAt.getTime();
+      const referrerAge = Date.now() - foundReferrer.createdAt.getTime();
       if (referrerAge < 60 * 60 * 1000) {
         return NextResponse.json(
           { success: false, error: "El código de referido es muy reciente. Espera al menos 1 hora." },
@@ -118,7 +124,7 @@ export async function POST(request: NextRequest) {
       }
 
       // ── ANTI-ABUSE: Cannot be referred by someone with same IP ──
-      if (referrer.ipAddress === clientIP) {
+      if (foundReferrer.ipAddress === clientIP) {
         return NextResponse.json(
           { success: false, error: "No puedes usar tu propio código de referido." },
           { status: 400 }
@@ -126,7 +132,7 @@ export async function POST(request: NextRequest) {
       }
 
       // ── ANTI-ABUSE: Cannot be referred by someone with same fingerprint ──
-      if (fingerprint && referrer.fingerprint === fingerprint) {
+      if (fingerprint && foundReferrer.fingerprint === fingerprint) {
         return NextResponse.json(
           { success: false, error: "No puedes usar tu propio código de referido." },
           { status: 400 }
@@ -147,6 +153,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      referrer = foundReferrer;
       referralCodeUsed = code;
     }
 

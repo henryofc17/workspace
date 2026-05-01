@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { cookies } from "next/headers"
+import { createToken } from "@/lib/auth"
 
 export async function POST(req: Request) {
   try {
@@ -28,15 +29,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }
 
-    // 👇 COOKIE BIEN CONFIGURADA
-    cookies().set("auth-token", user.id, {
+    // Generate JWT token
+    const token = await createToken({
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+    })
+
+    const cookieStore = await cookies()
+    cookieStore.set("auth-token", token, {
       httpOnly: true,
-      secure: true,
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7,
       path: "/"
     })
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        credits: user.credits,
+      },
+    })
 
   } catch (err) {
     console.error("LOGIN ERROR:", err)

@@ -3,6 +3,15 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
+function generateReferralCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "NF-";
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
 // GET /api/admin/users — list all users
 export async function GET() {
   try {
@@ -51,19 +60,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Contraseña debe tener al menos 4 caracteres" }, { status: 400 });
     }
 
-    const existing = await prisma.user.findUnique({ where: { username } });
+    const existing = await prisma.user.findUnique({ where: { username: username.trim().toLowerCase() } });
     if (existing) {
       return NextResponse.json({ success: false, error: "Usuario ya existe" }, { status: 400 });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Generate unique referral code
+    let referralCode = generateReferralCode();
+    let codeExists = await prisma.user.findUnique({ where: { referralCode } });
+    while (codeExists) {
+      referralCode = generateReferralCode();
+      codeExists = await prisma.user.findUnique({ where: { referralCode } });
+    }
+
     const user = await prisma.user.create({
       data: {
-        username,
+        username: username.trim().toLowerCase(),
         password: hashedPassword,
         role: "USER",
         credits: credits || 0,
+        referralCode,
       },
       select: { id: true, username: true, role: true, credits: true, createdAt: true },
     });
