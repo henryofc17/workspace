@@ -19,6 +19,7 @@ import {
   Coins,
   Loader2,
   Check,
+  Copy,
   ExternalLink,
   CreditCard,
   Clock,
