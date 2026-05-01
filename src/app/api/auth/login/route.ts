@@ -15,17 +15,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing credentials" }, { status: 400 })
     }
 
+    // Check database connection
+    try {
+      await prisma.$connect()
+    } catch (dbErr) {
+      console.error("DB CONNECTION ERROR:", dbErr)
+      return NextResponse.json(
+        { error: "Database connection failed. Check DATABASE_URL." },
+        { status: 500 }
+      )
+    }
+
     const user = await prisma.user.findUnique({
       where: { username }
     })
 
     if (!user) {
+      // Log for debugging (remove in production)
+      console.log(`Login attempt: user "${username}" not found`)
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }
 
     const valid = await bcrypt.compare(password, user.password)
 
     if (!valid) {
+      console.log(`Login attempt: wrong password for "${username}"`)
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }
 

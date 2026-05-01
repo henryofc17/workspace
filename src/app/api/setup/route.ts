@@ -13,7 +13,29 @@ function generateReferralCode(): string {
 
 export async function GET() {
   try {
-    // Check if admin already exists
+    // 1. Test database connection
+    try {
+      await prisma.$connect()
+    } catch (dbErr) {
+      const msg = dbErr instanceof Error ? dbErr.message : String(dbErr)
+      return NextResponse.json(
+        { success: false, error: `Database connection failed: ${msg}` },
+        { status: 500 }
+      )
+    }
+
+    // 2. Check if tables exist by trying a simple query
+    let userCount = 0
+    try {
+      userCount = await prisma.user.count()
+    } catch {
+      return NextResponse.json(
+        { success: false, error: "Tables not found. Run 'prisma db push' first or redeploy on Vercel." },
+        { status: 500 }
+      )
+    }
+
+    // 3. Check if admin already exists
     const existingAdmin = await prisma.user.findUnique({
       where: { username: "hachejota" },
     })
@@ -21,16 +43,19 @@ export async function GET() {
     if (existingAdmin) {
       return NextResponse.json({
         success: true,
-        message: "Admin already exists",
-        admin: {
-          username: existingAdmin.username,
-          role: existingAdmin.role,
-          credits: existingAdmin.credits,
+        message: "Database OK - Admin already exists",
+        stats: {
+          totalUsers: userCount,
+          admin: {
+            username: existingAdmin.username,
+            role: existingAdmin.role,
+            credits: existingAdmin.credits,
+          },
         },
       })
     }
 
-    // Create admin user
+    // 4. Create admin user
     const hashedPassword = await bcrypt.hash("HacheAdmin", 10)
     const admin = await prisma.user.create({
       data: {
@@ -44,11 +69,14 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      message: "Admin created successfully",
-      admin: {
-        username: admin.username,
-        role: admin.role,
-        credits: admin.credits,
+      message: "Database OK - Admin created successfully",
+      stats: {
+        totalUsers: userCount + 1,
+        admin: {
+          username: admin.username,
+          role: admin.role,
+          credits: admin.credits,
+        },
       },
     })
   } catch (error: unknown) {
