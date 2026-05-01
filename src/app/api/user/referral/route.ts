@@ -5,13 +5,18 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   try {
     const session = await getSession();
+
     if (!session) {
-      return NextResponse.json({ success: false, error: "No autenticado" }, { status: 401 });
+      return NextResponse.json(
+        { success: false, error: "No autenticado" },
+        { status: 401 }
+      );
     }
 
     const user = await prisma.user.findUnique({
       where: { id: session.userId },
       select: {
+        id: true,
         referralCode: true,
         createdAt: true,
         _count: {
@@ -21,21 +26,28 @@ export async function GET() {
     });
 
     if (!user) {
-      return NextResponse.json({ success: false, error: "Usuario no encontrado" }, { status: 401 });
+      return NextResponse.json(
+        { success: false, error: "Usuario no encontrado" },
+        { status: 404 }
+      );
     }
 
-    // Referrer must be at least 1 hour old to share code
+    // ⏱️ mínimo 1 hora para compartir código
     const referrerAge = Date.now() - user.createdAt.getTime();
     const canShare = referrerAge >= 60 * 60 * 1000;
 
-    // List of people this user has referred
+    // ✅ CORRECTO: usar referredById (no referralCode)
     const referrals = await prisma.user.findMany({
-      where: { referredBy: user.referralCode },
+      where: {
+        referredById: user.id,
+      },
       select: {
         username: true,
         createdAt: true,
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: {
+        createdAt: "desc",
+      },
       take: 20,
     });
 
@@ -46,7 +58,13 @@ export async function GET() {
       totalReferrals: user._count.referrals,
       referrals,
     });
+
   } catch (err: any) {
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    console.error("Referral error:", err);
+
+    return NextResponse.json(
+      { success: false, error: "Error del servidor" },
+      { status: 500 }
+    );
   }
 }
