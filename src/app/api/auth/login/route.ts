@@ -1,25 +1,45 @@
-// Fix secure cookie setting to handle both development and production environments
-const isProduction = process.env.NODE_ENV === 'production';
+import { NextResponse } from "next/server"
+import { prisma } from "@/lib/prisma"
+import bcrypt from "bcryptjs"
+import { cookies } from "next/headers"
 
-const cookieOptions = {
-    secure: isProduction, // Set secure flag for production
-    httpOnly: true, // Helps prevent XSS
-    maxAge: 3600000, // 1 hour
-};
+export async function POST(req: Request) {
+  try {
+    const body = await req.json()
 
-// Enhanced error logging with request details
-app.post('/login', (req, res) => {
-    // Handle login logic
-    // ...
-    console.error('Login error:', { message: error.message, requestBody: req.body }); // Log request details
-    res.status(500).send('An error occurred');
-});
+    const username = body.username?.trim().toLowerCase()
+    const password = body.password
 
-// Improve edge case handling for better debugging
-function handleEdgeCases(input) {
-    if (!input) {
-        console.error('Input cannot be empty');
-        throw new Error('Input is required');
+    if (!username || !password) {
+      return NextResponse.json({ error: "Missing credentials" }, { status: 400 })
     }
-    // Additional edge case logic
+
+    const user = await prisma.user.findUnique({
+      where: { username }
+    })
+
+    if (!user) {
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
+    }
+
+    const valid = await bcrypt.compare(password, user.password)
+
+    if (!valid) {
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
+    }
+
+    // 👇 COOKIE BIEN CONFIGURADA
+    cookies().set("auth-token", user.id, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/"
+    })
+
+    return NextResponse.json({ success: true })
+
+  } catch (err) {
+    console.error("LOGIN ERROR:", err)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
 }
