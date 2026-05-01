@@ -19,7 +19,6 @@ import {
   Coins,
   Loader2,
   Check,
-  Copy,
   ExternalLink,
   CreditCard,
   Clock,
@@ -487,7 +486,7 @@ export default function Home() {
                               onClick={() => copyToClip(checkerResult.link!, setCopiedLink)}
                               className="h-6 px-2 text-[10px] text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
                             >
-                              {copiedLink ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                              {copiedLink ? <Check className="h-3 w-3" /> : <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}
                             </button>
                             <a href={checkerResult.link} target="_blank" rel="noopener noreferrer"
                               className="h-6 px-2 text-[10px] text-gray-400 hover:text-white hover:bg-white/10 inline-flex items-center rounded transition-colors">
@@ -591,7 +590,7 @@ export default function Home() {
                           onClick={() => copyToClip(generatedLink, setCopiedLink)}
                           className="h-7 px-3 text-xs text-gray-400 hover:text-white hover:bg-white/10 rounded-md transition-colors flex items-center gap-1"
                         >
-                          {copiedLink ? <><Check className="h-3 w-3" /> Copiado</> : <><Copy className="h-3 w-3" /> Copiar Link</>}
+                          {copiedLink ? <><Check className="h-3 w-3" /> Copiado</> : <><svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copiar Link</>}
                         </button>
                         <a
                           href={generatedLink}
@@ -670,7 +669,7 @@ export default function Home() {
                       onClick={() => copyToClip(copiedCookie, setCopiedCookieClip)}
                       className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
                     >
-                      {copiedCookieClip ? <><Check className="h-4 w-4" /> Copiado</> : <><Copy className="h-4 w-4" /> Copiar Cookie</>}
+                      {copiedCookieClip ? <><Check className="h-4 w-4" /> Copiado</> : <><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copiar Cookie</>}
                     </button>
                   </div>
                   <div className="bg-black/40 rounded-lg p-3">
