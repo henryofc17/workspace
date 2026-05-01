@@ -1,21 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import Script from "next/script";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import {
-  Loader2,
-  LogIn,
-  UserPlus,
-  ShieldCheck,
-  Eye,
-  EyeOff,
-  Gift,
-} from "lucide-react";
+import { Shield, Loader2, LogIn, UserPlus, Gift } from "lucide-react";
 
 declare global {
   interface Window {
@@ -24,16 +16,15 @@ declare global {
   }
 }
 
-// fingerprint anti multi cuenta
 function generateFingerprint(): string {
   try {
     const nav = navigator as any;
-    const scr = `${screen.width}x${screen.height}x${screen.colorDepth}`;
+    const screen = `${screen.width}x${screen.height}x${screen.colorDepth}`;
     const lang = nav.language || "";
     const platform = nav.platform || "";
-    const ua = nav.userAgent.substring(0, 80);
+    const ua = nav.userAgent.substring(0, 100);
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-    return btoa(`${platform}|${scr}|${lang}|${tz}|${ua}`).substring(0, 64);
+    return btoa(`${platform}|${screen}|${lang}|${tz}|${ua}`).substring(0, 64);
   } catch {
     return "";
   }
@@ -45,13 +36,10 @@ export default function LoginPage() {
 
   const [tab, setTab] = useState<"login" | "register">("login");
 
-  // login
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [showPass, setShowPass] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
 
-  // register
   const [regUsername, setRegUsername] = useState("");
   const [regPassword, setRegPassword] = useState("");
   const [regReferral, setRegReferral] = useState("");
@@ -59,19 +47,7 @@ export default function LoginPage() {
 
   const [widgetReady, setWidgetReady] = useState(false);
 
-  // auto redirect si ya logueado
-  useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.success) {
-          router.push(d.user.role === "ADMIN" ? "/admin" : "/");
-        }
-      })
-      .catch(() => {});
-  }, [router]);
-
-  // turnstile init
+  // INIT TURNSTILE
   useEffect(() => {
     let tries = 0;
 
@@ -101,16 +77,16 @@ export default function LoginPage() {
   // LOGIN
   const handleLogin = useCallback(async () => {
     if (!username.trim() || !password.trim()) {
-      toast.error("Completa campos");
+      toast.error("Completa todos los campos");
       return;
     }
 
     if (!window.cfToken) {
-      toast.error("Completa captcha");
+      toast.error("Completa el captcha");
       return;
     }
 
-    setLoading(true);
+    setLoginLoading(true);
 
     try {
       const res = await fetch("/api/auth/login", {
@@ -125,22 +101,25 @@ export default function LoginPage() {
 
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) {
+        toast.error(data.error || "Error al iniciar sesión");
+        return;
+      }
 
-      toast.success("Bienvenido");
+      toast.success(`Bienvenido, ${data.user.username}`);
 
       router.push(data.user.role === "ADMIN" ? "/admin" : "/");
-    } catch (e: any) {
-      toast.error(e.message || "Error");
+    } catch {
+      toast.error("Error de conexión");
     } finally {
-      setLoading(false);
+      setLoginLoading(false);
     }
   }, [username, password, router]);
 
   // REGISTER
   const handleRegister = useCallback(async () => {
     if (!regUsername.trim() || !regPassword.trim()) {
-      toast.error("Completa campos");
+      toast.error("Completa usuario y contraseña");
       return;
     }
 
@@ -160,13 +139,16 @@ export default function LoginPage() {
 
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) {
+        toast.error(data.error || "Error al registrarse");
+        return;
+      }
 
       toast.success("Cuenta creada");
 
       router.push("/");
-    } catch (e: any) {
-      toast.error(e.message || "Error");
+    } catch {
+      toast.error("Error de conexión");
     } finally {
       setRegLoading(false);
     }
@@ -182,20 +164,23 @@ export default function LoginPage() {
       <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] px-4">
         <div className="w-full max-w-sm space-y-6">
 
-          {/* HEADER */}
-          <div className="text-center">
+          {/* LOGO */}
+          <div className="text-center space-y-3">
+            <div className="mx-auto h-16 w-16 rounded-2xl bg-[#E50914] flex items-center justify-center">
+              <Shield className="h-8 w-8 text-white" />
+            </div>
             <h1 className="text-2xl font-bold text-white">
-              Netflix Checker <span className="text-red-500">Pro</span>
+              Netflix Checker <span className="text-[#E50914]">Pro</span>
             </h1>
           </div>
 
           {/* TABS */}
           <div className="flex bg-[#1F1F1F] p-1 rounded-lg border border-white/10">
-            <button onClick={() => setTab("login")} className={`flex-1 py-2 ${tab==="login"?"bg-red-600 text-white":"text-gray-400"}`}>
-              Login
+            <button onClick={() => setTab("login")} className={`flex-1 py-2 ${tab==="login"?"bg-[#E50914] text-white":"text-gray-400"}`}>
+              Iniciar Sesión
             </button>
-            <button onClick={() => setTab("register")} className={`flex-1 py-2 ${tab==="register"?"bg-red-600 text-white":"text-gray-400"}`}>
-              Register
+            <button onClick={() => setTab("register")} className={`flex-1 py-2 ${tab==="register"?"bg-[#E50914] text-white":"text-gray-400"}`}>
+              Registrarse
             </button>
           </div>
 
@@ -204,27 +189,15 @@ export default function LoginPage() {
             <Card className="bg-[#1F1F1F] border-white/10">
               <CardContent className="space-y-4 pt-6">
 
-                <Input placeholder="Usuario" value={username} onChange={(e)=>setUsername(e.target.value)} />
+                <Input value={username} onChange={(e)=>setUsername(e.target.value)} placeholder="Usuario" />
 
-                <div className="relative">
-                  <Input
-                    type={showPass?"text":"password"}
-                    placeholder="Contraseña"
-                    value={password}
-                    onChange={(e)=>setPassword(e.target.value)}
-                  />
-                  <button
-                    onClick={()=>setShowPass(!showPass)}
-                    className="absolute right-3 top-3 text-gray-400"
-                  >
-                    {showPass ? <EyeOff/> : <Eye/>}
-                  </button>
-                </div>
+                <Input type="password" value={password} onChange={(e)=>setPassword(e.target.value)} placeholder="Contraseña" />
 
+                {/* CAPTCHA */}
                 <div id="cf-turnstile" className="flex justify-center" />
 
-                <Button onClick={handleLogin} disabled={loading} className="w-full bg-red-600">
-                  {loading ? <Loader2 className="animate-spin"/> : "Entrar"}
+                <Button onClick={handleLogin} disabled={loginLoading} className="w-full bg-[#E50914]">
+                  {loginLoading ? <Loader2 className="animate-spin"/> : "Iniciar Sesión"}
                 </Button>
 
               </CardContent>
@@ -236,14 +209,14 @@ export default function LoginPage() {
             <Card className="bg-[#1F1F1F] border-white/10">
               <CardContent className="space-y-4 pt-6">
 
-                <Input placeholder="Usuario" value={regUsername} onChange={(e)=>setRegUsername(e.target.value)} />
+                <Input value={regUsername} onChange={(e)=>setRegUsername(e.target.value)} placeholder="Usuario" />
 
-                <Input type="password" placeholder="Contraseña" value={regPassword} onChange={(e)=>setRegPassword(e.target.value)} />
+                <Input type="password" value={regPassword} onChange={(e)=>setRegPassword(e.target.value)} placeholder="Contraseña" />
 
-                <Input placeholder="Código (opcional)" value={regReferral} onChange={(e)=>setRegReferral(e.target.value)} />
+                <Input value={regReferral} onChange={(e)=>setRegReferral(e.target.value)} placeholder="Código referido" />
 
                 <Button onClick={handleRegister} disabled={regLoading} className="w-full bg-green-600">
-                  {regLoading ? <Loader2 className="animate-spin"/> : "Crear cuenta"}
+                  {regLoading ? <Loader2 className="animate-spin"/> : "Crear Cuenta"}
                 </Button>
 
               </CardContent>
