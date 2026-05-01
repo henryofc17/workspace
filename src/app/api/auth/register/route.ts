@@ -63,26 +63,29 @@ export async function POST(request: NextRequest) {
     });
     if (ipCount >= 2) {
       return NextResponse.json(
-        { success: false, error: "Límite de cuentas por dispositivo alcanzado. Contacta al admin si necesitas más." },
+        { success: false, error: "Límite de cuentas por dispositivo alcanzado." },
         { status: 400 }
       );
     }
 
-    // ── ANTI-ABUSE: Fingerprint check (same browser = same person) ──
+    // ── ANTI-ABUSE: Fingerprint ──
     if (fingerprint) {
       const fpCount = await prisma.user.count({
         where: { fingerprint },
       });
       if (fpCount >= 2) {
         return NextResponse.json(
-          { success: false, error: "Ya tienes cuentas registradas en este navegador." },
+          { success: false, error: "Ya tienes cuentas en este navegador." },
           { status: 400 }
         );
       }
     }
 
-    // ── Check username unique ──
-    const existing = await prisma.user.findUnique({ where: { username: username.trim().toLowerCase() } });
+    // ── Check username ──
+    const existing = await prisma.user.findUnique({
+      where: { username: username.trim().toLowerCase() },
+    });
+
     if (existing) {
       return NextResponse.json(
         { success: false, error: "Ese usuario ya existe" },
@@ -90,9 +93,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Validate referral code if provided ──
+    // ── Referral ──
     let referrer = null;
-    let referralCodeUsed: string | null = null;
 
     if (referralCode && referralCode.trim()) {
       const code = referralCode.trim().toUpperCase();
@@ -103,62 +105,40 @@ export async function POST(request: NextRequest) {
 
       if (!referrer) {
         return NextResponse.json(
-          { success: false, error: "Código de referido inválido" },
+          { success: false, error: "Código inválido" },
           { status: 400 }
         );
       }
 
-      // ── ANTI-ABUSE: Referrer account must be at least 1 hour old ──
-      const referrerAge = Date.now() - referrer.createdAt.getTime();
-      if (referrerAge < 60 * 60 * 1000) {
-        return NextResponse.json(
-          { success: false, error: "El código de referido es muy reciente. Espera al menos 1 hora." },
-          { status: 400 }
-        );
-      }
-
-      // ── ANTI-ABUSE: Cannot be referred by someone with same IP ──
-      if (referrer.ipAddress === clientIP) {
-        return NextResponse.json(
-          { success: false, error: "No puedes usar tu propio código de referido." },
-          { status: 400 }
-        );
-      }
-
-      // ── ANTI-ABUSE: Cannot be referred by someone with same fingerprint ──
-      if (fingerprint && referrer.fingerprint === fingerprint) {
-        return NextResponse.json(
-          { success: false, error: "No puedes usar tu propio código de referido." },
-          { status: 400 }
-        );
-      }
-
-      // ── ANTI-ABUSE: One referral per referrer per IP ──
+      // Anti abuse
       const sameRefSameIP = await prisma.user.count({
         where: {
-          referredBy: code,
+          referredById: referrer.id,
           ipAddress: clientIP,
         },
       });
+
       if (sameRefSameIP > 0) {
         return NextResponse.json(
-          { success: false, error: "Ya existe una cuenta referida por este código en tu red." },
+          { success: false, error: "Ya usaste este referido" },
           { status: 400 }
         );
       }
-
-      referralCodeUsed = code;
     }
 
     // ── Create user ──
     const hashedPassword = await bcrypt.hash(password, 10);
-    let finalCode = generateReferralCode();
 
-    // Ensure referral code is unique
-    let codeExists = await prisma.user.findUnique({ where: { referralCode: finalCode } });
-    while (codeExists) {
+    let finalCode = generateReferralCode();
+    let existsCode = await prisma.user.findUnique({
+      where: { referralCode: finalCode },
+    });
+
+    while (existsCode) {
       finalCode = generateReferralCode();
-      codeExists = await prisma.user.findUnique({ where: { referralCode: finalCode } });
+      existsCode = await prisma.user.findUnique({
+        where: { referralCode: finalCode },
+      });
     }
 
     const user = await prisma.user.create({
@@ -168,23 +148,23 @@ export async function POST(request: NextRequest) {
         role: "USER",
         credits: REGISTER_BONUS,
         referralCode: finalCode,
-        referredBy: referralCodeUsed,
+        referredById: referrer ? referrer.id : null, // ✅ FIX
         ipAddress: clientIP,
         fingerprint: fingerprint || null,
       },
     });
 
-    // Create register bonus transaction
+    // ── Bonus registro ──
     await prisma.transaction.create({
       data: {
         userId: user.id,
         type: "REGISTER_BONUS",
         credits: REGISTER_BONUS,
-        description: "Créditos de bienvenida",
+        description: "Bienvenida",
       },
     });
 
-    // Give referral bonus to referrer
+    // ── Bonus referido ──
     if (referrer) {
       await prisma.$transaction([
         prisma.user.update({
@@ -196,13 +176,13 @@ export async function POST(request: NextRequest) {
             userId: referrer.id,
             type: "REFERRAL_BONUS",
             credits: REFERRAL_BONUS,
-            description: `Bonus por referido: ${user.username}`,
+            description: `Referido: ${user.username}`,
           },
         }),
       ]);
     }
 
-    // Generate JWT
+    // ── Token ──
     const token = await createToken({
       userId: user.id,
       username: user.username,
@@ -218,9 +198,6 @@ export async function POST(request: NextRequest) {
         credits: user.credits,
         referralCode: user.referralCode,
       },
-      message: referrer
-        ? `¡Cuenta creada! +${REGISTER_BONUS} créditos de bienvenida. Tu referido ganó +${REFERRAL_BONUS} créditos.`
-        : `¡Cuenta creada! Tienes ${REGISTER_BONUS} créditos de bienvenida.`,
     });
 
     response.cookies.set("auth-token", token, {
@@ -232,10 +209,10 @@ export async function POST(request: NextRequest) {
     });
 
     return response;
-  } catch (err: any) {
+  } catch (err) {
     console.error("Register error:", err);
     return NextResponse.json(
-      { success: false, error: "Error del servidor. Intenta de nuevo." },
+      { success: false, error: "Error del servidor" },
       { status: 500 }
     );
   }
