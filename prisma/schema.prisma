@@ -11,29 +11,24 @@ model User {
   id           String   @id @default(cuid())
   username     String   @unique
   password     String
-  role         String   @default("USER")
+  role         String   @default("USER") // ADMIN or USER
   credits      Int      @default(0)
-
-  // 🔥 NUEVO
-  referralCode String?  @unique
-  referredById String?
-  ipAddress    String?
-  fingerprint  String?
-
+  referralCode String   @unique // e.g. NF-XXXXXX
+  referredBy   String?  // referral code of who invited them
+  ipAddress    String?  // IP at registration
+  fingerprint  String?  // browser fingerprint
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   transactions Transaction[]
-
-  // 🔥 relación correcta
-  referrer   User?  @relation("UserReferrals", fields: [referredById], references: [id])
-  referrals  User[] @relation("UserReferrals")
+  referrals    User[]   @relation("Referrals")
+  referrer     User?    @relation("Referrals", fields: [referredBy], references: [referralCode])
 }
 
 model Cookie {
   id        String   @id @default(cuid())
   rawCookie String
-  status    String   @default("ACTIVE")
+  status    String   @default("ACTIVE") // ACTIVE or DEAD
   usedCount Int      @default(0)
   lastUsed  DateTime?
   lastError String?
@@ -46,8 +41,8 @@ model Cookie {
 model Transaction {
   id          String   @id @default(cuid())
   userId      String
-  type        String
-  credits     Int
+  type        String   // GENERATE_TOKEN, COPY_COOKIE, ADMIN_GRANT, ADMIN_DEDUCT, REFERRAL_BONUS, REGISTER_BONUS
+  credits     Int      // positive for grants, negative for usage
   description String?
   createdAt   DateTime @default(now())
 
