@@ -81,8 +81,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── Check username unique ──
-    const existing = await prisma.user.findUnique({ where: { username: username.trim().toLowerCase() } });
+    // ── Check username unique (case-insensitive) ──
+    const existing = await prisma.user.findFirst({ where: { username: { equals: username.trim(), mode: 'insensitive' } } });
     if (existing) {
       return NextResponse.json(
         { success: false, error: "Ese usuario ya existe" },
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
 
     const user = await prisma.user.create({
       data: {
-        username: username.trim().toLowerCase(),
+        username: username.trim(),
         password: hashedPassword,
         role: "USER",
         credits: REGISTER_BONUS,

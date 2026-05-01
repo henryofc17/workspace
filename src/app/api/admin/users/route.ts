@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Contraseña debe tener al menos 4 caracteres" }, { status: 400 });
     }
 
-    const existing = await prisma.user.findUnique({ where: { username: username.trim().toLowerCase() } });
+    const existing = await prisma.user.findFirst({ where: { username: { equals: username.trim(), mode: 'insensitive' } } });
     if (existing) {
       return NextResponse.json({ success: false, error: "Usuario ya existe" }, { status: 400 });
     }
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
 
     const user = await prisma.user.create({
       data: {
-        username: username.trim().toLowerCase(),
+        username: username.trim(),
         password: hashedPassword,
         role: "USER",
         credits: credits || 0,

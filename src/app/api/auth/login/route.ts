@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json()
 
-    const username = body.username?.trim().toLowerCase()
+    const username = body.username?.trim()
     const password = body.password
 
     if (!username || !password) {
@@ -26,20 +26,18 @@ export async function POST(req: Request) {
       )
     }
 
-    const user = await prisma.user.findUnique({
-      where: { username }
+    // Case-insensitive user lookup
+    const user = await prisma.user.findFirst({
+      where: { username: { equals: username, mode: "insensitive" } }
     })
 
     if (!user) {
-      // Log for debugging (remove in production)
-      console.log(`Login attempt: user "${username}" not found`)
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }
 
     const valid = await bcrypt.compare(password, user.password)
 
     if (!valid) {
-      console.log(`Login attempt: wrong password for "${username}"`)
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }
 

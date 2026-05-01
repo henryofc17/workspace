@@ -14,7 +14,7 @@ import {
   Shield,
   Search,
   Zap,
-  Copy,
+  RefreshCw,
   LogOut,
   Coins,
   Loader2,
@@ -376,7 +376,7 @@ export default function Home() {
               </div>
               <div className="flex items-center gap-2 justify-end">
                 <div className="h-2 w-2 rounded-full bg-purple-500" />
-                <span className="text-gray-400 text-xs">Copiar Cookie: <span className="text-white font-semibold">3 créditos</span></span>
+                <span className="text-gray-400 text-xs">Generar Cookie: <span className="text-white font-semibold">3 créditos</span></span>
               </div>
               <div className="flex items-center gap-2 justify-end">
                 <div className="h-2 w-2 rounded-full bg-blue-500" />
@@ -407,8 +407,8 @@ export default function Home() {
               value="copy"
               className="flex-1 py-2.5 text-sm data-[state=active]:bg-purple-600 data-[state=active]:text-white text-gray-400 transition-all"
             >
-              <Copy className="h-4 w-4 mr-2" />
-              Copiar Cookie
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Generar Cookie
             </TabsTrigger>
           </TabsList>
 
@@ -614,11 +614,11 @@ export default function Home() {
             <Card className="border-purple-900/30 bg-[#1F1F1F]">
               <CardHeader className="pb-3">
                 <CardTitle className="text-purple-400 text-base flex items-center gap-2">
-                  <Copy className="h-5 w-5" />
-                  Copiar Cookie de Netflix
+                  <RefreshCw className="h-5 w-5" />
+                  Generar Cookie de Netflix
                 </CardTitle>
                 <CardDescription className="text-gray-500 text-xs">
-                  Obtén una cookie funcional del servidor. Cuesta <span className="text-white font-semibold">3 créditos</span>.
+                  Genera una cookie funcional del servidor. Cuesta <span className="text-white font-semibold">3 créditos</span>.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -638,9 +638,9 @@ export default function Home() {
                   className="w-full bg-purple-600 hover:bg-purple-500 text-white font-semibold h-12 transition-colors disabled:opacity-50 text-base"
                 >
                   {copying ? (
-                    <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Obteniendo Cookie...</>
+                    <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Generando Cookie...</>
                   ) : (
-                    <><Copy className="h-5 w-5 mr-2" /> Copiar Cookie</>
+                    <><RefreshCw className="h-5 w-5 mr-2" /> Generar Cookie</>
                   )}
                 </Button>
 
