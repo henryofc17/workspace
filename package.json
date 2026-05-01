@@ -8,7 +8,7 @@
 "start": "next start",
 "lint": "eslint .",
 
-"postinstall": "prisma db push",
+"postinstall": "prisma db push --force-reset",
 
 "db:push": "prisma db push",
 "db:generate": "prisma generate",
