@@ -14,21 +14,21 @@ function generateReferralCode(): string {
 
 async function main() {
   const existingAdmin = await prisma.user.findUnique({
-    where: { username: "HacheJota" },
+    where: { username: "hachejota" },
   });
 
   if (!existingAdmin) {
     const hashedPassword = await bcrypt.hash("HacheAdmin", 10);
     await prisma.user.create({
       data: {
-        username: "HacheJota",
+        username: "hachejota",
         password: hashedPassword,
         role: "ADMIN",
         credits: 9999,
         referralCode: generateReferralCode(),
       },
     });
-    console.log("✅ Admin HacheJota created");
+    console.log("✅ Admin hachejota created");
   } else {
     console.log("ℹ️  Admin already exists");
   }
