@@ -32,6 +32,7 @@ import {
   RefreshCw,
   RotateCcw,
   Trash2,
+  MonitorPlay,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -134,6 +135,11 @@ export default function Home() {
 
   const [historyCleared, setHistoryCleared] = useState(false);
 
+  // TV activation state
+  const [tvCode, setTvCode] = useState("");
+  const [tvActivating, setTvActivating] = useState(false);
+  const [tvResult, setTvResult] = useState<{ success: boolean; message: string } | null>(null);
+
   // Referral state
   const [referralCode, setReferralCode] = useState("");
   const [totalReferrals, setTotalReferrals] = useState(0);
@@ -195,6 +201,51 @@ export default function Home() {
       });
     return () => { cancelled = true; };
   }, [router, loadBalance, loadReferral]);
+
+  // ── TV Activate (5 credits) ──
+  const handleTvActivate = useCallback(async () => {
+    if (!tvCode.trim()) {
+      toast.error("Ingresa el código de 8 dígitos de tu TV");
+      return;
+    }
+    if (!/^\d{8}$/.test(tvCode.trim())) {
+      toast.error("El código debe tener exactamente 8 números");
+      return;
+    }
+    if (credits < 5) {
+      toast.error("Créditos insuficientes. Necesitas 5 créditos.");
+      return;
+    }
+    setTvActivating(true);
+    setTvResult(null);
+    try {
+      const res = await fetch("/api/user/tv-activate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: tvCode.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTvResult({ success: true, message: data.message });
+        setTvCode("");
+        setCredits(data.remainingCredits);
+        refreshCredits();
+        loadBalance();
+        toast.success("TV activada correctamente");
+      } else {
+        setTvResult({ success: false, message: data.error || "Error al activar TV" });
+        if (data.retry || data.noCookies) {
+          toast.error(data.error || "Error con la cookie, intenta de nuevo");
+        }
+        refreshCredits();
+      }
+    } catch {
+      toast.error("Error de conexión");
+      setTvResult({ success: false, message: "Error de conexión al servidor" });
+    } finally {
+      setTvActivating(false);
+    }
+  }, [tvCode, credits, refreshCredits, loadBalance]);
 
   const refreshCredits = useCallback(() => {
     fetch("/api/auth/me")
@@ -437,6 +488,10 @@ export default function Home() {
                   <div className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.5)]" />
                   <span className="text-white/40 text-[11px]">Checker: <span className="text-emerald-400/80 font-medium">Gratis</span></span>
                 </div>
+                <div className="flex items-center gap-2 justify-end">
+                  <div className="h-1.5 w-1.5 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(251,113,133,0.5)]" />
+                  <span className="text-white/40 text-[11px]">Activar TV: <span className="text-white/70 font-medium">5 créditos</span></span>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -465,6 +520,13 @@ export default function Home() {
             >
               <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
               Generar Cookie
+            </TabsTrigger>
+            <TabsTrigger
+              value="tv"
+              className="flex-1 py-2.5 text-xs font-medium data-[state=active]:bg-rose-500/15 data-[state=active]:text-rose-400 data-[state=active]:border-rose-500/20 data-[state=active]:shadow-[0_0_20px_rgba(251,113,133,0.08)] text-white/40 transition-all duration-300 rounded-lg border border-transparent"
+            >
+              <MonitorPlay className="h-3.5 w-3.5 mr-1.5" />
+              Activar TV
             </TabsTrigger>
           </TabsList>
 
@@ -766,6 +828,145 @@ export default function Home() {
                 </CardContent>
               </div>
             )}
+          </TabsContent>
+
+          {/* ═══ TAB 4: ACTIVAR TV ═══ */}
+          <TabsContent value="tv" className="space-y-4">
+            <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-rose-950/10 to-transparent pointer-events-none" />
+              <CardHeader className="pb-3 px-5 pt-5 relative">
+                <CardTitle className="text-rose-400 text-sm flex items-center gap-2.5">
+                  <div className="h-7 w-7 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
+                    <MonitorPlay className="h-3.5 w-3.5 text-rose-400" />
+                  </div>
+                  Activar Netflix en TV
+                </CardTitle>
+                <CardDescription className="text-white/25 text-xs ml-[38px]">
+                  Ingresa el código de 8 dígitos que aparece en tu TV. Se usa una cookie del servidor. Cuesta <span className="text-white/60 font-semibold">5 créditos</span>.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 px-5 pb-5 relative">
+                {/* Info Steps */}
+                <div className="flex items-start gap-3 p-3.5 rounded-xl bg-[#050508]/60 border border-white/[0.04]">
+                  <div className="h-8 w-8 rounded-lg bg-rose-500/10 border border-rose-500/15 flex items-center justify-center shrink-0 mt-0.5">
+                    <Tv className="h-4 w-4 text-rose-400/70" />
+                  </div>
+                  <ol className="text-white/40 text-[11px] space-y-1 list-decimal list-inside">
+                    <li>Abre Netflix en tu Smart TV o consola</li>
+                    <li>Selecciona &quot;Iniciar sesión&quot; &rarr; &quot;Iniciar sesión en la web&quot;</li>
+                    <li>Copia el código de 8 dígitos que aparece</li>
+                    <li>Pégalo aquí y presiona Activar</li>
+                  </ol>
+                </div>
+
+                {/* Code Input */}
+                <div className="relative">
+                  <Input
+                    value={tvCode}
+                    onChange={(e) => setTvCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                    placeholder="00000000"
+                    className="bg-[#050508]/80 border-white/[0.06] text-white/90 placeholder:text-white/10 text-center text-2xl font-mono font-bold tracking-[0.5em] h-16 rounded-xl focus:border-rose-500/40 focus:ring-2 focus:ring-rose-500/10 transition-all duration-300"
+                    maxLength={8}
+                  />
+                  {tvCode.length > 0 && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <span className="text-white/15 text-[10px] font-mono">{tvCode.length}/8</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Balance */}
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#050508]/80 border border-white/[0.04]">
+                  <div className="flex items-center gap-2">
+                    <Coins className="h-4 w-4 text-amber-400" />
+                    <span className="text-white/40 text-sm">Costo:</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-rose-400 font-bold text-lg tabular-nums">5</span>
+                    <span className="text-white/20 text-xs">créditos</span>
+                    <span className="text-white/10 mx-1">|</span>
+                    <span className={`text-sm font-bold tabular-nums ${credits >= 5 ? "text-emerald-400" : "text-red-400"}`}>
+                      {credits}
+                    </span>
+                    <span className="text-white/20 text-xs">disponibles</span>
+                  </div>
+                </div>
+
+                {/* Activate Button */}
+                <Button
+                  onClick={handleTvActivate}
+                  disabled={tvActivating || tvCode.length !== 8 || credits < 5}
+                  className="w-full bg-gradient-to-r from-rose-600 via-red-500 to-rose-600 hover:from-rose-500 hover:via-red-400 hover:to-rose-500 text-white font-semibold h-12 transition-all duration-300 disabled:opacity-40 rounded-xl shadow-[0_0_20px_rgba(251,113,133,0.15)] hover:shadow-[0_0_30px_rgba(251,113,133,0.25)] text-base"
+                >
+                  {tvActivating ? (
+                    <>
+                      <div className="h-5 w-5 mr-2 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                      Activando TV...
+                    </>
+                  ) : (
+                    <><MonitorPlay className="h-5 w-5 mr-2" /> Activar TV</>
+                  )}
+                </Button>
+
+                {credits < 5 && (
+                  <p className="text-red-400/40 text-xs text-center">
+                    Necesitas al menos 5 créditos. Contacta al administrador.
+                  </p>
+                )}
+
+                {/* Loading animation */}
+                {tvActivating && (
+                  <div className="rounded-xl border border-rose-500/10 bg-[#0a0a10]/60 overflow-hidden">
+                    <div className="relative h-24 flex items-center justify-center overflow-hidden">
+                      <div className="absolute inset-0 scan-line" />
+                      <div className="relative flex flex-col items-center gap-2 z-10">
+                        <div className="h-8 w-8 rounded-full border-2 border-rose-400/30 border-t-rose-400 animate-spin" />
+                        <span className="text-rose-400/60 text-[10px] uppercase tracking-widest">Activando TV...</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Result */}
+                {tvResult && !tvActivating && (
+                  tvResult.success ? (
+                    <div className="rounded-2xl border border-emerald-500/20 bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
+                      <CardContent className="p-5">
+                        <div className="flex items-start gap-3">
+                          <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(52,211,153,0.1)]">
+                            <Check className="h-5 w-5 text-emerald-400" />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="text-emerald-400 font-semibold text-sm">TV Activada</h4>
+                            <p className="text-white/30 text-xs mt-1">Netflix en tu TV está listo. Disfruta.</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-red-500/20 bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
+                      <CardContent className="p-5">
+                        <div className="flex items-start gap-3">
+                          <div className="h-10 w-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(239,68,68,0.1)]">
+                            <X className="h-5 w-5 text-red-400" />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="text-red-400 font-semibold text-sm">Error al activar</h4>
+                            <p className="text-white/25 text-xs mt-1">{tvResult.message}</p>
+                            <button
+                              onClick={() => setTvResult(null)}
+                              className="mt-2 text-white/30 hover:text-white/50 text-[10px] transition-colors"
+                            >
+                              Intentar de nuevo
+                            </button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </div>
+                  )
+                )}
+              </CardContent>
+            </div>
           </TabsContent>
         </Tabs>
 
