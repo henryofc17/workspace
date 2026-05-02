@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,6 +33,7 @@ import {
   RotateCcw,
   Trash2,
   MonitorPlay,
+  Menu,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -117,6 +118,10 @@ export default function Home() {
   const [username, setUsername] = useState("");
   const [credits, setCredits] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+
+  // Drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("checker");
 
   // Checker state
   const [cookieText, setCookieText] = useState("");
@@ -423,6 +428,13 @@ export default function Home() {
       <header className="border-b border-white/[0.06] bg-[#050508]/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
+            {/* Hamburger Button */}
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="h-8 w-8 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-gray-500 hover:text-white/70 hover:bg-white/[0.06] hover:border-white/[0.1] transition-all duration-300"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
             {/* Logo Image */}
             <img
               src="https://i.ibb.co/BKy3LKzL/AISelect-20260430-120048-Google.jpg"
@@ -454,6 +466,77 @@ export default function Home() {
           </div>
         </div>
       </header>
+
+      {/* ─── Drawer Overlay ─── */}
+      {drawerOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]"
+          onClick={() => setDrawerOpen(false)}
+        />
+      )}
+
+      {/* ─── Drawer Panel ─── */}
+      <div className={`fixed top-0 left-0 h-full w-72 bg-[#0a0a10]/95 backdrop-blur-xl border-r border-white/[0.06] z-[70] transform transition-transform duration-300 ease-in-out ${drawerOpen ? "translate-x-0" : "-translate-x-full"}`}>
+        <div className="flex items-center justify-between p-4 border-b border-white/[0.06]">
+          <span className="text-white/50 text-xs font-medium">Herramientas</span>
+          <button
+            onClick={() => setDrawerOpen(false)}
+            className="h-8 w-8 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-gray-500 hover:text-white/70 hover:bg-white/[0.06] transition-all duration-300"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <div className="p-3 space-y-1">
+          {/* Checker */}
+          <button
+            onClick={() => { setActiveTab("checker"); setDrawerOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-xs font-medium transition-all duration-300 rounded-lg border ${
+              activeTab === "checker"
+                ? "bg-sky-500/15 text-sky-400 border-sky-500/20 shadow-[0_0_20px_rgba(56,189,248,0.08)]"
+                : "text-white/40 border-transparent hover:bg-white/[0.04] hover:text-white/60"
+            }`}
+          >
+            <Search className="h-3.5 w-3.5" />
+            Checker
+          </button>
+          {/* Generar Token */}
+          <button
+            onClick={() => { setActiveTab("generate"); setDrawerOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-xs font-medium transition-all duration-300 rounded-lg border ${
+              activeTab === "generate"
+                ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20 shadow-[0_0_20px_rgba(52,211,153,0.08)]"
+                : "text-white/40 border-transparent hover:bg-white/[0.04] hover:text-white/60"
+            }`}
+          >
+            <Zap className="h-3.5 w-3.5" />
+            Generar Token
+          </button>
+          {/* Generar Cookie */}
+          <button
+            onClick={() => { setActiveTab("copy"); setDrawerOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-xs font-medium transition-all duration-300 rounded-lg border ${
+              activeTab === "copy"
+                ? "bg-violet-500/15 text-violet-400 border-violet-500/20 shadow-[0_0_20px_rgba(167,139,250,0.08)]"
+                : "text-white/40 border-transparent hover:bg-white/[0.04] hover:text-white/60"
+            }`}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Generar Cookie
+          </button>
+          {/* Activar TV */}
+          <button
+            onClick={() => { setActiveTab("tv"); setDrawerOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-xs font-medium transition-all duration-300 rounded-lg border ${
+              activeTab === "tv"
+                ? "bg-rose-500/15 text-rose-400 border-rose-500/20 shadow-[0_0_20px_rgba(251,113,133,0.08)]"
+                : "text-white/40 border-transparent hover:bg-white/[0.04] hover:text-white/60"
+            }`}
+          >
+            <MonitorPlay className="h-3.5 w-3.5" />
+            Activar TV
+          </button>
+        </div>
+      </div>
 
       {/* ─── Main Content ─── */}
       <main className="flex-1 max-w-3xl mx-auto w-full px-4 sm:px-6 py-6 space-y-5">
@@ -498,38 +581,8 @@ export default function Home() {
           </CardContent>
         </div>
 
-        {/* ═══ Tabs ═══ */}
-        <Tabs defaultValue="checker" className="space-y-5">
-          <TabsList className="bg-[#0a0a10]/80 backdrop-blur-sm border border-white/[0.06] w-full h-auto p-1 rounded-xl">
-            <TabsTrigger
-              value="checker"
-              className="flex-1 py-2.5 text-xs font-medium data-[state=active]:bg-sky-500/15 data-[state=active]:text-sky-400 data-[state=active]:border-sky-500/20 data-[state=active]:shadow-[0_0_20px_rgba(56,189,248,0.08)] text-white/40 transition-all duration-300 rounded-lg border border-transparent"
-            >
-              <Search className="h-3.5 w-3.5 mr-1.5" />
-              Checker
-            </TabsTrigger>
-            <TabsTrigger
-              value="generate"
-              className="flex-1 py-2.5 text-xs font-medium data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-400 data-[state=active]:border-emerald-500/20 data-[state=active]:shadow-[0_0_20px_rgba(52,211,153,0.08)] text-white/40 transition-all duration-300 rounded-lg border border-transparent"
-            >
-              <Zap className="h-3.5 w-3.5 mr-1.5" />
-              Generar Token
-            </TabsTrigger>
-            <TabsTrigger
-              value="copy"
-              className="flex-1 py-2.5 text-xs font-medium data-[state=active]:bg-violet-500/15 data-[state=active]:text-violet-400 data-[state=active]:border-violet-500/20 data-[state=active]:shadow-[0_0_20px_rgba(167,139,250,0.08)] text-white/40 transition-all duration-300 rounded-lg border border-transparent"
-            >
-              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-              Generar Cookie
-            </TabsTrigger>
-            <TabsTrigger
-              value="tv"
-              className="flex-1 py-2.5 text-xs font-medium data-[state=active]:bg-rose-500/15 data-[state=active]:text-rose-400 data-[state=active]:border-rose-500/20 data-[state=active]:shadow-[0_0_20px_rgba(251,113,133,0.08)] text-white/40 transition-all duration-300 rounded-lg border border-transparent"
-            >
-              <MonitorPlay className="h-3.5 w-3.5 mr-1.5" />
-              Activar TV
-            </TabsTrigger>
-          </TabsList>
+        {/* ═══ Tabs (no visible TabsList — controlled by drawer) ═══ */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-5">
 
           {/* ═══ TAB 1: CHECKER ═══ */}
           <TabsContent value="checker" className="space-y-4">
