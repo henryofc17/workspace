@@ -14,7 +14,6 @@ import {
   Shield,
   Search,
   Zap,
-  RefreshCw,
   LogOut,
   Coins,
   Loader2,
@@ -68,15 +67,38 @@ interface Transaction {
   createdAt: string;
 }
 
+// ─── Inline SVGs ─────────────────────────────────────────────────────────────
+
+function CopyIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
 // ─── Metadata Row ────────────────────────────────────────────────────────────
 
 function MetaRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value?: string | number | null }) {
   if (!value && value !== 0) return null;
   return (
-    <div className="flex items-center gap-2 text-sm">
-      <Icon className="h-4 w-4 text-gray-500 shrink-0" />
-      <span className="text-gray-400">{label}:</span>
-      <span className="text-white font-medium">{value}</span>
+    <div className="flex items-center gap-2.5 text-sm py-1">
+      <div className="w-7 h-7 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center shrink-0">
+        <Icon className="h-3.5 w-3.5 text-gray-500" />
+      </div>
+      <span className="text-gray-500 text-xs">{label}</span>
+      <span className="text-white/90 font-medium text-xs ml-auto">{value}</span>
+    </div>
+  );
+}
+
+// ─── Gradient Divider ────────────────────────────────────────────────────────
+
+function GradientDivider() {
+  return (
+    <div className="relative h-px w-full my-2">
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" />
     </div>
   );
 }
@@ -321,120 +343,149 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
-        <Loader2 className="h-8 w-8 text-[#E50914] animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-[#050508]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <Loader2 className="h-10 w-10 text-[#E50914] animate-spin" />
+            <div className="absolute inset-0 h-10 w-10 rounded-full bg-[#E50914]/20 blur-xl animate-pulse" />
+          </div>
+          <p className="text-white/40 text-sm tracking-wide">Cargando panel...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
-      {/* Header */}
-      <header className="border-b border-white/10 bg-[#141414]/95 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div className="min-h-screen flex flex-col bg-[#050508]">
+      {/* ─── Animated Gradient Header Bar ─── */}
+      <div className="h-[2px] w-full bg-gradient-to-r from-[#E50914] via-[#8B5CF6] via-[#3B82F6] to-[#E50914] bg-[length:200%_100%] animate-gradient-shift" />
+
+      {/* ─── Header ─── */}
+      <header className="border-b border-white/[0.06] bg-[#050508]/80 backdrop-blur-xl sticky top-0 z-50">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-[#E50914] flex items-center justify-center">
-              <Shield className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-white">
+            {/* Logo Image */}
+            <img
+              src="https://i.ibb.co/BKy3LKzL/AISelect-20260430-120048-Google.jpg"
+              alt="Netflix Checker Pro"
+              className="h-8 w-auto rounded-md object-contain"
+            />
+            <div className="hidden sm:block">
+              <h1 className="text-base font-bold tracking-tight text-white/90">
                 Netflix Checker<span className="text-[#E50914] ml-1">Pro</span>
               </h1>
+              <p className="text-[10px] text-white/25 tracking-widest uppercase">Premium Panel</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-1.5 bg-yellow-950/30 border border-yellow-900/20 rounded-full px-3 py-1.5">
-              <Coins className="h-3.5 w-3.5 text-yellow-400" />
-              <span className="text-yellow-400 text-sm font-bold">{credits}</span>
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Credits Badge with Pulse */}
+            <div className="flex items-center gap-1.5 bg-gradient-to-r from-amber-950/40 to-yellow-950/20 border border-yellow-500/10 rounded-full px-3 py-1.5 animate-credits-glow">
+              <Coins className="h-3.5 w-3.5 text-amber-400" />
+              <span className="text-amber-300 text-sm font-bold tabular-nums">{credits}</span>
             </div>
-            <span className="text-gray-500 text-sm hidden sm:inline">{username}</span>
-            <Button onClick={handleLogout} variant="ghost" size="sm" className="text-gray-400 hover:text-white h-8 w-8 p-0">
-              <LogOut className="h-4 w-4" />
-            </Button>
+            <div className="hidden md:flex flex-col items-end">
+              <span className="text-white/50 text-xs font-medium">{username}</span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="h-8 w-8 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-gray-500 hover:text-red-400 hover:border-red-500/20 hover:bg-red-500/5 transition-all duration-300"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Main */}
-      <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-6 space-y-6">
-        {/* Credit Banner */}
-        <Card className="border-yellow-900/20 bg-gradient-to-r from-yellow-950/20 to-orange-950/10">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-full bg-yellow-950/50 border border-yellow-900/30 flex items-center justify-center">
-                <Coins className="h-5 w-5 text-yellow-400" />
+      {/* ─── Main Content ─── */}
+      <main className="flex-1 max-w-3xl mx-auto w-full px-4 sm:px-6 py-6 space-y-5">
+
+        {/* ═══ Premium Credit Banner ═══ */}
+        <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-950/10 via-transparent to-orange-950/5" />
+          <div className="absolute top-0 right-0 w-40 h-40 bg-amber-500/5 rounded-full blur-3xl" />
+          <CardContent className="relative p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-yellow-600/10 border border-amber-500/20 flex items-center justify-center">
+                    <Coins className="h-5 w-5 text-amber-400" />
+                  </div>
+                  <div className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-amber-400 animate-pulse shadow-[0_0_8px_rgba(251,191,36,0.6)]" />
+                </div>
+                <div>
+                  <p className="text-amber-300 font-bold text-2xl tabular-nums tracking-tight animate-pulse-slow">{credits}</p>
+                  <p className="text-white/25 text-[10px] uppercase tracking-widest">Créditos disponibles</p>
+                </div>
               </div>
-              <div>
-                <p className="text-yellow-400 font-bold text-xl">{credits}</p>
-                <p className="text-yellow-700/60 text-xs">Créditos disponibles</p>
-              </div>
-            </div>
-            <div className="text-right space-y-1">
-              <div className="flex items-center gap-2 justify-end">
-                <div className="h-2 w-2 rounded-full bg-green-500" />
-                <span className="text-gray-400 text-xs">Generar Token: <span className="text-white font-semibold">1 crédito</span></span>
-              </div>
-              <div className="flex items-center gap-2 justify-end">
-                <div className="h-2 w-2 rounded-full bg-purple-500" />
-                <span className="text-gray-400 text-xs">Generar Cookie: <span className="text-white font-semibold">3 créditos</span></span>
-              </div>
-              <div className="flex items-center gap-2 justify-end">
-                <div className="h-2 w-2 rounded-full bg-blue-500" />
-                <span className="text-gray-400 text-xs">Checker: <span className="text-white font-semibold">Gratis</span></span>
+              <div className="text-right space-y-2">
+                <div className="flex items-center gap-2 justify-end">
+                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
+                  <span className="text-white/40 text-[11px]">Token: <span className="text-white/70 font-medium">1 crédito</span></span>
+                </div>
+                <div className="flex items-center gap-2 justify-end">
+                  <div className="h-1.5 w-1.5 rounded-full bg-violet-400 shadow-[0_0_6px_rgba(167,139,250,0.5)]" />
+                  <span className="text-white/40 text-[11px]">Cookie: <span className="text-white/70 font-medium">3 créditos</span></span>
+                </div>
+                <div className="flex items-center gap-2 justify-end">
+                  <div className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.5)]" />
+                  <span className="text-white/40 text-[11px]">Checker: <span className="text-emerald-400/80 font-medium">Gratis</span></span>
+                </div>
               </div>
             </div>
           </CardContent>
-        </Card>
+        </div>
 
-        {/* Tabs */}
-        <Tabs defaultValue="checker" className="space-y-6">
-          <TabsList className="bg-[#1F1F1F] border border-white/10 w-full h-auto p-1">
+        {/* ═══ Tabs ═══ */}
+        <Tabs defaultValue="checker" className="space-y-5">
+          <TabsList className="bg-[#0a0a10]/80 backdrop-blur-sm border border-white/[0.06] w-full h-auto p-1 rounded-xl">
             <TabsTrigger
               value="checker"
-              className="flex-1 py-2.5 text-sm data-[state=active]:bg-blue-600 data-[state=active]:text-white text-gray-400 transition-all"
+              className="flex-1 py-2.5 text-xs font-medium data-[state=active]:bg-sky-500/15 data-[state=active]:text-sky-400 data-[state=active]:border-sky-500/20 data-[state=active]:shadow-[0_0_20px_rgba(56,189,248,0.08)] text-white/40 transition-all duration-300 rounded-lg border border-transparent"
             >
-              <Search className="h-4 w-4 mr-2" />
+              <Search className="h-3.5 w-3.5 mr-1.5" />
               Checker
             </TabsTrigger>
             <TabsTrigger
               value="generate"
-              className="flex-1 py-2.5 text-sm data-[state=active]:bg-green-600 data-[state=active]:text-white text-gray-400 transition-all"
+              className="flex-1 py-2.5 text-xs font-medium data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-400 data-[state=active]:border-emerald-500/20 data-[state=active]:shadow-[0_0_20px_rgba(52,211,153,0.08)] text-white/40 transition-all duration-300 rounded-lg border border-transparent"
             >
-              <Zap className="h-4 w-4 mr-2" />
+              <Zap className="h-3.5 w-3.5 mr-1.5" />
               Generar Token
             </TabsTrigger>
             <TabsTrigger
               value="copy"
-              className="flex-1 py-2.5 text-sm data-[state=active]:bg-purple-600 data-[state=active]:text-white text-gray-400 transition-all"
+              className="flex-1 py-2.5 text-xs font-medium data-[state=active]:bg-violet-500/15 data-[state=active]:text-violet-400 data-[state=active]:border-violet-500/20 data-[state=active]:shadow-[0_0_20px_rgba(167,139,250,0.08)] text-white/40 transition-all duration-300 rounded-lg border border-transparent"
             >
-              <RefreshCw className="h-4 w-4 mr-2" />
+              <span className="mr-1.5 text-sm">{"\uD83D\uDD01"}</span>
               Generar Cookie
             </TabsTrigger>
           </TabsList>
 
           {/* ═══ TAB 1: CHECKER ═══ */}
           <TabsContent value="checker" className="space-y-4">
-            <Card className="border-white/10 bg-[#1F1F1F]">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-white text-base flex items-center gap-2">
-                  <Search className="h-4 w-4 text-blue-400" />
+            <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
+              <CardHeader className="pb-3 px-5 pt-5">
+                <CardTitle className="text-white/90 text-sm flex items-center gap-2.5">
+                  <div className="h-7 w-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center">
+                    <Search className="h-3.5 w-3.5 text-sky-400" />
+                  </div>
                   Verificar Cookie Individual
                 </CardTitle>
-                <CardDescription className="text-gray-500 text-xs">
+                <CardDescription className="text-white/25 text-xs ml-[38px]">
                   Pega tu cookie de Netflix para verificarla y extraer metadatos. Completamente gratis.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 px-5 pb-5">
                 <Textarea
                   value={cookieText}
                   onChange={(e) => setCookieText(e.target.value)}
-                  placeholder="Pega tu cookie aquí...&#10;&#10;Ejemplo: NetflixId=v1%3B...; SecureNetflixId=v2%3B...; nfvdid=..."
-                  className="bg-[#0a0a0a] border-white/10 text-white text-sm font-mono placeholder:text-gray-600 min-h-[120px] resize-y focus:border-blue-500/50"
+                  placeholder={"Pega tu cookie aquí...\n\nEjemplo: NetflixId=v1%3B...; SecureNetflixId=v2%3B...; nfvdid=..."}
+                  className="bg-[#050508]/80 border-white/[0.06] text-white/80 text-xs font-mono placeholder:text-white/15 min-h-[120px] resize-y focus:border-sky-500/30 focus:ring-1 focus:ring-sky-500/10 rounded-xl transition-all duration-300"
                 />
                 <Button
                   onClick={handleCheck}
                   disabled={checking || !cookieText.trim()}
-                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold h-11 transition-colors disabled:opacity-50"
+                  className="w-full bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 text-white font-semibold h-11 transition-all duration-300 disabled:opacity-40 rounded-xl shadow-[0_0_20px_rgba(56,189,248,0.15)] hover:shadow-[0_0_30px_rgba(56,189,248,0.25)]"
                 >
                   {checking ? (
                     <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Verificando...</>
@@ -443,61 +494,73 @@ export default function Home() {
                   )}
                 </Button>
               </CardContent>
-            </Card>
+            </div>
 
+            {/* Scanning Animation */}
             {checking && (
               <div className="space-y-3">
-                <Skeleton className="h-28 w-full bg-[#1F1F1F] rounded-xl" />
-                <Skeleton className="h-16 w-full bg-[#1F1F1F] rounded-xl" />
+                <div className="rounded-xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
+                  <div className="relative h-28 flex items-center justify-center overflow-hidden">
+                    <div className="absolute inset-0 scan-line" />
+                    <div className="relative flex flex-col items-center gap-2 z-10">
+                      <div className="h-8 w-8 rounded-full border-2 border-sky-400/30 border-t-sky-400 animate-spin" />
+                      <span className="text-sky-400/60 text-[10px] uppercase tracking-widest">Scanning...</span>
+                    </div>
+                  </div>
+                </div>
+                <Skeleton className="h-16 w-full bg-[#0a0a10] border border-white/[0.06] rounded-xl" />
               </div>
             )}
 
             {checkerResult && !checking && (
               checkerResult.success ? (
-                <Card className="border-green-900/40 bg-[#0d1a0d]">
-                  <CardHeader className="pb-3 px-4 pt-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className="h-10 w-10 rounded-full bg-green-950/50 flex items-center justify-center shrink-0">
-                          <Shield className="h-5 w-5 text-green-400" />
+                <div className="rounded-2xl border border-emerald-500/20 bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/10 to-transparent pointer-events-none" />
+                  <CardHeader className="pb-3 px-5 pt-5 relative">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(52,211,153,0.1)]">
+                          <Shield className="h-5 w-5 text-emerald-400" />
                         </div>
                         <div>
-                          <CardTitle className="text-green-400 text-sm">Cookie Válida</CardTitle>
-                          <CardDescription className="text-green-600/60 text-xs">
+                          <CardTitle className="text-emerald-400 text-sm">Cookie Válida</CardTitle>
+                          <CardDescription className="text-white/30 text-xs">
                             {checkerResult.metadata?.plan || "Plan Desconocido"}
                             {checkerResult.metadata?.countryName ? ` • ${checkerResult.metadata.countryName}` : ""}
                           </CardDescription>
                         </div>
                       </div>
-                      <Badge variant="outline" className="border-green-800 text-green-400 text-[10px]">
+                      <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-[10px] bg-emerald-500/5">
+                        <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse" />
                         {checkerResult.metadata?.status || "Activa"}
                       </Badge>
                     </div>
                   </CardHeader>
-                  <CardContent className="px-4 pb-4 space-y-3">
+                  <CardContent className="px-5 pb-5 space-y-3 relative">
                     {checkerResult.link && (
-                      <div className="bg-black/40 rounded-lg p-3">
+                      <div className="bg-[#050508]/60 rounded-xl p-3 border border-white/[0.04]">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs text-green-400 font-semibold flex items-center gap-1">
+                          <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1.5">
                             <Zap className="h-3 w-3" /> NFToken
                           </span>
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => copyToClip(checkerResult.link!, setCopiedLink)}
-                              className="h-6 px-2 text-[10px] text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
+                              className="h-7 px-2.5 text-[10px] text-white/40 hover:text-white/80 hover:bg-white/[0.06] rounded-lg transition-all duration-200"
                             >
-                              {copiedLink ? <Check className="h-3 w-3" /> : <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}
+                              {copiedLink ? <><Check className="h-3 w-3 text-emerald-400" /> <span className="text-emerald-400">Copiado</span></> : <><CopyIcon className="h-3 w-3" /> Copiar</>}
                             </button>
                             <a href={checkerResult.link} target="_blank" rel="noopener noreferrer"
-                              className="h-6 px-2 text-[10px] text-gray-400 hover:text-white hover:bg-white/10 inline-flex items-center rounded transition-colors">
+                              className="h-7 px-2.5 text-[10px] text-white/40 hover:text-white/80 hover:bg-white/[0.06] inline-flex items-center rounded-lg transition-all duration-200">
                               <ExternalLink className="h-3 w-3" />
                             </a>
                           </div>
                         </div>
-                        <p className="text-[10px] text-gray-500 font-mono break-all leading-relaxed">{checkerResult.link}</p>
+                        <p className="text-[10px] text-white/20 font-mono break-all leading-relaxed">{checkerResult.link}</p>
                       </div>
                     )}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                    <GradientDivider />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
                       <MetaRow icon={Globe} label="País" value={checkerResult.metadata?.countryName || checkerResult.metadata?.country} />
                       <MetaRow icon={Tv} label="Plan" value={checkerResult.metadata?.plan} />
                       <MetaRow icon={Mail} label="Email" value={checkerResult.metadata?.email} />
@@ -506,52 +569,55 @@ export default function Home() {
                       <MetaRow icon={CreditCard} label="Pago" value={checkerResult.metadata?.paymentMethod} />
                     </div>
                   </CardContent>
-                </Card>
+                </div>
               ) : (
-                <Card className="border-red-900/40 bg-[#1a1010]">
-                  <CardContent className="p-4">
+                <div className="rounded-2xl border border-red-500/20 bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
+                  <CardContent className="p-5">
                     <div className="flex items-start gap-3">
-                      <div className="h-10 w-10 rounded-full bg-red-950/50 flex items-center justify-center shrink-0">
+                      <div className="h-10 w-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(239,68,68,0.1)]">
                         <X className="h-5 w-5 text-red-400" />
                       </div>
                       <div className="flex-1">
                         <h4 className="text-red-400 font-semibold text-sm">Cookie Inválida</h4>
-                        <p className="text-red-300/60 text-xs mt-1">{checkerResult.error || "Error desconocido"}</p>
+                        <p className="text-white/25 text-xs mt-1">{checkerResult.error || "Error desconocido"}</p>
                       </div>
                     </div>
                   </CardContent>
-                </Card>
+                </div>
               )
             )}
           </TabsContent>
 
           {/* ═══ TAB 2: GENERATE TOKEN ═══ */}
           <TabsContent value="generate" className="space-y-4">
-            <Card className="border-green-900/30 bg-[#1F1F1F]">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-green-400 text-base flex items-center gap-2">
-                  <Zap className="h-5 w-5" />
+            <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/10 to-transparent pointer-events-none" />
+              <CardHeader className="pb-3 px-5 pt-5 relative">
+                <CardTitle className="text-emerald-400 text-sm flex items-center gap-2.5">
+                  <div className="h-7 w-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                    <Zap className="h-3.5 w-3.5" />
+                  </div>
                   Generar Token de Netflix
                 </CardTitle>
-                <CardDescription className="text-gray-500 text-xs">
-                  Se usa una cookie del servidor para generar tu link de acceso. Cuesta <span className="text-white font-semibold">1 crédito</span>.
+                <CardDescription className="text-white/25 text-xs ml-[38px]">
+                  Se usa una cookie del servidor para generar tu link de acceso. Cuesta <span className="text-white/60 font-semibold">1 crédito</span>.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-[#0a0a0a] border border-white/5">
+              <CardContent className="space-y-4 px-5 pb-5 relative">
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#050508]/80 border border-white/[0.04]">
                   <div className="flex items-center gap-2">
-                    <Coins className="h-4 w-4 text-yellow-400" />
-                    <span className="text-gray-400 text-sm">Tu saldo:</span>
+                    <Coins className="h-4 w-4 text-amber-400" />
+                    <span className="text-white/40 text-sm">Tu saldo:</span>
                   </div>
-                  <span className={`text-lg font-bold ${credits >= 1 ? "text-green-400" : "text-red-400"}`}>
-                    {credits} <span className="text-xs text-gray-500 font-normal">créditos</span>
+                  <span className={`text-xl font-bold tabular-nums ${credits >= 1 ? "text-emerald-400" : "text-red-400"}`}>
+                    {credits} <span className="text-xs text-white/20 font-normal">créditos</span>
                   </span>
                 </div>
 
                 <Button
                   onClick={handleGenerate}
                   disabled={generating || credits < 1}
-                  className="w-full bg-green-600 hover:bg-green-500 text-white font-semibold h-12 transition-colors disabled:opacity-50 text-base"
+                  className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-semibold h-12 transition-all duration-300 disabled:opacity-40 rounded-xl shadow-[0_0_20px_rgba(52,211,153,0.15)] hover:shadow-[0_0_30px_rgba(52,211,153,0.25)] text-base"
                 >
                   {generating ? (
                     <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Generando Token...</>
@@ -561,151 +627,163 @@ export default function Home() {
                 </Button>
 
                 {credits < 1 && (
-                  <p className="text-red-400/60 text-xs text-center">
+                  <p className="text-red-400/40 text-xs text-center">
                     Créditos insuficientes. Contacta al administrador para obtener más.
                   </p>
                 )}
               </CardContent>
-            </Card>
+            </div>
 
             {generatedLink && (
-              <Card className="border-green-900/40 bg-[#0d1a0d]">
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-full bg-green-950/50 flex items-center justify-center">
-                      <Check className="h-4 w-4 text-green-400" />
+              <div className="rounded-2xl border border-emerald-500/20 bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
+                <CardContent className="p-5 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shadow-[0_0_12px_rgba(52,211,153,0.1)]">
+                      <Check className="h-4 w-4 text-emerald-400" />
                     </div>
                     <div>
-                      <p className="text-green-400 font-semibold text-sm">Token Generado</p>
-                      <p className="text-green-600/60 text-xs">Créditos restantes: {credits}</p>
+                      <p className="text-emerald-400 font-semibold text-sm">Token Generado</p>
+                      <p className="text-white/25 text-xs">Créditos restantes: {credits}</p>
                     </div>
                   </div>
-                  <div className="bg-black/40 rounded-lg p-3">
+                  <div className="bg-[#050508]/60 rounded-xl p-3 border border-white/[0.04]">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-green-400 font-semibold flex items-center gap-1">
+                      <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1.5">
                         <Zap className="h-3 w-3" /> Tu Link de Netflix
                       </span>
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => copyToClip(generatedLink, setCopiedLink)}
-                          className="h-7 px-3 text-xs text-gray-400 hover:text-white hover:bg-white/10 rounded-md transition-colors flex items-center gap-1"
+                          className="h-7 px-3 text-[10px] text-white/40 hover:text-white/80 hover:bg-white/[0.06] rounded-lg transition-all duration-200 flex items-center gap-1.5"
                         >
-                          {copiedLink ? <><Check className="h-3 w-3" /> Copiado</> : <><svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copiar Link</>}
+                          {copiedLink ? <><Check className="h-3 w-3 text-emerald-400" /> <span className="text-emerald-400">Copiado</span></> : <><CopyIcon className="h-3 w-3" /> Copiar Link</>}
                         </button>
                         <a
                           href={generatedLink}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="h-7 px-3 text-xs text-green-400 hover:text-green-300 hover:bg-green-950/30 rounded-md transition-colors flex items-center gap-1 font-medium"
+                          className="h-7 px-3 text-[10px] text-emerald-400/80 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all duration-200 flex items-center gap-1 font-medium"
                         >
                           Abrir <ExternalLink className="h-3 w-3" />
                         </a>
                       </div>
                     </div>
-                    <p className="text-[10px] text-gray-500 font-mono break-all leading-relaxed">{generatedLink}</p>
+                    <p className="text-[10px] text-white/15 font-mono break-all leading-relaxed">{generatedLink}</p>
                   </div>
                 </CardContent>
-              </Card>
+              </div>
             )}
           </TabsContent>
 
           {/* ═══ TAB 3: COPY COOKIE ═══ */}
           <TabsContent value="copy" className="space-y-4">
-            <Card className="border-purple-900/30 bg-[#1F1F1F]">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-purple-400 text-base flex items-center gap-2">
-                  <RefreshCw className="h-5 w-5" />
+            <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-violet-950/10 to-transparent pointer-events-none" />
+              <CardHeader className="pb-3 px-5 pt-5 relative">
+                <CardTitle className="text-violet-400 text-sm flex items-center gap-2.5">
+                  <div className="h-7 w-7 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
+                    <span className="text-base">{"\uD83D\uDD01"}</span>
+                  </div>
                   Generar Cookie de Netflix
                 </CardTitle>
-                <CardDescription className="text-gray-500 text-xs">
-                  Genera una cookie funcional del servidor. Cuesta <span className="text-white font-semibold">3 créditos</span>.
+                <CardDescription className="text-white/25 text-xs ml-[38px]">
+                  Genera una cookie funcional del servidor. Cuesta <span className="text-white/60 font-semibold">3 créditos</span>.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-[#0a0a0a] border border-white/5">
+              <CardContent className="space-y-4 px-5 pb-5 relative">
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#050508]/80 border border-white/[0.04]">
                   <div className="flex items-center gap-2">
-                    <Coins className="h-4 w-4 text-yellow-400" />
-                    <span className="text-gray-400 text-sm">Tu saldo:</span>
+                    <Coins className="h-4 w-4 text-amber-400" />
+                    <span className="text-white/40 text-sm">Tu saldo:</span>
                   </div>
-                  <span className={`text-lg font-bold ${credits >= 3 ? "text-green-400" : "text-red-400"}`}>
-                    {credits} <span className="text-xs text-gray-500 font-normal">créditos</span>
+                  <span className={`text-xl font-bold tabular-nums ${credits >= 3 ? "text-emerald-400" : "text-red-400"}`}>
+                    {credits} <span className="text-xs text-white/20 font-normal">créditos</span>
                   </span>
                 </div>
 
                 <Button
                   onClick={handleCopyCookie}
                   disabled={copying || credits < 3}
-                  className="w-full bg-purple-600 hover:bg-purple-500 text-white font-semibold h-12 transition-colors disabled:opacity-50 text-base"
+                  className="w-full bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 text-white font-semibold h-12 transition-all duration-300 disabled:opacity-40 rounded-xl shadow-[0_0_20px_rgba(167,139,250,0.15)] hover:shadow-[0_0_30px_rgba(167,139,250,0.25)] text-base"
                 >
                   {copying ? (
                     <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Generando Cookie...</>
                   ) : (
-                    <><RefreshCw className="h-5 w-5 mr-2" /> Generar Cookie</>
+                    <><span className="mr-2">{"\uD83D\uDD01"}</span> Generar Cookie</>
                   )}
                 </Button>
 
                 {credits < 3 && (
-                  <p className="text-red-400/60 text-xs text-center">
+                  <p className="text-red-400/40 text-xs text-center">
                     Necesitas al menos 3 créditos. Contacta al administrador.
                   </p>
                 )}
               </CardContent>
-            </Card>
+            </div>
 
             {copiedCookie && (
-              <Card className="border-purple-900/40 bg-[#120d1a]">
-                <CardContent className="p-4 space-y-3">
+              <div className="rounded-2xl border border-violet-500/20 bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
+                <CardContent className="p-5 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-8 w-8 rounded-full bg-purple-950/50 flex items-center justify-center">
-                        <Check className="h-4 w-4 text-purple-400" />
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shadow-[0_0_12px_rgba(167,139,250,0.1)]">
+                        <Check className="h-4 w-4 text-violet-400" />
                       </div>
                       <div>
-                        <p className="text-purple-400 font-semibold text-sm">Cookie Obtenida</p>
-                        <p className="text-purple-600/60 text-xs">Créditos restantes: {credits}</p>
+                        <p className="text-violet-400 font-semibold text-sm">Cookie Obtenida</p>
+                        <p className="text-white/25 text-xs">Créditos restantes: {credits}</p>
                       </div>
                     </div>
                     <button
                       onClick={() => copyToClip(copiedCookie, setCopiedCookieClip)}
-                      className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+                      className="px-4 py-2 bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 text-white text-xs font-medium rounded-xl transition-all duration-300 flex items-center gap-2 shadow-[0_0_15px_rgba(167,139,250,0.15)]"
                     >
-                      {copiedCookieClip ? <><Check className="h-4 w-4" /> Copiado</> : <><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copiar Cookie</>}
+                      {copiedCookieClip ? <><Check className="h-3.5 w-3.5" /> Copiado</> : <><CopyIcon className="h-3.5 w-3.5" /> Copiar Cookie</>}
                     </button>
                   </div>
-                  <div className="bg-black/40 rounded-lg p-3">
-                    <p className="text-[10px] text-gray-500 font-mono break-all leading-relaxed max-h-24 overflow-y-auto custom-scrollbar">
+                  <div className="bg-[#050508]/60 rounded-xl p-3 border border-white/[0.04]">
+                    <p className="text-[10px] text-white/15 font-mono break-all leading-relaxed max-h-24 overflow-y-auto premium-scrollbar">
                       {copiedCookie}
                     </p>
                   </div>
                 </CardContent>
-              </Card>
+              </div>
             )}
           </TabsContent>
         </Tabs>
 
-        {/* Referral Section */}
-        <Card className="border-orange-900/20 bg-gradient-to-r from-orange-950/10 to-yellow-950/5">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-orange-400 text-sm flex items-center gap-2">
-              <Gift className="h-4 w-4" />
+        {/* ═══ Gradient Section Divider ═══ */}
+        <div className="relative h-px w-full">
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#E50914]/30 to-transparent" />
+        </div>
+
+        {/* ═══ Referral Section — Premium Card ═══ */}
+        <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
+          <div className="absolute inset-0 bg-gradient-to-br from-orange-950/10 via-transparent to-amber-950/5" />
+          <div className="absolute -top-20 -right-20 w-40 h-40 bg-orange-500/5 rounded-full blur-3xl" />
+          <CardHeader className="pb-3 px-5 pt-5 relative">
+            <CardTitle className="text-orange-300 text-sm flex items-center gap-2.5">
+              <div className="h-7 w-7 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center">
+                <Gift className="h-3.5 w-3.5 text-orange-400" />
+              </div>
               Sistema de Referidos
             </CardTitle>
-            <CardDescription className="text-gray-500 text-xs">
-              Comparte tu código y gana <span className="text-white font-semibold">+5 créditos</span> por cada persona que se registre.
+            <CardDescription className="text-white/25 text-xs ml-[38px]">
+              Comparte tu código y gana <span className="text-white/60 font-semibold">+5 créditos</span> por cada persona que se registre.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Your Code */}
+          <CardContent className="space-y-4 px-5 pb-5 relative">
+            {/* Referral Code Display */}
             <div className="flex items-center gap-3">
-              <div className="flex-1 bg-[#0a0a0a] border border-white/10 rounded-lg px-4 py-3 flex items-center justify-between">
+              <div className="flex-1 bg-[#050508]/80 border border-white/[0.06] rounded-xl px-4 py-3.5 flex items-center justify-between">
                 <div>
-                  <p className="text-gray-500 text-[10px]">Tu código</p>
-                  <p className="text-white font-mono font-bold text-lg tracking-wider">{referralCode || "..."}</p>
+                  <p className="text-white/20 text-[10px] uppercase tracking-widest">Tu código</p>
+                  <p className="text-white/90 font-mono font-bold text-lg tracking-wider">{referralCode || "..."}</p>
                 </div>
                 <button
                   onClick={() => copyToClip(referralCode, setCodeCopied)}
                   disabled={!referralCode}
-                  className="h-9 px-3 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                  className="h-9 px-3.5 rounded-xl bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white text-xs font-medium flex items-center gap-1.5 transition-all duration-300 disabled:opacity-30 shadow-[0_0_15px_rgba(234,88,12,0.15)]"
                 >
                   {codeCopied ? <><Check className="h-3.5 w-3.5" /> Copiado</> : <><Share2 className="h-3.5 w-3.5" /> Copiar</>}
                 </button>
@@ -713,55 +791,63 @@ export default function Home() {
             </div>
 
             {canShareCode ? (
-              <p className="text-green-400/60 text-[10px] text-center flex items-center justify-center gap-1">
-                <Check className="h-3 w-3" /> Tu código está activo y listo para compartir
+              <p className="text-emerald-400/50 text-[10px] text-center flex items-center justify-center gap-1.5">
+                <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
+                Tu código está activo y listo para compartir
               </p>
             ) : (
-              <p className="text-yellow-400/60 text-[10px] text-center">
-                Tu código se activa en 1 hora después del registro
+              <p className="text-amber-400/50 text-[10px] text-center flex items-center justify-center gap-1.5">
+                <Clock className="h-3 w-3" />
+                Tu código se activa en 10 minutos después del registro
               </p>
             )}
 
-            <div className="flex items-center justify-center gap-4 text-center">
-              <div>
-                <p className="text-orange-400 font-bold text-lg">{totalReferrals}</p>
-                <p className="text-gray-600 text-[10px]">Referidos</p>
+            {/* Stats Row */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-[#050508]/60 border border-white/[0.04] p-3 text-center">
+                <p className="text-orange-300 font-bold text-xl tabular-nums">{totalReferrals}</p>
+                <p className="text-white/20 text-[10px] uppercase tracking-widest mt-0.5">Referidos</p>
               </div>
-              <div className="h-8 w-px bg-white/10" />
-              <div>
-                <p className="text-yellow-400 font-bold text-lg">{totalReferrals * 5}</p>
-                <p className="text-gray-600 text-[10px]">Créditos ganados</p>
+              <div className="rounded-xl bg-[#050508]/60 border border-white/[0.04] p-3 text-center">
+                <p className="text-amber-300 font-bold text-xl tabular-nums">{totalReferrals * 5}</p>
+                <p className="text-white/20 text-[10px] uppercase tracking-widest mt-0.5">Créditos ganados</p>
               </div>
             </div>
 
-            {/* Redeem Code */}
-            <div className="border-t border-white/5 pt-4">
-              <p className="text-gray-400 text-xs font-medium mb-2 flex items-center gap-1">
-                <Gift className="h-3 w-3" /> ¿Tienes un código de referido?
+            {/* Redeem Section */}
+            <div className="relative pt-4">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+              <p className="text-white/40 text-xs font-medium mb-2.5 flex items-center gap-1.5">
+                <Gift className="h-3 w-3 text-orange-400/60" /> ¿Tienes un código de referido?
               </p>
               <div className="flex gap-2">
                 <Input
                   value={redeemCode}
                   onChange={(e) => setRedeemCode(e.target.value.toUpperCase())}
                   placeholder="NF-XXXXXX"
-                  className="flex-1 bg-[#0a0a0a] border-white/10 text-white placeholder:text-gray-600 uppercase font-mono"
+                  className="flex-1 bg-[#050508]/80 border-white/[0.06] text-white/80 placeholder:text-white/15 uppercase font-mono rounded-xl focus:border-orange-500/30 focus:ring-1 focus:ring-orange-500/10 transition-all duration-300 text-sm"
                 />
                 <Button
                   onClick={handleRedeem}
                   disabled={redeeming || !redeemCode.trim()}
-                  className="bg-orange-600 hover:bg-orange-500 text-white font-medium h-10 px-4 disabled:opacity-50 shrink-0"
+                  className="bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white font-medium h-10 px-5 disabled:opacity-40 shrink-0 rounded-xl shadow-[0_0_15px_rgba(234,88,12,0.15)] transition-all duration-300"
                 >
                   {redeeming ? <Loader2 className="h-4 w-4 animate-spin" /> : "Canjear"}
                 </Button>
               </div>
             </div>
           </CardContent>
-        </Card>
+        </div>
 
-        {/* Buy Credits Notice */}
-        <Card className="border-blue-900/20 bg-blue-950/5">
-          <CardContent className="p-4">
-            <p className="text-gray-400 text-xs text-center mb-2">
+        {/* ═══ Gradient Section Divider ═══ */}
+        <div className="relative h-px w-full">
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+        </div>
+
+        {/* ═══ Buy Credits Notice ═══ */}
+        <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
+          <CardContent className="p-5">
+            <p className="text-white/30 text-xs text-center mb-3">
               ¿Necesitas más créditos? Contacta al administrador:
             </p>
             <div className="flex items-center justify-center gap-2">
@@ -769,54 +855,74 @@ export default function Home() {
                 href="https://wa.me/524437863111"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 transition-colors text-[#25D366] text-xs font-medium"
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#25D366]/5 hover:bg-[#25D366]/10 border border-[#25D366]/15 transition-all duration-300 text-[#25D366]/80 hover:text-[#25D366] text-xs font-medium shadow-[0_0_15px_rgba(37,211,102,0.05)] hover:shadow-[0_0_20px_rgba(37,211,102,0.1)]"
               >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                 WhatsApp
               </a>
               <a
                 href="https://t.me/HcheJotaA_Bot"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#229ED9]/10 hover:bg-[#229ED9]/20 border border-[#229ED9]/30 transition-colors text-[#229ED9] text-xs font-medium"
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#229ED9]/5 hover:bg-[#229ED9]/10 border border-[#229ED9]/15 transition-all duration-300 text-[#229ED9]/80 hover:text-[#229ED9] text-xs font-medium shadow-[0_0_15px_rgba(34,158,217,0.05)] hover:shadow-[0_0_20px_rgba(34,158,217,0.1)]"
               >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
                 Telegram
               </a>
             </div>
           </CardContent>
-        </Card>
+        </div>
 
-        {/* Transaction History */}
-        <Card className="border-white/10 bg-[#1F1F1F]">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-white text-sm flex items-center gap-2">
-              <CreditCard className="h-4 w-4 text-[#E50914]" />
-              Historial
+        {/* ═══ Transaction History ═══ */}
+        <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
+          <CardHeader className="pb-3 px-5 pt-5">
+            <CardTitle className="text-white/70 text-sm flex items-center gap-2.5">
+              <div className="h-7 w-7 rounded-lg bg-[#E50914]/10 border border-[#E50914]/20 flex items-center justify-center">
+                <CreditCard className="h-3.5 w-3.5 text-[#E50914]" />
+              </div>
+              Historial de Transacciones
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar">
+          <CardContent className="px-3 pb-3">
+            <div className="space-y-1 max-h-[280px] overflow-y-auto premium-scrollbar">
               {transactions.length === 0 ? (
-                <p className="text-gray-600 text-sm text-center py-6">Sin actividad aún</p>
+                <div className="flex flex-col items-center justify-center py-10 gap-2">
+                  <div className="h-10 w-10 rounded-full bg-white/[0.03] border border-white/[0.06] flex items-center justify-center">
+                    <CreditCard className="h-4 w-4 text-white/15" />
+                  </div>
+                  <p className="text-white/15 text-xs">Sin actividad aún</p>
+                </div>
               ) : (
-                transactions.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between p-2.5 rounded-lg bg-[#0a0a0a]">
-                    <div className="flex items-center gap-2">
-                      {t.credits >= 0 ? (
-                        <TrendingDown className="h-4 w-4 text-green-400 rotate-180" />
-                      ) : (
-                        <TrendingDown className="h-4 w-4 text-red-400" />
-                      )}
+                transactions.map((t, i) => (
+                  <div
+                    key={t.id}
+                    className={`flex items-center justify-between p-3 rounded-xl transition-all duration-200 hover:bg-white/[0.03] ${
+                      i % 2 === 0 ? "bg-transparent" : "bg-white/[0.015]"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        t.credits >= 0
+                          ? "bg-emerald-500/10 border border-emerald-500/15"
+                          : "bg-red-500/10 border border-red-500/15"
+                      }`}>
+                        {t.credits >= 0 ? (
+                          <TrendingDown className="h-3.5 w-3.5 text-emerald-400 rotate-180" />
+                        ) : (
+                          <TrendingDown className="h-3.5 w-3.5 text-red-400" />
+                        )}
+                      </div>
                       <div>
-                        <p className="text-white text-xs font-medium">{t.description || t.type}</p>
-                        <p className="text-gray-600 text-[10px] flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
+                        <p className="text-white/60 text-xs font-medium">{t.description || t.type}</p>
+                        <p className="text-white/15 text-[10px] flex items-center gap-1">
+                          <Clock className="h-2.5 w-2.5" />
                           {new Date(t.createdAt).toLocaleString("es")}
                         </p>
                       </div>
                     </div>
-                    <span className={`text-sm font-bold ${t.credits >= 0 ? "text-green-400" : "text-red-400"}`}>
+                    <span className={`text-sm font-bold tabular-nums ${
+                      t.credits >= 0 ? "text-emerald-400" : "text-red-400"
+                    }`}>
                       {t.credits >= 0 ? "+" : ""}{t.credits}
                     </span>
                   </div>
@@ -824,50 +930,132 @@ export default function Home() {
               )}
             </div>
           </CardContent>
-        </Card>
+        </div>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-white/5 bg-[#0a0a0a]">
-        <div className="max-w-3xl mx-auto px-4 py-6">
-          <div className="flex flex-col items-center gap-3">
-            <p className="text-gray-500 text-xs">
-              Netflix Cookie Checker Pro — Desarrollado por <span className="text-white font-semibold">HacheJota</span>
+      {/* ─── Footer ─── */}
+      <footer className="border-t border-white/[0.04] bg-[#050508] mt-auto">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+          <div className="flex flex-col items-center gap-4">
+            <GradientDivider />
+            <p className="text-white/20 text-[10px] tracking-wide">
+              Netflix Cookie Checker Pro — Desarrollado por <span className="text-white/40 font-semibold">HacheJota</span>
             </p>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <a
                 href="https://wa.me/524437863111"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 transition-colors text-[#25D366] text-xs font-medium"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.06] transition-all duration-300 text-white/30 hover:text-white/60 text-[10px]"
               >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                 WhatsApp
               </a>
               <a
                 href="https://t.me/HcheJotaA_Bot"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#229ED9]/10 hover:bg-[#229ED9]/20 border border-[#229ED9]/30 transition-colors text-[#229ED9] text-xs font-medium"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.06] transition-all duration-300 text-white/30 hover:text-white/60 text-[10px]"
               >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
                 Telegram
               </a>
             </div>
-            <p className="text-gray-700 text-[10px]">
+            <p className="text-white/10 text-[9px]">
               Uso privado únicamente. No afiliado a Netflix, Inc.
             </p>
           </div>
         </div>
       </footer>
 
-      {/* Global Styles */}
+      {/* ─── Global Premium Styles ─── */}
       <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #555; }
-        [role="progressbar"] > div { background-color: #E50914 !important; }
+        @keyframes gradient-shift {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+
+        @keyframes pulse-slow {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.7; }
+        }
+
+        @keyframes scan-move {
+          0% { transform: translateY(-100%); }
+          100% { transform: translateY(400%); }
+        }
+
+        @keyframes credits-glow {
+          0%, 100% { box-shadow: 0 0 0px rgba(251,191,36,0); }
+          50% { box-shadow: 0 0 12px rgba(251,191,36,0.08); }
+        }
+
+        .animate-gradient-shift {
+          animation: gradient-shift 6s ease infinite;
+        }
+
+        .animate-pulse-slow {
+          animation: pulse-slow 3s ease-in-out infinite;
+        }
+
+        .animate-credits-glow {
+          animation: credits-glow 4s ease-in-out infinite;
+        }
+
+        .scan-line {
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            to bottom,
+            transparent 0%,
+            rgba(56, 189, 248, 0.03) 40%,
+            rgba(56, 189, 248, 0.06) 50%,
+            rgba(56, 189, 248, 0.03) 60%,
+            transparent 100%
+          );
+          animation: scan-move 2s ease-in-out infinite;
+        }
+
+        /* Premium Scrollbar */
+        .premium-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .premium-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .premium-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.06);
+          border-radius: 2px;
+        }
+        .premium-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.12);
+        }
+
+        /* Custom scrollbar for textarea */
+        textarea::-webkit-scrollbar {
+          width: 4px;
+        }
+        textarea::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        textarea::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.06);
+          border-radius: 2px;
+        }
+        textarea::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.12);
+        }
+
+        [role="progressbar"] > div {
+          background-color: #E50914 !important;
+        }
+
+        /* Smooth overall scrollbar */
+        * {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255, 255, 255, 0.06) transparent;
+        }
       `}</style>
     </div>
   );

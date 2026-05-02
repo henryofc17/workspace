@@ -57,14 +57,14 @@ export async function POST(request: NextRequest) {
 
     const clientIP = getClientIP(request);
 
-    // ── ANTI-ABUSE: Max 2 accounts per IP ──
+    // ── ANTI-ABUSE: Max 1 account per IP (hardened) ──
     const ipCount = await prisma.user.count({
       where: { ipAddress: clientIP },
     });
-    if (ipCount >= 2) {
+    if (ipCount >= 1) {
       return NextResponse.json(
-        { success: false, error: "Límite de cuentas por dispositivo alcanzado. Contacta al admin si necesitas más." },
-        { status: 400 }
+        { success: false, error: "Solo se permite una cuenta por dispositivo. Contacta al admin si necesitas acceso." },
+        { status: 429 }
       );
     }
 
@@ -73,12 +73,44 @@ export async function POST(request: NextRequest) {
       const fpCount = await prisma.user.count({
         where: { fingerprint },
       });
-      if (fpCount >= 2) {
+      if (fpCount >= 1) {
         return NextResponse.json(
-          { success: false, error: "Ya tienes cuentas registradas en este navegador." },
-          { status: 400 }
+          { success: false, error: "Ya tienes una cuenta registrada en este navegador." },
+          { status: 429 }
         );
       }
+    }
+
+    // ── ANTI-ABUSE: Rate limit — max 3 registrations per IP in last 24h ──
+    const recentRegs = await prisma.user.count({
+      where: {
+        ipAddress: clientIP,
+        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      },
+    });
+    if (recentRegs >= 3) {
+      return NextResponse.json(
+        { success: false, error: "Demasiados registros desde tu red. Intenta ma\u00f1ana." },
+        { status: 429 }
+      );
+    }
+
+    // ── ANTI-ABUSE: Block reserved usernames ──
+    const reserved = /^(admin|moderator|root|support|help|netflix|nfchecker|hachejota|staff|system)/i;
+    if (reserved.test(username.trim())) {
+      return NextResponse.json(
+        { success: false, error: "Nombre de usuario no disponible." },
+        { status: 400 }
+      );
+    }
+
+    // ── ANTI-ABUSE: Block disposable email patterns in username ──
+    const disposablePattern = /(test|temp|fake|spam|bot|dummy|anon)/i;
+    if (disposablePattern.test(username.trim())) {
+      return NextResponse.json(
+        { success: false, error: "Nombre de usuario no permitido." },
+        { status: 400 }
+      );
     }
 
     // ── Check username unique (case-insensitive) ──
@@ -114,11 +146,11 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // ── ANTI-ABUSE: Referrer account must be at least 1 hour old ──
+      // ── ANTI-ABUSE: Referrer account must be at least 10 minutes old ──
       const referrerAge = Date.now() - foundReferrer.createdAt.getTime();
-      if (referrerAge < 60 * 60 * 1000) {
+      if (referrerAge < 10 * 60 * 1000) {
         return NextResponse.json(
-          { success: false, error: "El código de referido es muy reciente. Espera al menos 1 hora." },
+          { success: false, error: "El código de referido es muy reciente. Espera al menos 10 minutos." },
           { status: 400 }
         );
       }

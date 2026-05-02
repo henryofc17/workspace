@@ -24,9 +24,9 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Usuario no encontrado" }, { status: 401 });
     }
 
-    // Referrer must be at least 1 hour old to share code
+    // Referrer must be at least 10 minutes old to share code
     const referrerAge = Date.now() - user.createdAt.getTime();
-    const canShare = referrerAge >= 60 * 60 * 1000;
+    const canShare = referrerAge >= 10 * 60 * 1000;
 
     // List of people this user has referred
     const referrals = await prisma.user.findMany({
