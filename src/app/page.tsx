@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,6 +33,7 @@ import {
   Trash2,
   MonitorPlay,
   Menu,
+  ArrowLeft,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -119,9 +119,9 @@ export default function Home() {
   const [credits, setCredits] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
-  // Drawer state
+  // Navigation state
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("checker");
+  const [activeView, setActiveView] = useState<"dashboard" | "checker" | "generate" | "copy" | "tv">("dashboard");
 
   // Checker state
   const [cookieText, setCookieText] = useState("");
@@ -487,11 +487,24 @@ export default function Home() {
           </button>
         </div>
         <div className="p-3 space-y-1">
+          {/* Dashboard (home) */}
+          <button
+            onClick={() => { setActiveView("dashboard"); setDrawerOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-xs font-medium transition-all duration-300 rounded-lg border ${
+              activeView === "dashboard"
+                ? "bg-white/[0.06] text-white/70 border-white/[0.1] shadow-[0_0_20px_rgba(255,255,255,0.03)]"
+                : "text-white/40 border-transparent hover:bg-white/[0.04] hover:text-white/60"
+            }`}
+          >
+            <Coins className="h-3.5 w-3.5" />
+            Inicio
+          </button>
+
           {/* Checker */}
           <button
-            onClick={() => { setActiveTab("checker"); setDrawerOpen(false); }}
+            onClick={() => { setActiveView("checker"); setDrawerOpen(false); }}
             className={`w-full flex items-center gap-3 px-4 py-3 text-xs font-medium transition-all duration-300 rounded-lg border ${
-              activeTab === "checker"
+              activeView === "checker"
                 ? "bg-sky-500/15 text-sky-400 border-sky-500/20 shadow-[0_0_20px_rgba(56,189,248,0.08)]"
                 : "text-white/40 border-transparent hover:bg-white/[0.04] hover:text-white/60"
             }`}
@@ -501,9 +514,9 @@ export default function Home() {
           </button>
           {/* Generar Token */}
           <button
-            onClick={() => { setActiveTab("generate"); setDrawerOpen(false); }}
+            onClick={() => { setActiveView("generate"); setDrawerOpen(false); }}
             className={`w-full flex items-center gap-3 px-4 py-3 text-xs font-medium transition-all duration-300 rounded-lg border ${
-              activeTab === "generate"
+              activeView === "generate"
                 ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20 shadow-[0_0_20px_rgba(52,211,153,0.08)]"
                 : "text-white/40 border-transparent hover:bg-white/[0.04] hover:text-white/60"
             }`}
@@ -513,9 +526,9 @@ export default function Home() {
           </button>
           {/* Generar Cookie */}
           <button
-            onClick={() => { setActiveTab("copy"); setDrawerOpen(false); }}
+            onClick={() => { setActiveView("copy"); setDrawerOpen(false); }}
             className={`w-full flex items-center gap-3 px-4 py-3 text-xs font-medium transition-all duration-300 rounded-lg border ${
-              activeTab === "copy"
+              activeView === "copy"
                 ? "bg-violet-500/15 text-violet-400 border-violet-500/20 shadow-[0_0_20px_rgba(167,139,250,0.08)]"
                 : "text-white/40 border-transparent hover:bg-white/[0.04] hover:text-white/60"
             }`}
@@ -525,9 +538,9 @@ export default function Home() {
           </button>
           {/* Activar TV */}
           <button
-            onClick={() => { setActiveTab("tv"); setDrawerOpen(false); }}
+            onClick={() => { setActiveView("tv"); setDrawerOpen(false); }}
             className={`w-full flex items-center gap-3 px-4 py-3 text-xs font-medium transition-all duration-300 rounded-lg border ${
-              activeTab === "tv"
+              activeView === "tv"
                 ? "bg-rose-500/15 text-rose-400 border-rose-500/20 shadow-[0_0_20px_rgba(251,113,133,0.08)]"
                 : "text-white/40 border-transparent hover:bg-white/[0.04] hover:text-white/60"
             }`}
@@ -541,51 +554,276 @@ export default function Home() {
       {/* ─── Main Content ─── */}
       <main className="flex-1 max-w-3xl mx-auto w-full px-4 sm:px-6 py-6 space-y-5">
 
-        {/* ═══ Premium Credit Banner ═══ */}
-        <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
-          <div className="absolute inset-0 bg-gradient-to-br from-amber-950/10 via-transparent to-orange-950/5" />
-          <div className="absolute top-0 right-0 w-40 h-40 bg-amber-500/5 rounded-full blur-3xl" />
-          <CardContent className="relative p-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-yellow-600/10 border border-amber-500/20 flex items-center justify-center">
-                    <Coins className="h-5 w-5 text-amber-400" />
+        {/* ═══════════════════════════════════════════════════════════════════
+            DASHBOARD VIEW — Credits + Referral + Buy + Transactions
+            ═══════════════════════════════════════════════════════════════════ */}
+        {activeView === "dashboard" && (
+          <>
+            {/* ═══ Premium Credit Banner ═══ */}
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
+              <div className="absolute inset-0 bg-gradient-to-br from-amber-950/10 via-transparent to-orange-950/5" />
+              <div className="absolute top-0 right-0 w-40 h-40 bg-amber-500/5 rounded-full blur-3xl" />
+              <CardContent className="relative p-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-yellow-600/10 border border-amber-500/20 flex items-center justify-center">
+                        <Coins className="h-5 w-5 text-amber-400" />
+                      </div>
+                      <div className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-amber-400 animate-pulse shadow-[0_0_8px_rgba(251,191,36,0.6)]" />
+                    </div>
+                    <div>
+                      <p className="text-amber-300 font-bold text-2xl tabular-nums tracking-tight animate-pulse-slow">{credits}</p>
+                      <p className="text-white/25 text-[10px] uppercase tracking-widest">Créditos disponibles</p>
+                    </div>
                   </div>
-                  <div className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-amber-400 animate-pulse shadow-[0_0_8px_rgba(251,191,36,0.6)]" />
+                  <div className="text-right space-y-2">
+                    <div className="flex items-center gap-2 justify-end">
+                      <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
+                      <span className="text-white/40 text-[11px]">Token: <span className="text-white/70 font-medium">1 crédito</span></span>
+                    </div>
+                    <div className="flex items-center gap-2 justify-end">
+                      <div className="h-1.5 w-1.5 rounded-full bg-violet-400 shadow-[0_0_6px_rgba(167,139,250,0.5)]" />
+                      <span className="text-white/40 text-[11px]">Cookie: <span className="text-white/70 font-medium">3 créditos</span></span>
+                    </div>
+                    <div className="flex items-center gap-2 justify-end">
+                      <div className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.5)]" />
+                      <span className="text-white/40 text-[11px]">Checker: <span className="text-emerald-400/80 font-medium">Gratis</span></span>
+                    </div>
+                    <div className="flex items-center gap-2 justify-end">
+                      <div className="h-1.5 w-1.5 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(251,113,133,0.5)]" />
+                      <span className="text-white/40 text-[11px]">Activar TV: <span className="text-white/70 font-medium">5 créditos</span></span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-amber-300 font-bold text-2xl tabular-nums tracking-tight animate-pulse-slow">{credits}</p>
-                  <p className="text-white/25 text-[10px] uppercase tracking-widest">Créditos disponibles</p>
-                </div>
-              </div>
-              <div className="text-right space-y-2">
-                <div className="flex items-center gap-2 justify-end">
-                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
-                  <span className="text-white/40 text-[11px]">Token: <span className="text-white/70 font-medium">1 crédito</span></span>
-                </div>
-                <div className="flex items-center gap-2 justify-end">
-                  <div className="h-1.5 w-1.5 rounded-full bg-violet-400 shadow-[0_0_6px_rgba(167,139,250,0.5)]" />
-                  <span className="text-white/40 text-[11px]">Cookie: <span className="text-white/70 font-medium">3 créditos</span></span>
-                </div>
-                <div className="flex items-center gap-2 justify-end">
-                  <div className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.5)]" />
-                  <span className="text-white/40 text-[11px]">Checker: <span className="text-emerald-400/80 font-medium">Gratis</span></span>
-                </div>
-                <div className="flex items-center gap-2 justify-end">
-                  <div className="h-1.5 w-1.5 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(251,113,133,0.5)]" />
-                  <span className="text-white/40 text-[11px]">Activar TV: <span className="text-white/70 font-medium">5 créditos</span></span>
-                </div>
-              </div>
+              </CardContent>
             </div>
-          </CardContent>
-        </div>
 
-        {/* ═══ Tabs (no visible TabsList — controlled by drawer) ═══ */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-5">
+            {/* ═══ Gradient Section Divider ═══ */}
+            <div className="relative h-px w-full">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#E50914]/30 to-transparent" />
+            </div>
 
-          {/* ═══ TAB 1: CHECKER ═══ */}
-          <TabsContent value="checker" className="space-y-4">
+            {/* ═══ Referral Section — Premium Card ═══ */}
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
+              <div className="absolute inset-0 bg-gradient-to-br from-orange-950/10 via-transparent to-amber-950/5" />
+              <div className="absolute -top-20 -right-20 w-40 h-40 bg-orange-500/5 rounded-full blur-3xl" />
+              <CardHeader className="pb-3 px-5 pt-5 relative">
+                <CardTitle className="text-orange-300 text-sm flex items-center gap-2.5">
+                  <div className="h-7 w-7 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center">
+                    <Gift className="h-3.5 w-3.5 text-orange-400" />
+                  </div>
+                  Sistema de Referidos
+                </CardTitle>
+                <CardDescription className="text-white/25 text-xs ml-[38px]">
+                  Comparte tu código y gana <span className="text-white/60 font-semibold">+5 créditos</span> por cada persona que se registre.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 px-5 pb-5 relative">
+                {/* Referral Code Display */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 bg-[#050508]/80 border border-white/[0.06] rounded-xl px-4 py-3.5 flex items-center justify-between">
+                    <div>
+                      <p className="text-white/20 text-[10px] uppercase tracking-widest">Tu código</p>
+                      <p className="text-white/90 font-mono font-bold text-lg tracking-wider">{referralCode || "..."}</p>
+                    </div>
+                    <button
+                      onClick={() => copyToClip(referralCode, setCodeCopied)}
+                      disabled={!referralCode}
+                      className="h-9 px-3.5 rounded-xl bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white text-xs font-medium flex items-center gap-1.5 transition-all duration-300 disabled:opacity-30 shadow-[0_0_15px_rgba(234,88,12,0.15)]"
+                    >
+                      {codeCopied ? <><Check className="h-3.5 w-3.5" /> Copiado</> : <><Share2 className="h-3.5 w-3.5" /> Copiar</>}
+                    </button>
+                  </div>
+                </div>
+
+                {canShareCode ? (
+                  <p className="text-emerald-400/50 text-[10px] text-center flex items-center justify-center gap-1.5">
+                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
+                    Tu código está activo y listo para compartir
+                  </p>
+                ) : (
+                  <p className="text-amber-400/50 text-[10px] text-center flex items-center justify-center gap-1.5">
+                    <Clock className="h-3 w-3" />
+                    Tu código se activa en 10 minutos después del registro
+                  </p>
+                )}
+
+                {/* Stats Row */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl bg-[#050508]/60 border border-white/[0.04] p-3 text-center">
+                    <p className="text-orange-300 font-bold text-xl tabular-nums">{totalReferrals}</p>
+                    <p className="text-white/20 text-[10px] uppercase tracking-widest mt-0.5">Referidos</p>
+                  </div>
+                  <div className="rounded-xl bg-[#050508]/60 border border-white/[0.04] p-3 text-center">
+                    <p className="text-amber-300 font-bold text-xl tabular-nums">{totalReferrals * 5}</p>
+                    <p className="text-white/20 text-[10px] uppercase tracking-widest mt-0.5">Créditos ganados</p>
+                  </div>
+                </div>
+
+                {/* Redeem Section */}
+                <div className="relative pt-4">
+                  <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+                  <p className="text-white/40 text-xs font-medium mb-2.5 flex items-center gap-1.5">
+                    <Gift className="h-3 w-3 text-orange-400/60" /> ¿Tienes un código de referido?
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      value={redeemCode}
+                      onChange={(e) => setRedeemCode(e.target.value.toUpperCase())}
+                      placeholder="NF-XXXXXX"
+                      className="flex-1 bg-[#050508]/80 border-white/[0.06] text-white/80 placeholder:text-white/15 uppercase font-mono rounded-xl focus:border-orange-500/30 focus:ring-1 focus:ring-orange-500/10 transition-all duration-300 text-sm"
+                    />
+                    <Button
+                      onClick={handleRedeem}
+                      disabled={redeeming || !redeemCode.trim()}
+                      className="bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white font-medium h-10 px-5 disabled:opacity-40 shrink-0 rounded-xl shadow-[0_0_15px_rgba(234,88,12,0.15)] transition-all duration-300"
+                    >
+                      {redeeming ? <Loader2 className="h-4 w-4 animate-spin" /> : "Canjear"}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </div>
+
+            {/* ═══ Gradient Section Divider ═══ */}
+            <div className="relative h-px w-full">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+            </div>
+
+            {/* ═══ Buy Credits Notice ═══ */}
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/10 via-transparent to-sky-950/5" />
+              <div className="absolute -top-16 -left-16 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl" />
+              <CardContent className="relative p-5 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500/15 to-sky-500/10 border border-emerald-500/20 flex items-center justify-center">
+                      <Coins className="h-4.5 w-4.5 text-emerald-400" />
+                    </div>
+                    <div className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+                  </div>
+                  <div>
+                    <p className="text-white/80 text-sm font-semibold">¿Necesitas más créditos?</p>
+                    <p className="text-white/25 text-[11px]">Contacta al administrador para adquirir paquetes</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <a
+                    href="https://wa.me/524437863111"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#25D366]/5 hover:bg-[#25D366]/12 border border-[#25D366]/15 hover:border-[#25D366]/25 transition-all duration-300 text-[#25D366] text-xs font-semibold shadow-[0_0_15px_rgba(37,211,102,0.05)] hover:shadow-[0_0_25px_rgba(37,211,102,0.12)] group"
+                  >
+                    <svg className="h-4 w-4 group-hover:scale-110 transition-transform duration-300" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                    WhatsApp
+                  </a>
+                  <a
+                    href="https://t.me/HcheJotaA_Bot"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#229ED9]/5 hover:bg-[#229ED9]/12 border border-[#229ED9]/15 hover:border-[#229ED9]/25 transition-all duration-300 text-[#229ED9] text-xs font-semibold shadow-[0_0_15px_rgba(34,158,217,0.05)] hover:shadow-[0_0_25px_rgba(34,158,217,0.12)] group"
+                  >
+                    <svg className="h-4 w-4 group-hover:scale-110 transition-transform duration-300" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+                    Telegram
+                  </a>
+                </div>
+                <p className="text-white/15 text-[10px] text-center">
+                  Respuesta rápida. Paquetes a tu medida.
+                </p>
+              </CardContent>
+            </div>
+
+            {/* ═══ Transaction History ═══ */}
+            <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
+              <CardHeader className="pb-3 px-5 pt-5">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-white/70 text-sm flex items-center gap-2.5">
+                    <div className="h-7 w-7 rounded-lg bg-[#E50914]/10 border border-[#E50914]/20 flex items-center justify-center">
+                      <CreditCard className="h-3.5 w-3.5 text-[#E50914]" />
+                    </div>
+                    Historial de Transacciones
+                  </CardTitle>
+                  {transactions.length > 0 && (
+                    <button
+                      onClick={() => { setTransactions([]); setHistoryCleared(true); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/[0.06] bg-white/[0.02] text-white/30 hover:text-white/60 hover:bg-white/[0.05] hover:border-white/[0.1] transition-all duration-300 text-[10px] font-medium"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Limpiar historial
+                    </button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="px-3 pb-3">
+                <div className="space-y-1 max-h-[280px] overflow-y-auto premium-scrollbar">
+                  {transactions.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 gap-2">
+                      <div className="h-10 w-10 rounded-full bg-white/[0.03] border border-white/[0.06] flex items-center justify-center">
+                        <CreditCard className="h-4 w-4 text-white/15" />
+                      </div>
+                      <p className="text-white/15 text-xs">Sin actividad aún</p>
+                    </div>
+                  ) : (
+                    transactions.map((t, i) => (
+                      <div
+                        key={t.id}
+                        className={`flex items-center justify-between p-3 rounded-xl transition-all duration-200 hover:bg-white/[0.03] ${
+                          i % 2 === 0 ? "bg-transparent" : "bg-white/[0.015]"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
+                            t.credits >= 0
+                              ? "bg-emerald-500/10 border border-emerald-500/15"
+                              : "bg-red-500/10 border border-red-500/15"
+                          }`}>
+                            {t.credits >= 0 ? (
+                              <TrendingDown className="h-3.5 w-3.5 text-emerald-400 rotate-180" />
+                            ) : (
+                              <TrendingDown className="h-3.5 w-3.5 text-red-400" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-white/60 text-xs font-medium">{t.description || t.type}</p>
+                            <p className="text-white/15 text-[10px] flex items-center gap-1">
+                              <Clock className="h-2.5 w-2.5" />
+                              {new Date(t.createdAt).toLocaleString("es")}
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`text-sm font-bold tabular-nums ${
+                          t.credits >= 0 ? "text-emerald-400" : "text-red-400"
+                        }`}>
+                          {t.credits >= 0 ? "+" : ""}{t.credits}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </div>
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            TOOL VIEWS — Rendered ONLY when selected from drawer
+            ═══════════════════════════════════════════════════════════════════ */}
+
+        {/* ── Back to Dashboard Button ── */}
+        {activeView !== "dashboard" && (
+          <button
+            onClick={() => setActiveView("dashboard")}
+            className="flex items-center gap-2 text-white/40 hover:text-white/70 text-xs font-medium transition-all duration-300"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Volver al inicio
+          </button>
+        )}
+
+        {/* ═══ TOOL: CHECKER ═══ */}
+        {activeView === "checker" && (
+          <div className="space-y-4">
             <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
               <CardHeader className="pb-3 px-5 pt-5">
                 <CardTitle className="text-white/90 text-sm flex items-center gap-2.5">
@@ -719,10 +957,12 @@ export default function Home() {
               )}
               </div>
             )}
-          </TabsContent>
+          </div>
+        )}
 
-          {/* ═══ TAB 2: GENERATE TOKEN ═══ */}
-          <TabsContent value="generate" className="space-y-4">
+        {/* ═══ TOOL: GENERATE TOKEN ═══ */}
+        {activeView === "generate" && (
+          <div className="space-y-4">
             <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/10 to-transparent pointer-events-none" />
               <CardHeader className="pb-3 px-5 pt-5 relative">
@@ -806,10 +1046,12 @@ export default function Home() {
                 </CardContent>
               </div>
             )}
-          </TabsContent>
+          </div>
+        )}
 
-          {/* ═══ TAB 3: COPY COOKIE ═══ */}
-          <TabsContent value="copy" className="space-y-4">
+        {/* ═══ TOOL: GENERAR COOKIE ═══ */}
+        {activeView === "copy" && (
+          <div className="space-y-4">
             <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-br from-violet-950/10 to-transparent pointer-events-none" />
               <CardHeader className="pb-3 px-5 pt-5 relative">
@@ -882,10 +1124,12 @@ export default function Home() {
                 </CardContent>
               </div>
             )}
-          </TabsContent>
+          </div>
+        )}
 
-          {/* ═══ TAB 4: ACTIVAR TV ═══ */}
-          <TabsContent value="tv" className="space-y-4">
+        {/* ═══ TOOL: ACTIVAR TV ═══ */}
+        {activeView === "tv" && (
+          <div className="space-y-4">
             <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-br from-rose-950/10 to-transparent pointer-events-none" />
               <CardHeader className="pb-3 px-5 pt-5 relative">
@@ -1021,213 +1265,8 @@ export default function Home() {
                 )}
               </CardContent>
             </div>
-          </TabsContent>
-        </Tabs>
-
-        {/* ═══ Gradient Section Divider ═══ */}
-        <div className="relative h-px w-full">
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#E50914]/30 to-transparent" />
-        </div>
-
-        {/* ═══ Referral Section — Premium Card ═══ */}
-        <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
-          <div className="absolute inset-0 bg-gradient-to-br from-orange-950/10 via-transparent to-amber-950/5" />
-          <div className="absolute -top-20 -right-20 w-40 h-40 bg-orange-500/5 rounded-full blur-3xl" />
-          <CardHeader className="pb-3 px-5 pt-5 relative">
-            <CardTitle className="text-orange-300 text-sm flex items-center gap-2.5">
-              <div className="h-7 w-7 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center">
-                <Gift className="h-3.5 w-3.5 text-orange-400" />
-              </div>
-              Sistema de Referidos
-            </CardTitle>
-            <CardDescription className="text-white/25 text-xs ml-[38px]">
-              Comparte tu código y gana <span className="text-white/60 font-semibold">+5 créditos</span> por cada persona que se registre.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 px-5 pb-5 relative">
-            {/* Referral Code Display */}
-            <div className="flex items-center gap-3">
-              <div className="flex-1 bg-[#050508]/80 border border-white/[0.06] rounded-xl px-4 py-3.5 flex items-center justify-between">
-                <div>
-                  <p className="text-white/20 text-[10px] uppercase tracking-widest">Tu código</p>
-                  <p className="text-white/90 font-mono font-bold text-lg tracking-wider">{referralCode || "..."}</p>
-                </div>
-                <button
-                  onClick={() => copyToClip(referralCode, setCodeCopied)}
-                  disabled={!referralCode}
-                  className="h-9 px-3.5 rounded-xl bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white text-xs font-medium flex items-center gap-1.5 transition-all duration-300 disabled:opacity-30 shadow-[0_0_15px_rgba(234,88,12,0.15)]"
-                >
-                  {codeCopied ? <><Check className="h-3.5 w-3.5" /> Copiado</> : <><Share2 className="h-3.5 w-3.5" /> Copiar</>}
-                </button>
-              </div>
-            </div>
-
-            {canShareCode ? (
-              <p className="text-emerald-400/50 text-[10px] text-center flex items-center justify-center gap-1.5">
-                <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
-                Tu código está activo y listo para compartir
-              </p>
-            ) : (
-              <p className="text-amber-400/50 text-[10px] text-center flex items-center justify-center gap-1.5">
-                <Clock className="h-3 w-3" />
-                Tu código se activa en 10 minutos después del registro
-              </p>
-            )}
-
-            {/* Stats Row */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl bg-[#050508]/60 border border-white/[0.04] p-3 text-center">
-                <p className="text-orange-300 font-bold text-xl tabular-nums">{totalReferrals}</p>
-                <p className="text-white/20 text-[10px] uppercase tracking-widest mt-0.5">Referidos</p>
-              </div>
-              <div className="rounded-xl bg-[#050508]/60 border border-white/[0.04] p-3 text-center">
-                <p className="text-amber-300 font-bold text-xl tabular-nums">{totalReferrals * 5}</p>
-                <p className="text-white/20 text-[10px] uppercase tracking-widest mt-0.5">Créditos ganados</p>
-              </div>
-            </div>
-
-            {/* Redeem Section */}
-            <div className="relative pt-4">
-              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
-              <p className="text-white/40 text-xs font-medium mb-2.5 flex items-center gap-1.5">
-                <Gift className="h-3 w-3 text-orange-400/60" /> ¿Tienes un código de referido?
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  value={redeemCode}
-                  onChange={(e) => setRedeemCode(e.target.value.toUpperCase())}
-                  placeholder="NF-XXXXXX"
-                  className="flex-1 bg-[#050508]/80 border-white/[0.06] text-white/80 placeholder:text-white/15 uppercase font-mono rounded-xl focus:border-orange-500/30 focus:ring-1 focus:ring-orange-500/10 transition-all duration-300 text-sm"
-                />
-                <Button
-                  onClick={handleRedeem}
-                  disabled={redeeming || !redeemCode.trim()}
-                  className="bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white font-medium h-10 px-5 disabled:opacity-40 shrink-0 rounded-xl shadow-[0_0_15px_rgba(234,88,12,0.15)] transition-all duration-300"
-                >
-                  {redeeming ? <Loader2 className="h-4 w-4 animate-spin" /> : "Canjear"}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </div>
-
-        {/* ═══ Gradient Section Divider ═══ */}
-        <div className="relative h-px w-full">
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
-        </div>
-
-        {/* ═══ Buy Credits Notice ═══ */}
-        <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
-          <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/10 via-transparent to-sky-950/5" />
-          <div className="absolute -top-16 -left-16 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl" />
-          <CardContent className="relative p-5 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500/15 to-sky-500/10 border border-emerald-500/20 flex items-center justify-center">
-                  <Coins className="h-4.5 w-4.5 text-emerald-400" />
-                </div>
-                <div className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
-              </div>
-              <div>
-                <p className="text-white/80 text-sm font-semibold">¿Necesitas más créditos?</p>
-                <p className="text-white/25 text-[11px]">Contacta al administrador para adquirir paquetes</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2.5">
-              <a
-                href="https://wa.me/524437863111"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#25D366]/5 hover:bg-[#25D366]/12 border border-[#25D366]/15 hover:border-[#25D366]/25 transition-all duration-300 text-[#25D366] text-xs font-semibold shadow-[0_0_15px_rgba(37,211,102,0.05)] hover:shadow-[0_0_25px_rgba(37,211,102,0.12)] group"
-              >
-                <svg className="h-4 w-4 group-hover:scale-110 transition-transform duration-300" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                WhatsApp
-              </a>
-              <a
-                href="https://t.me/HcheJotaA_Bot"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#229ED9]/5 hover:bg-[#229ED9]/12 border border-[#229ED9]/15 hover:border-[#229ED9]/25 transition-all duration-300 text-[#229ED9] text-xs font-semibold shadow-[0_0_15px_rgba(34,158,217,0.05)] hover:shadow-[0_0_25px_rgba(34,158,217,0.12)] group"
-              >
-                <svg className="h-4 w-4 group-hover:scale-110 transition-transform duration-300" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
-                Telegram
-              </a>
-            </div>
-            <p className="text-white/15 text-[10px] text-center">
-              Respuesta rápida. Paquetes a tu medida.
-            </p>
-          </CardContent>
-        </div>
-
-        {/* ═══ Transaction History ═══ */}
-        <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
-          <CardHeader className="pb-3 px-5 pt-5">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-white/70 text-sm flex items-center gap-2.5">
-                <div className="h-7 w-7 rounded-lg bg-[#E50914]/10 border border-[#E50914]/20 flex items-center justify-center">
-                  <CreditCard className="h-3.5 w-3.5 text-[#E50914]" />
-                </div>
-                Historial de Transacciones
-              </CardTitle>
-              {transactions.length > 0 && (
-                <button
-                  onClick={() => { setTransactions([]); setHistoryCleared(true); }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/[0.06] bg-white/[0.02] text-white/30 hover:text-white/60 hover:bg-white/[0.05] hover:border-white/[0.1] transition-all duration-300 text-[10px] font-medium"
-                >
-                  <Trash2 className="h-3 w-3" />
-                  Limpiar historial
-                </button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="px-3 pb-3">
-            <div className="space-y-1 max-h-[280px] overflow-y-auto premium-scrollbar">
-              {transactions.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 gap-2">
-                  <div className="h-10 w-10 rounded-full bg-white/[0.03] border border-white/[0.06] flex items-center justify-center">
-                    <CreditCard className="h-4 w-4 text-white/15" />
-                  </div>
-                  <p className="text-white/15 text-xs">Sin actividad aún</p>
-                </div>
-              ) : (
-                transactions.map((t, i) => (
-                  <div
-                    key={t.id}
-                    className={`flex items-center justify-between p-3 rounded-xl transition-all duration-200 hover:bg-white/[0.03] ${
-                      i % 2 === 0 ? "bg-transparent" : "bg-white/[0.015]"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
-                        t.credits >= 0
-                          ? "bg-emerald-500/10 border border-emerald-500/15"
-                          : "bg-red-500/10 border border-red-500/15"
-                      }`}>
-                        {t.credits >= 0 ? (
-                          <TrendingDown className="h-3.5 w-3.5 text-emerald-400 rotate-180" />
-                        ) : (
-                          <TrendingDown className="h-3.5 w-3.5 text-red-400" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-white/60 text-xs font-medium">{t.description || t.type}</p>
-                        <p className="text-white/15 text-[10px] flex items-center gap-1">
-                          <Clock className="h-2.5 w-2.5" />
-                          {new Date(t.createdAt).toLocaleString("es")}
-                        </p>
-                      </div>
-                    </div>
-                    <span className={`text-sm font-bold tabular-nums ${
-                      t.credits >= 0 ? "text-emerald-400" : "text-red-400"
-                    }`}>
-                      {t.credits >= 0 ? "+" : ""}{t.credits}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </div>
+          </div>
+        )}
       </main>
 
       {/* ─── Footer ─── */}
