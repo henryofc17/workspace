@@ -202,6 +202,15 @@ export default function Home() {
     return () => { cancelled = true; };
   }, [router, loadBalance, loadReferral]);
 
+
+  const refreshCredits = useCallback(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) setCredits(data.user.credits ?? 0);
+      })
+      .catch(() => {});
+  }, []);
   // ── TV Activate (5 credits) ──
   const handleTvActivate = useCallback(async () => {
     if (!tvCode.trim()) {
@@ -247,14 +256,6 @@ export default function Home() {
     }
   }, [tvCode, credits, refreshCredits, loadBalance]);
 
-  const refreshCredits = useCallback(() => {
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.success) setCredits(data.user.credits ?? 0);
-      })
-      .catch(() => {});
-  }, []);
 
   // ── Checker: Verify own cookie (free) ──
   const handleCheck = useCallback(async () => {
