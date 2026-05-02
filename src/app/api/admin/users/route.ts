@@ -12,7 +12,7 @@ function generateReferralCode(): string {
   return code;
 }
 
-// GET /api/admin/users — list all users
+// GET /api/admin/users — list all users with referral data
 export async function GET() {
   try {
     const session = await getSession();
@@ -26,8 +26,18 @@ export async function GET() {
         username: true,
         role: true,
         credits: true,
+        referralCode: true,
+        referredBy: true,
         createdAt: true,
-        _count: { select: { transactions: true } },
+        _count: {
+          select: {
+            transactions: true,
+            referrals: true,
+          },
+        },
+        referrer: {
+          select: { username: true, id: true },
+        },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -121,6 +131,12 @@ export async function DELETE(request: NextRequest) {
     if (userId === session.userId) {
       return NextResponse.json({ success: false, error: "No puedes eliminarte a ti mismo" }, { status: 400 });
     }
+
+    // Remove referredBy reference from any referrals
+    await prisma.user.updateMany({
+      where: { referredBy: (await prisma.user.findUnique({ where: { id: userId }, select: { referralCode: true } }))?.referralCode || "" },
+      data: { referredBy: null },
+    });
 
     await prisma.transaction.deleteMany({ where: { userId } });
     await prisma.user.delete({ where: { id: userId } });
