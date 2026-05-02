@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const REFERRAL_BONUS = 5;
+const REDEEM_BONUS = 3;
 
 export async function POST(request: NextRequest) {
   try {
@@ -119,10 +120,13 @@ export async function POST(request: NextRequest) {
 
     // ── Apply referral ──
     await prisma.$transaction([
-      // Mark user as referred
+      // Mark user as referred + give redeem bonus
       prisma.user.update({
         where: { id: session.userId },
-        data: { referredBy: cleanCode },
+        data: {
+          referredBy: cleanCode,
+          credits: { increment: REDEEM_BONUS },
+        },
       }),
       // Give bonus to referrer
       prisma.user.update({
@@ -138,12 +142,12 @@ export async function POST(request: NextRequest) {
           description: `Bonus por referido: ${session.username}`,
         },
       }),
-      // Log my action
+      // Log my bonus
       prisma.transaction.create({
         data: {
           userId: session.userId,
           type: "REFERRAL_BONUS",
-          credits: 0,
+          credits: REDEEM_BONUS,
           description: `Canjeó código de referido de ${referrer.username}`,
         },
       }),
@@ -151,7 +155,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Código canjeado. ${referrer.username} recibió +${REFERRAL_BONUS} créditos.`,
+      message: `Código canjeado. Tú recibiste +${REDEEM_BONUS} créditos y ${referrer.username} recibió +${REFERRAL_BONUS} créditos.`,
       referrerUsername: referrer.username,
     });
   } catch (err: any) {
