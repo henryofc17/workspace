@@ -704,7 +704,7 @@ export default function Home() {
                     <div className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
                   </div>
                   <div>
-                    <p className="text-white/80 text-sm font-semibold">¿Necesitas más créditos?</p>
+                    <p className="text-white/80 text-sm font-semibold">¿Necesitas comprar  créditos?</p>
                     <p className="text-white/25 text-[11px]">Contacta al administrador para adquirir paquetes</p>
                   </div>
                 </div>
