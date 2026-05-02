@@ -303,7 +303,7 @@ export default function LoginPage() {
                         type={showPassword ? "text" : "password"}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Contrasena"
+                        placeholder="Contraseña"
                         showPassword={showPassword}
                         onTogglePassword={() => setShowPassword(!showPassword)}
                       />
@@ -337,7 +337,7 @@ export default function LoginPage() {
                       <div className="flex items-center justify-center gap-2 py-1">
                         <div className="flex items-center gap-1.5 text-[11px] text-gray-600">
                           <ShieldCheck className="h-3.5 w-3.5 text-emerald-500/70" />
-                          <span>Sistema protegido con seguridad avanzada</span>
+                          <span>Sistema protegido y optimizado</span>
                         </div>
                       </div>
                     </motion.div>
