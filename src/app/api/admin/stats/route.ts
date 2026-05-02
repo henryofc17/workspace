@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
-      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 403 });
-    }
+    await requireAdmin();
 
     const [totalUsers, totalCookies, activeCookies, deadCookies, totalTransactions] = await Promise.all([
       prisma.user.count({ where: { role: "USER" } }),
@@ -38,6 +35,12 @@ export async function GET() {
       recentTransactions,
     });
   } catch (err: any) {
+    if (err.message === "UNAUTHORIZED") {
+      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 });
+    }
+    if (err.message === "FORBIDDEN") {
+      return NextResponse.json({ success: false, error: "Acceso denegado" }, { status: 403 });
+    }
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

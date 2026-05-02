@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { extractCookiesFromText } from "@/lib/netflix-checker";
 
 // GET /api/admin/cookies — list all cookies with status
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
-      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 403 });
-    }
+    await requireAdmin();
 
     const cookies = await prisma.cookie.findMany({
       orderBy: { createdAt: "desc" },
@@ -20,17 +17,20 @@ export async function GET() {
 
     return NextResponse.json({ success: true, cookies, stats: { total: cookies.length, active, dead } });
   } catch (err: any) {
+    if (err.message === "UNAUTHORIZED") {
+      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 });
+    }
+    if (err.message === "FORBIDDEN") {
+      return NextResponse.json({ success: false, error: "Acceso denegado" }, { status: 403 });
+    }
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
 
-// POST /api/admin/cookies — upload cookies (text content with multiple cookies)
+// POST /api/admin/cookies — upload cookies
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
-      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 403 });
-    }
+    await requireAdmin();
 
     const contentType = request.headers.get("content-type") || "";
     let cookieTexts: string[] = [];
@@ -70,15 +70,15 @@ export async function POST(request: NextRequest) {
       }
     } else {
       const body = await request.json();
-      const { cookies } = body;
-      if (Array.isArray(cookies)) {
-        cookieTexts = cookies;
-      } else if (typeof cookies === "string") {
-        cookieTexts = parseTextToCookies(cookies);
+      const { cookies: bodyCookies } = body;
+      if (Array.isArray(bodyCookies)) {
+        cookieTexts = bodyCookies;
+      } else if (typeof bodyCookies === "string") {
+        cookieTexts = parseTextToCookies(bodyCookies);
       }
     }
 
-    // Deduplicate and validate
+    // Deduplicate by NetflixId
     const seen = new Set<string>();
     const unique: string[] = [];
     for (const raw of cookieTexts) {
@@ -106,18 +106,20 @@ export async function POST(request: NextRequest) {
       count: created.count,
     });
   } catch (err: any) {
-    console.error("Upload cookies error:", err);
+    if (err.message === "UNAUTHORIZED") {
+      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 });
+    }
+    if (err.message === "FORBIDDEN") {
+      return NextResponse.json({ success: false, error: "Acceso denegado" }, { status: 403 });
+    }
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
 
-// DELETE /api/admin/cookies — delete all dead cookies
+// DELETE /api/admin/cookies — delete cookies by type
 export async function DELETE(request: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
-      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 403 });
-    }
+    await requireAdmin();
 
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type");
@@ -133,9 +135,8 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (type === "duplicates") {
-      // Find duplicates by NetflixId value, keep only the first (oldest)
       const allCookies = await prisma.cookie.findMany({ orderBy: { createdAt: "asc" } });
-      const seenIds = new Map<string, string>(); // NetflixId -> cookie id (first occurrence)
+      const seenIds = new Map<string, string>();
       const duplicateIds: string[] = [];
 
       for (const cookie of allCookies) {
@@ -159,12 +160,21 @@ export async function DELETE(request: NextRequest) {
 
     const cookieId = searchParams.get("id");
     if (cookieId) {
+      if (!/^[\w-]+$/.test(cookieId)) {
+        return NextResponse.json({ success: false, error: "ID inválido" }, { status: 400 });
+      }
       await prisma.cookie.delete({ where: { id: cookieId } });
       return NextResponse.json({ success: true });
     }
 
     return NextResponse.json({ success: false, error: "Parámetro 'type' o 'id' requerido" }, { status: 400 });
   } catch (err: any) {
+    if (err.message === "UNAUTHORIZED") {
+      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 });
+    }
+    if (err.message === "FORBIDDEN") {
+      return NextResponse.json({ success: false, error: "Acceso denegado" }, { status: 403 });
+    }
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
@@ -185,7 +195,6 @@ function parseTextToCookies(content: string): string[] {
       continue;
     }
 
-    // Try line by line
     const lines = trimmed.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
     for (const line of lines) {
       const lineDict = extractCookiesFromText(line);

@@ -1,7 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { createToken } from "@/lib/auth";
+import { createTokenPair, setAuthCookies } from "@/lib/auth";
+import {
+  getClientIP,
+  logSecurityEvent,
+  SecurityEvents,
+  checkRateLimit,
+  sanitizeString,
+} from "@/lib/security";
+import { validateBody, registerSchema } from "@/lib/validators";
 
 const REGISTER_BONUS = 3;
 const REFERRAL_BONUS = 5;
@@ -31,32 +39,49 @@ function generateReferralCode(): string {
   return code;
 }
 
-function getClientIP(request: NextRequest): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  const real = request.headers.get("x-real-ip");
-  if (real) return real;
-  return "unknown";
-}
-
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const { username, password, referralCode, fingerprint, turnstileToken } = await request.json();
+    const clientIP = getClientIP(request as any);
 
-    if (!username || !password) {
+    // ── Rate limit: max 3 registrations per IP per 15 min ──
+    const rateCheck = checkRateLimit(`register:${clientIP}`, {
+      maxRequests: 3,
+      windowMs: 15 * 60 * 1000,
+      blockDurationMs: 60 * 60 * 1000, // 1 hour block
+    });
+
+    if (!rateCheck.allowed) {
+      logSecurityEvent({
+        level: "error",
+        event: SecurityEvents.REGISTER_BLOCKED,
+        ip: clientIP,
+        details: { retryAfter: rateCheck.retryAfter },
+      });
       return NextResponse.json(
-        { success: false, error: "Usuario y contraseña requeridos" },
+        { success: false, error: `Demasiados registros. Espera ${rateCheck.retryAfter || 60} segundos.` },
+        { status: 429 }
+      );
+    }
+
+    // ── Parse & validate body ──
+    const body = await request.json();
+    const validation = validateBody(registerSchema, body);
+    if (!validation.success) {
+      logSecurityEvent({
+        level: "warn",
+        event: SecurityEvents.INPUT_VALIDATION_FAILED,
+        ip: clientIP,
+        details: { field: "register", error: validation.error },
+      });
+      return NextResponse.json(
+        { success: false, error: validation.error },
         { status: 400 }
       );
     }
 
-    // Verify turnstile
-    if (!turnstileToken) {
-      return NextResponse.json(
-        { success: false, error: "Completa la verificación" },
-        { status: 400 }
-      );
-    }
+    const { username, password, referralCode, fingerprint, turnstileToken } = validation.data;
+
+    // ── Verify Turnstile ──
     const turnstileValid = await verifyTurnstile(turnstileToken);
     if (!turnstileValid) {
       return NextResponse.json(
@@ -65,45 +90,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (username.length < 3) {
+    // ── Block reserved usernames ──
+    const reserved = /^(admin|moderator|root|support|help|netflix|nfchecker|hachejota|staff|system)/i;
+    if (reserved.test(username)) {
       return NextResponse.json(
-        { success: false, error: "Usuario debe tener al menos 3 caracteres" },
+        { success: false, error: "Nombre de usuario no disponible." },
         { status: 400 }
       );
     }
 
-    if (password.length < 4) {
-      return NextResponse.json(
-        { success: false, error: "Contraseña debe tener al menos 4 caracteres" },
-        { status: 400 }
-      );
-    }
-
-    if (/admin/i.test(username) || /mod/i.test(username)) {
-      return NextResponse.json(
-        { success: false, error: "Nombre de usuario no permitido" },
-        { status: 400 }
-      );
-    }
-
-    const clientIP = getClientIP(request);
-
-    // ── ANTI-ABUSE: Max 1 account per IP (hardened) ──
-    const ipCount = await prisma.user.count({
-      where: { ipAddress: clientIP },
-    });
+    // ── ANTI-ABUSE: Max 1 account per IP ──
+    const ipCount = await prisma.user.count({ where: { ipAddress: clientIP } });
     if (ipCount >= 1) {
       return NextResponse.json(
-        { success: false, error: "Solo se permite una cuenta por dispositivo. Contacta al admin si necesitas acceso." },
+        { success: false, error: "Solo se permite una cuenta por dispositivo." },
         { status: 429 }
       );
     }
 
-    // ── ANTI-ABUSE: Fingerprint check (same browser = same person) ──
+    // ── ANTI-ABUSE: Fingerprint check ──
     if (fingerprint) {
-      const fpCount = await prisma.user.count({
-        where: { fingerprint },
-      });
+      const fpCount = await prisma.user.count({ where: { fingerprint } });
       if (fpCount >= 1) {
         return NextResponse.json(
           { success: false, error: "Ya tienes una cuenta registrada en este navegador." },
@@ -112,40 +119,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── ANTI-ABUSE: Rate limit — max 3 registrations per IP in last 24h ──
-    const recentRegs = await prisma.user.count({
-      where: {
-        ipAddress: clientIP,
-        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-      },
+    // ── Check username unique ──
+    const existing = await prisma.user.findFirst({
+      where: { username: { equals: username, mode: "insensitive" } },
     });
-    if (recentRegs >= 3) {
-      return NextResponse.json(
-        { success: false, error: "Demasiados registros desde tu red. Intenta ma\u00f1ana." },
-        { status: 429 }
-      );
-    }
-
-    // ── ANTI-ABUSE: Block reserved usernames ──
-    const reserved = /^(admin|moderator|root|support|help|netflix|nfchecker|hachejota|staff|system)/i;
-    if (reserved.test(username.trim())) {
-      return NextResponse.json(
-        { success: false, error: "Nombre de usuario no disponible." },
-        { status: 400 }
-      );
-    }
-
-    // ── ANTI-ABUSE: Block disposable email patterns in username ──
-    const disposablePattern = /(test|temp|fake|spam|bot|dummy|anon)/i;
-    if (disposablePattern.test(username.trim())) {
-      return NextResponse.json(
-        { success: false, error: "Nombre de usuario no permitido." },
-        { status: 400 }
-      );
-    }
-
-    // ── Check username unique (case-insensitive) ──
-    const existing = await prisma.user.findFirst({ where: { username: { equals: username.trim(), mode: 'insensitive' } } });
     if (existing) {
       return NextResponse.json(
         { success: false, error: "Ese usuario ya existe" },
@@ -153,21 +130,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Validate referral code if provided ──
-    let referrer: {
-      id: string;
-      createdAt: Date;
-      ipAddress: string | null;
-      fingerprint: string | null;
-      username: string;
-    } | null = null;
+    // ── Validate referral code ──
+    let referrer: { id: string; createdAt: Date; ipAddress: string | null; fingerprint: string | null; username: string } | null = null;
     let referralCodeUsed: string | null = null;
 
-    if (referralCode && referralCode.trim()) {
-      const code = referralCode.trim().toUpperCase();
-
+    if (referralCode) {
       const foundReferrer = await prisma.user.findUnique({
-        where: { referralCode: code },
+        where: { referralCode },
       });
 
       if (!foundReferrer) {
@@ -177,16 +146,16 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // ── ANTI-ABUSE: Referrer account must be at least 10 minutes old ──
+      // Referrer must be at least 10 minutes old
       const referrerAge = Date.now() - foundReferrer.createdAt.getTime();
       if (referrerAge < 10 * 60 * 1000) {
         return NextResponse.json(
-          { success: false, error: "El código de referido es muy reciente. Espera al menos 10 minutos." },
+          { success: false, error: "El código de referido es muy reciente." },
           { status: 400 }
         );
       }
 
-      // ── ANTI-ABUSE: Cannot be referred by someone with same IP ──
+      // Cannot be referred by same IP
       if (foundReferrer.ipAddress === clientIP) {
         return NextResponse.json(
           { success: false, error: "No puedes usar tu propio código de referido." },
@@ -194,7 +163,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // ── ANTI-ABUSE: Cannot be referred by someone with same fingerprint ──
+      // Same fingerprint check
       if (fingerprint && foundReferrer.fingerprint === fingerprint) {
         return NextResponse.json(
           { success: false, error: "No puedes usar tu propio código de referido." },
@@ -202,12 +171,9 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // ── ANTI-ABUSE: One referral per referrer per IP ──
+      // One referral per referrer per IP
       const sameRefSameIP = await prisma.user.count({
-        where: {
-          referredBy: code,
-          ipAddress: clientIP,
-        },
+        where: { referredBy: referralCode, ipAddress: clientIP },
       });
       if (sameRefSameIP > 0) {
         return NextResponse.json(
@@ -217,14 +183,12 @@ export async function POST(request: NextRequest) {
       }
 
       referrer = foundReferrer;
-      referralCodeUsed = code;
+      referralCodeUsed = referralCode;
     }
 
     // ── Create user ──
     const hashedPassword = await bcrypt.hash(password, 10);
     let finalCode = generateReferralCode();
-
-    // Ensure referral code is unique
     let codeExists = await prisma.user.findUnique({ where: { referralCode: finalCode } });
     while (codeExists) {
       finalCode = generateReferralCode();
@@ -233,7 +197,7 @@ export async function POST(request: NextRequest) {
 
     const user = await prisma.user.create({
       data: {
-        username: username.trim(),
+        username,
         password: hashedPassword,
         role: "USER",
         credits: REGISTER_BONUS,
@@ -244,7 +208,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Create register bonus transaction
     await prisma.transaction.create({
       data: {
         userId: user.id,
@@ -254,7 +217,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Give referral bonus to referrer
     if (referrer) {
       await prisma.$transaction([
         prisma.user.update({
@@ -272,8 +234,8 @@ export async function POST(request: NextRequest) {
       ]);
     }
 
-    // Generate JWT
-    const token = await createToken({
+    // ── Generate tokens & respond ──
+    const tokens = await createTokenPair({
       userId: user.id,
       username: user.username,
       role: user.role,
@@ -293,12 +255,15 @@ export async function POST(request: NextRequest) {
         : `¡Cuenta creada! Tienes ${REGISTER_BONUS} créditos de bienvenida.`,
     });
 
-    response.cookies.set("auth-token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
+    setAuthCookies(response, tokens);
+
+    logSecurityEvent({
+      level: "info",
+      event: SecurityEvents.REGISTER_SUCCESS,
+      ip: clientIP,
+      userId: user.id,
+      username: user.username,
+      details: { referredBy: referralCodeUsed || null },
     });
 
     return response;

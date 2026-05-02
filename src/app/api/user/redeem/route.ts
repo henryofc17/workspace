@@ -1,139 +1,102 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { validateBody, redeemSchema } from "@/lib/validators";
+import { logSecurityEvent, SecurityEvents } from "@/lib/security";
 
 const REFERRAL_BONUS = 5;
 const REDEEM_BONUS = 3;
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ success: false, error: "No autenticado" }, { status: 401 });
     }
 
-    const { code } = await request.json();
-
-    if (!code || !code.trim()) {
-      return NextResponse.json(
-        { success: false, error: "Ingresa un código de referido" },
-        { status: 400 }
-      );
+    // ── Validate body ──
+    const body = await request.json();
+    const validation = validateBody(redeemSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ success: false, error: validation.error }, { status: 400 });
     }
 
-    const cleanCode = code.trim().toUpperCase();
+    const cleanCode = validation.data.code;
 
-    // ── Cannot use your own code ──
+    // ── Cannot use own code ──
     const me = await prisma.user.findUnique({
       where: { id: session.userId },
       select: { referralCode: true },
     });
 
     if (me?.referralCode === cleanCode) {
-      return NextResponse.json(
-        { success: false, error: "No puedes usar tu propio código" },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "No puedes usar tu propio código" }, { status: 400 });
     }
 
-    // ── Check if already used a referral code ──
+    // ── Already redeemed ──
     const myReferral = await prisma.user.findUnique({
       where: { id: session.userId },
       select: { referredBy: true },
     });
 
     if (myReferral?.referredBy) {
-      return NextResponse.json(
-        { success: false, error: "Ya canjeaste un código de referido" },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "Ya canjeaste un código de referido" }, { status: 400 });
     }
 
     // ── Find referrer ──
-    const referrer = await prisma.user.findUnique({
-      where: { referralCode: cleanCode },
-    });
+    const referrer = await prisma.user.findUnique({ where: { referralCode: cleanCode } });
 
     if (!referrer) {
-      return NextResponse.json(
-        { success: false, error: "Código de referido inválido" },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "Código de referido inválido" }, { status: 400 });
     }
 
-    // ── ANTI-ABUSE: Referrer account must be at least 1 hour old ──
+    // ── ANTI-ABUSE: Referrer must be at least 1 hour old ──
     const referrerAge = Date.now() - referrer.createdAt.getTime();
     if (referrerAge < 60 * 60 * 1000) {
-      return NextResponse.json(
-        { success: false, error: "Ese código es muy reciente. Intenta más tarde." },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "Ese código es muy reciente." }, { status: 400 });
     }
 
-    // ── ANTI-ABUSE: Same IP check ──
-    if (referrer.ipAddress) {
-      const myIP = await prisma.user.findUnique({
-        where: { id: session.userId },
-        select: { ipAddress: true },
+    // ── ANTI-ABUSE: Same IP / fingerprint ──
+    const myUser = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { ipAddress: true, fingerprint: true },
+    });
+
+    if (myUser?.ipAddress && referrer.ipAddress && myUser.ipAddress === referrer.ipAddress) {
+      logSecurityEvent({
+        level: "warn",
+        event: SecurityEvents.SUSPICIOUS_ACTIVITY,
+        userId: session.userId,
+        username: session.username,
+        details: { type: "self_referral_same_ip", referrerId: referrer.id },
       });
-      if (myIP?.ipAddress && myIP.ipAddress === referrer.ipAddress) {
-        return NextResponse.json(
-          { success: false, error: "No puedes usar un código de tu misma red." },
-          { status: 400 }
-        );
-      }
+      return NextResponse.json({ success: false, error: "No puedes usar un código de tu misma red." }, { status: 400 });
     }
 
-    // ── ANTI-ABUSE: Same fingerprint check ──
-    if (referrer.fingerprint) {
-      const myFP = await prisma.user.findUnique({
-        where: { id: session.userId },
-        select: { fingerprint: true },
-      });
-      if (myFP?.fingerprint && myFP.fingerprint === referrer.fingerprint) {
-        return NextResponse.json(
-          { success: false, error: "No puedes usar tu propio código de referido." },
-          { status: 400 }
-        );
-      }
+    if (myUser?.fingerprint && referrer.fingerprint && myUser.fingerprint === referrer.fingerprint) {
+      return NextResponse.json({ success: false, error: "No puedes usar tu propio código." }, { status: 400 });
     }
 
     // ── ANTI-ABUSE: One referral per referrer per IP ──
-    const myIP = await prisma.user.findUnique({
-      where: { id: session.userId },
-      select: { ipAddress: true },
-    });
-    if (myIP?.ipAddress) {
+    if (myUser?.ipAddress) {
       const sameRefSameIP = await prisma.user.count({
-        where: {
-          referredBy: cleanCode,
-          ipAddress: myIP.ipAddress,
-        },
+        where: { referredBy: cleanCode, ipAddress: myUser.ipAddress },
       });
       if (sameRefSameIP > 0) {
-        return NextResponse.json(
-          { success: false, error: "Ya existe una cuenta referida por este código en tu red." },
-          { status: 400 }
-        );
+        return NextResponse.json({ success: false, error: "Ya existe una cuenta referida por este código en tu red." }, { status: 400 });
       }
     }
 
     // ── Apply referral ──
     await prisma.$transaction([
-      // Mark user as referred + give redeem bonus
       prisma.user.update({
         where: { id: session.userId },
-        data: {
-          referredBy: cleanCode,
-          credits: { increment: REDEEM_BONUS },
-        },
+        data: { referredBy: cleanCode, credits: { increment: REDEEM_BONUS } },
       }),
-      // Give bonus to referrer
       prisma.user.update({
         where: { id: referrer.id },
         data: { credits: { increment: REFERRAL_BONUS } },
       }),
-      // Log referrer's bonus
       prisma.transaction.create({
         data: {
           userId: referrer.id,
@@ -142,7 +105,6 @@ export async function POST(request: NextRequest) {
           description: `Bonus por referido: ${session.username}`,
         },
       }),
-      // Log my bonus
       prisma.transaction.create({
         data: {
           userId: session.userId,
@@ -159,6 +121,7 @@ export async function POST(request: NextRequest) {
       referrerUsername: referrer.username,
     });
   } catch (err: any) {
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    console.error("Redeem error:", err);
+    return NextResponse.json({ success: false, error: "Error del servidor" }, { status: 500 });
   }
 }

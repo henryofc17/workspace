@@ -1,19 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { validateBody, updateCreditsSchema } from "@/lib/validators";
+import { logSecurityEvent } from "@/lib/security";
 
-// PUT /api/admin/credits — update user credits
 export async function PUT(request: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
-      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 403 });
+    const session = await requireAdmin();
+
+    const body = await request.json();
+    const validation = validateBody(updateCreditsSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ success: false, error: validation.error }, { status: 400 });
     }
 
-    const { userId, amount, description } = await request.json();
+    const { userId, amount, description } = validation.data;
 
-    if (!userId || amount === undefined || amount === null) {
-      return NextResponse.json({ success: false, error: "userId y amount requeridos" }, { status: 400 });
+    // Validate userId format
+    if (!/^[\w-]+$/.test(userId)) {
+      return NextResponse.json({ success: false, error: "ID de usuario inválido" }, { status: 400 });
     }
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -23,7 +28,7 @@ export async function PUT(request: NextRequest) {
 
     const newCredits = user.credits + Number(amount);
     if (newCredits < 0) {
-      return NextResponse.json({ success: false, error: "Créditos insuficientes para esta operación" }, { status: 400 });
+      return NextResponse.json({ success: false, error: "Créditos insuficientes" }, { status: 400 });
     }
 
     const updatedUser = await prisma.user.update({
@@ -41,8 +46,22 @@ export async function PUT(request: NextRequest) {
       },
     });
 
+    logSecurityEvent({
+      level: "info",
+      event: "ADMIN_UPDATE_CREDITS",
+      userId: session.userId,
+      username: session.username,
+      details: { targetUser: updatedUser.username, amount, newCredits: updatedUser.credits },
+    });
+
     return NextResponse.json({ success: true, user: updatedUser });
   } catch (err: any) {
+    if (err.message === "UNAUTHORIZED") {
+      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 });
+    }
+    if (err.message === "FORBIDDEN") {
+      return NextResponse.json({ success: false, error: "Acceso denegado" }, { status: 403 });
+    }
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

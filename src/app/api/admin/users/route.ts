@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSession, requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { validateBody, createUserSchema } from "@/lib/validators";
+import { logSecurityEvent, SecurityEvents, getClientIP } from "@/lib/security";
 
 function generateReferralCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -15,11 +17,7 @@ function generateReferralCode(): string {
 // GET /api/admin/users — list all users with referral data
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
-      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 403 });
-    }
-
+    const session = await requireAdmin();
     const users = await prisma.user.findMany({
       select: {
         id: true,
@@ -30,10 +28,7 @@ export async function GET() {
         referredBy: true,
         createdAt: true,
         _count: {
-          select: {
-            transactions: true,
-            referrals: true,
-          },
+          select: { transactions: true, referrals: true },
         },
         referrer: {
           select: { username: true, id: true },
@@ -44,6 +39,12 @@ export async function GET() {
 
     return NextResponse.json({ success: true, users });
   } catch (err: any) {
+    if (err.message === "UNAUTHORIZED") {
+      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 });
+    }
+    if (err.message === "FORBIDDEN") {
+      return NextResponse.json({ success: false, error: "Acceso denegado" }, { status: 403 });
+    }
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
@@ -51,33 +52,25 @@ export async function GET() {
 // POST /api/admin/users — create new user
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
-      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 403 });
+    const session = await requireAdmin();
+
+    const body = await request.json();
+    const validation = validateBody(createUserSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ success: false, error: validation.error }, { status: 400 });
     }
 
-    const { username, password, credits } = await request.json();
+    const { username, password, credits } = validation.data;
 
-    if (!username || !password) {
-      return NextResponse.json({ success: false, error: "Usuario y contraseña requeridos" }, { status: 400 });
-    }
-
-    if (username.length < 3) {
-      return NextResponse.json({ success: false, error: "Usuario debe tener al menos 3 caracteres" }, { status: 400 });
-    }
-
-    if (password.length < 4) {
-      return NextResponse.json({ success: false, error: "Contraseña debe tener al menos 4 caracteres" }, { status: 400 });
-    }
-
-    const existing = await prisma.user.findFirst({ where: { username: { equals: username.trim(), mode: 'insensitive' } } });
+    const existing = await prisma.user.findFirst({
+      where: { username: { equals: username, mode: "insensitive" } },
+    });
     if (existing) {
       return NextResponse.json({ success: false, error: "Usuario ya existe" }, { status: 400 });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Generate unique referral code
     let referralCode = generateReferralCode();
     let codeExists = await prisma.user.findUnique({ where: { referralCode } });
     while (codeExists) {
@@ -87,7 +80,7 @@ export async function POST(request: NextRequest) {
 
     const user = await prisma.user.create({
       data: {
-        username: username.trim(),
+        username,
         password: hashedPassword,
         role: "USER",
         credits: credits || 0,
@@ -102,13 +95,27 @@ export async function POST(request: NextRequest) {
           userId: user.id,
           type: "ADMIN_GRANT",
           credits: Number(credits),
-          description: `Créditos iniciales otorgados por admin`,
+          description: "Créditos iniciales otorgados por admin",
         },
       });
     }
 
+    logSecurityEvent({
+      level: "info",
+      event: "ADMIN_CREATE_USER",
+      userId: session.userId,
+      username: session.username,
+      details: { createdUser: user.username, credits },
+    });
+
     return NextResponse.json({ success: true, user });
   } catch (err: any) {
+    if (err.message === "UNAUTHORIZED") {
+      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 });
+    }
+    if (err.message === "FORBIDDEN") {
+      return NextResponse.json({ success: false, error: "Acceso denegado" }, { status: 403 });
+    }
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
@@ -116,10 +123,7 @@ export async function POST(request: NextRequest) {
 // DELETE /api/admin/users — delete user by id
 export async function DELETE(request: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
-      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 403 });
-    }
+    const session = await requireAdmin();
 
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("id");
@@ -128,21 +132,39 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: "ID requerido" }, { status: 400 });
     }
 
+    // Validate userId format (cuid)
+    if (!/^[\w-]+$/.test(userId)) {
+      return NextResponse.json({ success: false, error: "ID inválido" }, { status: 400 });
+    }
+
     if (userId === session.userId) {
       return NextResponse.json({ success: false, error: "No puedes eliminarte a ti mismo" }, { status: 400 });
     }
 
-    // Remove referredBy reference from any referrals
-    await prisma.user.updateMany({
-      where: { referredBy: (await prisma.user.findUnique({ where: { id: userId }, select: { referralCode: true } }))?.referralCode || "" },
-      data: { referredBy: null },
+    const deletedUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { username: true },
     });
 
     await prisma.transaction.deleteMany({ where: { userId } });
     await prisma.user.delete({ where: { id: userId } });
 
+    logSecurityEvent({
+      level: "warn",
+      event: "ADMIN_DELETE_USER",
+      userId: session.userId,
+      username: session.username,
+      details: { deletedUserId: userId, deletedUsername: deletedUser?.username },
+    });
+
     return NextResponse.json({ success: true });
   } catch (err: any) {
+    if (err.message === "UNAUTHORIZED") {
+      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 });
+    }
+    if (err.message === "FORBIDDEN") {
+      return NextResponse.json({ success: false, error: "Acceso denegado" }, { status: 403 });
+    }
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { checkCookie, extractCookiesFromText } from "@/lib/netflix-checker";
+import { extractCookiesFromText } from "@/lib/netflix-checker";
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
-      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 403 });
-    }
+    await requireAdmin();
 
     const { searchParams } = new URL(request.url);
     const onlyActive = searchParams.get("active") === "true";
@@ -17,9 +14,14 @@ export async function POST(request: NextRequest) {
     const cookies = await prisma.cookie.findMany({ where });
 
     if (cookies.length === 0) {
-      return NextResponse.json({ success: true, message: "No hay cookies para validar", results: { checked: 0, alive: 0, dead: 0 } });
+      return NextResponse.json({
+        success: true,
+        message: "No hay cookies para validar",
+        results: { checked: 0, alive: 0, dead: 0 },
+      });
     }
 
+    const { checkCookie } = await import("@/lib/netflix-checker");
     let alive = 0;
     let dead = 0;
 
@@ -37,7 +39,6 @@ export async function POST(request: NextRequest) {
 
       try {
         const result = await checkCookie(dict);
-
         if (result.success) {
           await prisma.cookie.update({
             where: { id: cookie.id },
@@ -66,6 +67,12 @@ export async function POST(request: NextRequest) {
       results: { checked: cookies.length, alive, dead },
     });
   } catch (err: any) {
+    if (err.message === "UNAUTHORIZED") {
+      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 });
+    }
+    if (err.message === "FORBIDDEN") {
+      return NextResponse.json({ success: false, error: "Acceso denegado" }, { status: 403 });
+    }
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

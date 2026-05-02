@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { extractCookiesFromText, buildCookieString } from "@/lib/netflix-checker";
+import { validateBody, tvActivateSchema } from "@/lib/validators";
 
 const TV_ACTIVATE_COST = 5;
 
 const DESKTOP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function getVal(html: string, key: string): string | null {
   const m = html.match(new RegExp(`"${key}"\\s*:\\s*"([^"]+)"`));
@@ -16,13 +14,10 @@ function getVal(html: string, key: string): string | null {
 }
 
 function getAuthURL(html: string): string | null {
-  // Try input[name=authURL] first
   const inputMatch = html.match(/name="authURL"\s+value="([^"]+)"/);
   if (inputMatch) return inputMatch[1];
   return getVal(html, "authURL");
 }
-
-// ─── POST /api/user/tv-activate ─────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,17 +26,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "No autenticado" }, { status: 401 });
     }
 
+    // ── Validate body ──
     const body = await request.json();
-    const { code } = body;
-
-    if (!code || !code.trim()) {
-      return NextResponse.json({ success: false, error: "Ingresa el código de TV" }, { status: 400 });
+    const validation = validateBody(tvActivateSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ success: false, error: validation.error }, { status: 400 });
     }
 
-    const cleanCode = code.trim();
-    if (!/^\d{8}$/.test(cleanCode)) {
-      return NextResponse.json({ success: false, error: "El código debe tener exactamente 8 dígitos" }, { status: 400 });
-    }
+    const cleanCode = validation.data.code;
 
     // ── Check credits ──
     const user = await prisma.user.findUnique({ where: { id: session.userId } });
@@ -55,7 +47,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Pick cookie with smart rotation (least used, oldest lastUsed) ──
+    // ── Pick cookie with rotation ──
     const cookies = await prisma.cookie.findMany({
       where: { status: "ACTIVE" },
       orderBy: [{ usedCount: "asc" }, { lastUsed: "asc" }],
@@ -64,10 +56,12 @@ export async function POST(request: NextRequest) {
 
     if (!cookies || cookies.length === 0) {
       return NextResponse.json(
-        { success: false, error: "No hay cookies disponibles. Contacta al administrador.", noCookies: true },
+        { success: false, error: "No hay cookies disponibles.", noCookies: true },
         { status: 503 }
       );
     }
+
+    const { extractCookiesFromText, buildCookieString } = await import("@/lib/netflix-checker");
 
     const cookie = cookies[Math.floor(Math.random() * cookies.length)];
     const cookieDict = extractCookiesFromText(cookie.rawCookie);
@@ -80,7 +74,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Cookie dañada, intenta de nuevo", retry: true });
     }
 
-    // ── Step 1: GET /tv8 to validate cookie & get authURL ──
+    // ── Step 1: GET /tv8 ──
     const rawCookie = buildCookieString(cookieDict, false);
 
     let tv8Response: Response;
@@ -99,9 +93,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: `Error de conexión: ${err.message}` }, { status: 500 });
     }
 
-    // Netflix redirects to login if cookie is dead
-    if (tv8Response.status === 301 || tv8Response.status === 302 || tv8Response.status === 303 || tv8Response.status === 307) {
-      const loc = tv8Response.headers.get("Location") || "";
+    if ([301, 302, 303, 307].includes(tv8Response.status)) {
       await prisma.cookie.update({
         where: { id: cookie.id },
         data: { status: "DEAD", lastError: "Cookie expirada (redirect en /tv8)", lastUsed: new Date() },
@@ -119,25 +111,21 @@ export async function POST(request: NextRequest) {
 
     const html = await tv8Response.text();
 
-    // Validate membership
     const membershipStatus = getVal(html, "membershipStatus");
     if (membershipStatus !== "CURRENT_MEMBER") {
       await prisma.cookie.update({
         where: { id: cookie.id },
         data: { status: "DEAD", lastError: `Estado: ${membershipStatus || "UNKNOWN"}`, lastUsed: new Date() },
       });
-      return NextResponse.json(
-        { success: false, error: "La cookie no tiene una suscripción activa", retry: true }
-      );
+      return NextResponse.json({ success: false, error: "La cookie no tiene suscripción activa", retry: true });
     }
 
-    // Extract authURL
     const authURL = getAuthURL(html);
     if (!authURL) {
-      return NextResponse.json({ success: false, error: "Error interno: no se pudo obtener authURL" }, { status: 500 });
+      return NextResponse.json({ success: false, error: "Error interno: no se obtuvo authURL" }, { status: 500 });
     }
 
-    // ── Step 2: POST /tv8 with code + authURL ──
+    // ── Step 2: POST /tv8 ──
     const payload = new URLSearchParams({
       flow: "websiteSignUp",
       authURL: authURL,
@@ -185,14 +173,12 @@ export async function POST(request: NextRequest) {
         resultMessage = "Redirección inesperada. Intenta de nuevo.";
       }
     } else {
-      // Try to extract error from HTML
       const errText = await activateResponse.text().catch(() => "");
       const nfMessage = errText.match(/class="nf-message-contents"[^>]*>([\s\S]*?)<\/div>/);
-      resultMessage = nfMessage ? nfMessage[1].trim() : "Error al enviar el código. Verifica que sea correcto e intenta.";
+      resultMessage = nfMessage ? nfMessage[1].trim() : "Error al enviar el código. Verifica e intenta.";
     }
 
     if (success) {
-      // Deduct credits & log
       await prisma.$transaction([
         prisma.user.update({
           where: { id: session.userId },

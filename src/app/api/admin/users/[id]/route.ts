@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/admin/users/[id] — get user detail with referrals + transactions
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
-      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 403 });
-    }
+    await requireAdmin();
 
     const { id } = await params;
+
+    // Validate ID format
+    if (!/^[\w-]+$/.test(id)) {
+      return NextResponse.json({ success: false, error: "ID inválido" }, { status: 400 });
+    }
 
     const user = await prisma.user.findUnique({
       where: { id },
@@ -67,6 +68,12 @@ export async function GET(
 
     return NextResponse.json({ success: true, user });
   } catch (err: any) {
+    if (err.message === "UNAUTHORIZED") {
+      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 });
+    }
+    if (err.message === "FORBIDDEN") {
+      return NextResponse.json({ success: false, error: "Acceso denegado" }, { status: 403 });
+    }
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
