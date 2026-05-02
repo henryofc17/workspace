@@ -523,7 +523,7 @@ export default function Home() {
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02] text-white/40 hover:text-white/70 hover:bg-white/[0.05] hover:border-white/[0.1] transition-all duration-300 text-xs font-medium"
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                Limpiar historial
+                Limpiar
               </button>
               {checkerResult.success ? (
                 <div className="rounded-2xl border border-emerald-500/20 bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
@@ -889,12 +889,23 @@ export default function Home() {
         {/* ═══ Transaction History ═══ */}
         <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
           <CardHeader className="pb-3 px-5 pt-5">
-            <CardTitle className="text-white/70 text-sm flex items-center gap-2.5">
-              <div className="h-7 w-7 rounded-lg bg-[#E50914]/10 border border-[#E50914]/20 flex items-center justify-center">
-                <CreditCard className="h-3.5 w-3.5 text-[#E50914]" />
-              </div>
-              Historial de Transacciones
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-white/70 text-sm flex items-center gap-2.5">
+                <div className="h-7 w-7 rounded-lg bg-[#E50914]/10 border border-[#E50914]/20 flex items-center justify-center">
+                  <CreditCard className="h-3.5 w-3.5 text-[#E50914]" />
+                </div>
+                Historial de Transacciones
+              </CardTitle>
+              {transactions.length > 0 && (
+                <button
+                  onClick={() => setTransactions([])}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/[0.06] bg-white/[0.02] text-white/30 hover:text-white/60 hover:bg-white/[0.05] hover:border-white/[0.1] transition-all duration-300 text-[10px] font-medium"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Limpiar historial
+                </button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="px-3 pb-3">
             <div className="space-y-1 max-h-[280px] overflow-y-auto premium-scrollbar">
