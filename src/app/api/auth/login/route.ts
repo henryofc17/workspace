@@ -4,8 +4,28 @@ import bcrypt from "bcryptjs"
 import { cookies } from "next/headers"
 import { createToken } from "@/lib/auth"
 
+// Rate limit: max 10 attempts per IP per 15 min
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+
 export async function POST(req: Request) {
   try {
+    // Rate limit by IP
+    const forwarded = req.headers.get("x-forwarded-for");
+    const clientIP = forwarded ? forwarded.split(",")[0].trim() : "unknown";
+    const now = Date.now();
+    const entry = loginAttempts.get(clientIP);
+    if (!entry || now > entry.resetAt) {
+      loginAttempts.set(clientIP, { count: 1, resetAt: now + 15 * 60 * 1000 });
+    } else {
+      entry.count++;
+      if (entry.count > 10) {
+        return NextResponse.json(
+          { error: "Demasiados intentos. Espera unos minutos." },
+          { status: 429 }
+        );
+      }
+    }
+
     const body = await req.json()
 
     const username = body.username?.trim()

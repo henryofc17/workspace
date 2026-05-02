@@ -139,6 +139,7 @@ export default function LoginPage() {
   const [showRegPassword, setShowRegPassword] = useState(false);
 
   const [widgetReady, setWidgetReady] = useState(false);
+  const [regWidgetId, setRegWidgetId] = useState<any>(null);
 
   useEffect(() => {
     let tries = 0;
@@ -157,6 +158,29 @@ export default function LoginPage() {
     }, 500);
     return () => clearInterval(t);
   }, [widgetReady]);
+
+  // Render register turnstile when switching to register tab
+  useEffect(() => {
+    if (tab !== "register") return;
+    let tries = 0;
+    const t = setInterval(() => {
+      tries++;
+      if (window.turnstile && document.getElementById("cf-turnstile-register")) {
+        clearInterval(t);
+        const el = document.getElementById("cf-turnstile-register");
+        if (el && el.children.length === 0) {
+          const id = window.turnstile.render("#cf-turnstile-register", {
+            sitekey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+            theme: "dark",
+            callback: (token: string) => { window.cfToken = token; },
+          });
+          setRegWidgetId(id);
+        }
+      }
+      if (tries >= 30) clearInterval(t);
+    }, 300);
+    return () => clearInterval(t);
+  }, [tab]);
 
   const handleLogin = useCallback(async () => {
     if (!username.trim() || !password.trim()) { toast.error("Completa todos los campos"); return; }
@@ -182,17 +206,19 @@ export default function LoginPage() {
 
   const handleRegister = useCallback(async () => {
     if (!regUsername.trim() || !regPassword.trim()) { toast.error("Completa usuario y contrasena"); return; }
+    if (!window.cfToken) { toast.error("Completa la verificacion"); return; }
     setRegLoading(true);
     try {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: regUsername.trim(), password: regPassword, referralCode: regReferral || undefined, fingerprint: generateFingerprint() }),
+        body: JSON.stringify({ username: regUsername.trim(), password: regPassword, referralCode: regReferral || undefined, fingerprint: generateFingerprint(), turnstileToken: window.cfToken }),
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error || "Error al registrarse"); return; }
       toast.success("Cuenta creada, ahora inicia sesion");
       setTab("login"); setRegUsername(""); setRegPassword(""); setRegReferral("");
+      if (regWidgetId && window.turnstile) { window.turnstile.reset(regWidgetId); window.cfToken = ""; }
     } catch { toast.error("Error de conexion"); }
     finally { setRegLoading(false); }
   }, [regUsername, regPassword, regReferral]);
@@ -361,6 +387,9 @@ export default function LoginPage() {
                         onTogglePassword={() => setShowRegPassword(!showRegPassword)}
                       />
                       <PremiumInput icon={Gift} value={regReferral} onChange={(e) => setRegReferral(e.target.value)} placeholder="Codigo referido (opcional)" />
+
+                      {/* Turnstile for Register */}
+                      <div id="cf-turnstile-register" className="flex justify-center" />
 
                       <motion.div
                         initial={{ opacity: 0 }}

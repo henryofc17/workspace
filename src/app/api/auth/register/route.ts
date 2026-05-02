@@ -6,6 +6,22 @@ import { createToken } from "@/lib/auth";
 const REGISTER_BONUS = 3;
 const REFERRAL_BONUS = 5;
 
+async function verifyTurnstile(token: string): Promise<boolean> {
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+  if (!secret) return true;
+  try {
+    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret, response: token }),
+    });
+    const data = await res.json();
+    return data.success === true;
+  } catch {
+    return false;
+  }
+}
+
 function generateReferralCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "NF-";
@@ -25,11 +41,26 @@ function getClientIP(request: NextRequest): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, password, referralCode, fingerprint } = await request.json();
+    const { username, password, referralCode, fingerprint, turnstileToken } = await request.json();
 
     if (!username || !password) {
       return NextResponse.json(
         { success: false, error: "Usuario y contraseña requeridos" },
+        { status: 400 }
+      );
+    }
+
+    // Verify turnstile
+    if (!turnstileToken) {
+      return NextResponse.json(
+        { success: false, error: "Completa la verificación" },
+        { status: 400 }
+      );
+    }
+    const turnstileValid = await verifyTurnstile(turnstileToken);
+    if (!turnstileValid) {
+      return NextResponse.json(
+        { success: false, error: "Verificación fallida. Intenta de nuevo." },
         { status: 400 }
       );
     }
