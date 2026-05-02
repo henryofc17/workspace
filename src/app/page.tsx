@@ -29,6 +29,9 @@ import {
   Calendar,
   Gift,
   Share2,
+  RefreshCw,
+  RotateCcw,
+  Trash2,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -456,7 +459,7 @@ export default function Home() {
               value="copy"
               className="flex-1 py-2.5 text-xs font-medium data-[state=active]:bg-violet-500/15 data-[state=active]:text-violet-400 data-[state=active]:border-violet-500/20 data-[state=active]:shadow-[0_0_20px_rgba(167,139,250,0.08)] text-white/40 transition-all duration-300 rounded-lg border border-transparent"
             >
-              <span className="mr-1.5 text-sm">{"\uD83D\uDD01"}</span>
+              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
               Generar Cookie
             </TabsTrigger>
           </TabsList>
@@ -513,7 +516,16 @@ export default function Home() {
             )}
 
             {checkerResult && !checking && (
-              checkerResult.success ? (
+              <div className="space-y-3">
+              {/* Limpiar Historial Button */}
+              <button
+                onClick={() => { setCheckerResult(null); setCookieText(""); setCopiedLink(false); }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02] text-white/40 hover:text-white/70 hover:bg-white/[0.05] hover:border-white/[0.1] transition-all duration-300 text-xs font-medium"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Limpiar historial
+              </button>
+              {checkerResult.success ? (
                 <div className="rounded-2xl border border-emerald-500/20 bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
                   <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/10 to-transparent pointer-events-none" />
                   <CardHeader className="pb-3 px-5 pt-5 relative">
@@ -584,7 +596,8 @@ export default function Home() {
                     </div>
                   </CardContent>
                 </div>
-              )
+              )}
+              </div>
             )}
           </TabsContent>
 
@@ -682,7 +695,7 @@ export default function Home() {
               <CardHeader className="pb-3 px-5 pt-5 relative">
                 <CardTitle className="text-violet-400 text-sm flex items-center gap-2.5">
                   <div className="h-7 w-7 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
-                    <span className="text-base">{"\uD83D\uDD01"}</span>
+                    <RefreshCw className="h-3.5 w-3.5 text-violet-400" />
                   </div>
                   Generar Cookie de Netflix
                 </CardTitle>
@@ -709,7 +722,7 @@ export default function Home() {
                   {copying ? (
                     <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Generando Cookie...</>
                   ) : (
-                    <><span className="mr-2">{"\uD83D\uDD01"}</span> Generar Cookie</>
+                    <><RefreshCw className="h-5 w-5 mr-2" /> Generar Cookie</>
                   )}
                 </Button>
 
