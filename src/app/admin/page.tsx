@@ -32,6 +32,7 @@ import {
   Crown,
   Activity,
   Eye,
+  Copy,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -202,6 +203,11 @@ export default function AdminPage() {
   const [refreshing, setRefreshing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+
+  // Duplicates
+  const [duplicateCount, setDuplicateCount] = useState<number | null>(null);
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [deletingDuplicates, setDeletingDuplicates] = useState(false);
 
   // Active tab
   const [tab, setTab] = useState<"dashboard" | "users" | "cookies">("dashboard");
@@ -383,6 +389,61 @@ export default function AdminPage() {
       toast.error("Error");
     }
   }, [loadData]);
+
+  // ── Check Duplicates ──
+  const handleCheckDuplicates = useCallback(async () => {
+    setCheckingDuplicates(true);
+    setDuplicateCount(null);
+    try {
+      const cookiesRes = await fetch("/api/admin/cookies").then((r) => r.json());
+      if (!cookiesRes.success) { toast.error("Error al obtener cookies"); return; }
+
+      const seenIds = new Map<string, number>();
+      let dupes = 0;
+      for (const cookie of cookiesRes.cookies) {
+        // Extract NetflixId from rawCookie
+        const match = cookie.rawCookie.match(/NetflixId=([^;]+)/);
+        if (!match) continue;
+        const netflixId = match[1];
+        if (seenIds.has(netflixId)) {
+          dupes++;
+        } else {
+          seenIds.set(netflixId, 1);
+        }
+      }
+      setDuplicateCount(dupes);
+      if (dupes === 0) {
+        toast.success("No hay cookies duplicadas");
+      } else {
+        toast.info(`Se encontraron ${dupes} cookies duplicadas`);
+      }
+    } catch {
+      toast.error("Error al buscar duplicados");
+    } finally {
+      setCheckingDuplicates(false);
+    }
+  }, []);
+
+  // ── Delete Duplicates ──
+  const handleDeleteDuplicates = useCallback(async () => {
+    if (!confirm(`¿Eliminar ${duplicateCount} cookies duplicadas? Se mantendrá la más antigua de cada grupo.`)) return;
+    setDeletingDuplicates(true);
+    try {
+      const res = await fetch("/api/admin/cookies?type=duplicates", { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message || `${data.deleted} duplicadas eliminadas`);
+        setDuplicateCount(null);
+        loadData();
+      } else {
+        toast.error(data.error || "Error al eliminar duplicadas");
+      }
+    } catch {
+      toast.error("Error al eliminar duplicadas");
+    } finally {
+      setDeletingDuplicates(false);
+    }
+  }, [duplicateCount, loadData]);
 
   // ── Logout ──
   const handleLogout = useCallback(async () => {
@@ -972,6 +1033,32 @@ export default function AdminPage() {
                       <Trash2 className="h-4 w-4" />
                       Limpiar Muertas
                     </button>
+                    <button
+                      onClick={handleCheckDuplicates}
+                      disabled={checkingDuplicates || refreshing || uploadingCookies}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-amber-500/20 bg-amber-500/[0.05] text-amber-400 text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-amber-500/10 active:scale-[0.98]"
+                    >
+                      {checkingDuplicates ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                      Buscar Repetidas
+                    </button>
+                    {duplicateCount !== null && duplicateCount > 0 && (
+                      <button
+                        onClick={handleDeleteDuplicates}
+                        disabled={deletingDuplicates}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-red-500/10 hover:shadow-red-500/20 active:scale-[0.98]"
+                      >
+                        {deletingDuplicates ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                        Eliminar Repetidas ({duplicateCount})
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

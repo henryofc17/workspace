@@ -899,7 +899,7 @@ export default function Home() {
               </a>
             </div>
             <p className="text-white/15 text-[10px] text-center">
-              Respuesta rápida. Paquetes desde 1 crédito.
+              Respuesta rápida. Paquetes a tu medida.
             </p>
           </CardContent>
         </div>

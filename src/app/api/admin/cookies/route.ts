@@ -132,6 +132,31 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: true, deleted: deleted.count });
     }
 
+    if (type === "duplicates") {
+      // Find duplicates by NetflixId value, keep only the first (oldest)
+      const allCookies = await prisma.cookie.findMany({ orderBy: { createdAt: "asc" } });
+      const seenIds = new Map<string, string>(); // NetflixId -> cookie id (first occurrence)
+      const duplicateIds: string[] = [];
+
+      for (const cookie of allCookies) {
+        const dict = extractCookiesFromText(cookie.rawCookie);
+        const netflixId = dict?.["NetflixId"];
+        if (!netflixId) continue;
+        if (seenIds.has(netflixId)) {
+          duplicateIds.push(cookie.id);
+        } else {
+          seenIds.set(netflixId, cookie.id);
+        }
+      }
+
+      if (duplicateIds.length === 0) {
+        return NextResponse.json({ success: true, deleted: 0, message: "No se encontraron duplicados" });
+      }
+
+      const deleted = await prisma.cookie.deleteMany({ where: { id: { in: duplicateIds } } });
+      return NextResponse.json({ success: true, deleted: deleted.count, message: `${deleted.count} cookies duplicadas eliminadas` });
+    }
+
     const cookieId = searchParams.get("id");
     if (cookieId) {
       await prisma.cookie.delete({ where: { id: cookieId } });
