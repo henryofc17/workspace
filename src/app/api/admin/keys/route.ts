@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ensureMigrations } from "@/lib/migrate";
+import { z } from "zod";
+
+const createKeysSchema = z.object({
+  count: z.number().int().min(1).max(100),
+  credits: z.number().int().min(1).max(10000),
+});
 
 // ─── Generate random key code: HJFLIX-XXXXX ─────────────────────────────────
 function generateKeyCode(): string {
@@ -20,14 +26,14 @@ export async function POST(request: Request) {
     await ensureMigrations();
 
     const body = await request.json();
-    const { count, credits } = body;
-
-    if (!count || !credits || count < 1 || count > 100 || credits < 1) {
+    const parsed = createKeysSchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { success: false, error: "Datos inválidos. Cantidad: 1-100, Créditos: 1+" },
+        { success: false, error: "Datos inválidos. Cantidad: 1-100, Créditos: 1-10000" },
         { status: 400 }
       );
     }
+    const { count, credits } = parsed.data;
 
     const keys: { code: string; credits: number; createdBy: string }[] = [];
     const existingCodes = new Set<string>();

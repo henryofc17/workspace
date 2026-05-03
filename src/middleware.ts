@@ -9,6 +9,7 @@ const PUBLIC_PATHS = [
   "/api/auth/me",  // Returns 401 if no token, which is expected
   "/login",
   "/api/setup",
+  "/api/config",  // Public config for pricing display
 ];
 
 // Routes that require ADMIN role
@@ -16,6 +17,26 @@ const ADMIN_PATHS = ["/admin", "/api/admin"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // ── Block suspicious paths ──
+  const blockedPatterns = [
+    /\.(env|git|htaccess|htpasswd|ini|log|sh|sql|bak|config)$/i,
+    /\/wp-/,       // WordPress probes
+    /\/xmlrpc\.php/, // XML-RPC attacks
+    /\/phpmyadmin/,  // phpMyAdmin probes
+    /\/\.well-known\/security\.txt/, // info gathering
+  ];
+  for (const pattern of blockedPatterns) {
+    if (pattern.test(pathname)) {
+      logSecurityEvent({
+        level: "error",
+        event: SecurityEvents.SUSPICIOUS_ACTIVITY,
+        ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || undefined,
+        details: { path: pathname, reason: "blocked_pattern" },
+      });
+      return NextResponse.json({ error: "Not found" }, { status: 404, headers: getSecurityHeaders() });
+    }
+  }
 
   // ── Skip non-API/non-protected page routes ──
   const isAPI = pathname.startsWith("/api/");
@@ -42,6 +63,11 @@ export async function middleware(request: NextRequest) {
   // Try access token
   if (accessToken) {
     session = await verifyAccessToken(accessToken);
+  }
+
+  // Try refresh token
+  if (!session && refreshToken) {
+    session = await verifyAccessToken(refreshToken);
   }
 
   // Try legacy token (backward compat)

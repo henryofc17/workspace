@@ -6,8 +6,9 @@ import {
   extractCookiesFromText,
 } from "@/lib/netflix-checker";
 import { getConfig } from "@/lib/config";
+import { checkRateLimit } from "@/lib/security";
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const session = await getSession();
 
@@ -15,6 +16,19 @@ export async function POST() {
       return NextResponse.json(
         { success: false, error: "No autenticado" },
         { status: 401 }
+      );
+    }
+
+    // ── Rate limit per user: max 10 requests per minute ──
+    const rateCheck = checkRateLimit(`copy-cookie:${session.userId}`, {
+      maxRequests: 10,
+      windowMs: 60 * 1000,
+      blockDurationMs: 60 * 1000,
+    });
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { success: false, error: `Demasiadas peticiones. Espera ${rateCheck.retryAfter || 60} segundos.` },
+        { status: 429 }
       );
     }
 
@@ -106,51 +120,49 @@ export async function POST() {
 
       return NextResponse.json({
         success: false,
-        error: "Intentar de nuevo", // 🔥 SOLO CAMBIO
+        error: "Intentar de nuevo",
         cookieDead: true,
         noMoreCookies,
       });
     }
 
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: session.userId },
-        data: {
-          credits: { decrement: await getConfig("COPY_COST", 3) },
-        },
-      }),
+    // Atomic credit deduction
+    try {
+      const updatedUser = await prisma.$transaction(async (tx) => {
+        const u = await tx.user.update({
+          where: { id: session.userId, credits: { gte: COPY_COST } },
+          data: { credits: { decrement: COPY_COST } },
+        });
+        await tx.cookie.update({
+          where: { id: cookie.id },
+          data: { usedCount: { increment: 1 }, lastUsed: new Date() },
+        });
+        await tx.transaction.create({
+          data: {
+            userId: session.userId,
+            type: "COPY_COOKIE",
+            credits: -COPY_COST,
+            description: `Cookie copiada #${cookie.id.slice(0, 6)}`,
+          },
+        });
+        return u;
+      });
 
-      prisma.cookie.update({
-        where: { id: cookie.id },
-        data: {
-          usedCount: { increment: 1 },
-          lastUsed: new Date(),
-        },
-      }),
-
-      prisma.transaction.create({
-        data: {
-          userId: session.userId,
-          type: "COPY_COOKIE",
-          credits: -await getConfig("COPY_COST", 3),
-          description: `Cookie copiada #${cookie.id.slice(0, 6)}`,
-        },
-      }),
-    ]);
-
-    return NextResponse.json({
-      success: true,
-      cookie: cookie.rawCookie,
-      remainingCredits: user.credits - await getConfig("COPY_COST", 3),
-    });
-  } catch (err: any) {
-    console.error("Copy cookie error:", err);
-
+      return NextResponse.json({
+        success: true,
+        cookie: cookie.rawCookie,
+        remainingCredits: updatedUser.credits,
+      });
+    } catch {
+      return NextResponse.json(
+        { success: false, error: "Créditos insuficientes. Intenta de nuevo." },
+        { status: 400 }
+      );
+    }
+  } catch {
+    console.error("Copy cookie error");
     return NextResponse.json(
-      {
-        success: false,
-        error: "Error del servidor",
-      },
+      { success: false, error: "Error del servidor" },
       { status: 500 }
     );
   }

@@ -46,7 +46,7 @@ export async function GET() {
       totalReferrals: user._count.referrals,
       referrals,
     });
-  } catch (err: any) {
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  } catch {
+    return NextResponse.json({ success: false, error: "Error del servidor" }, { status: 500 });
   }
 }

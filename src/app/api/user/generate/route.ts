@@ -6,8 +6,9 @@ import {
   extractCookiesFromText,
 } from "@/lib/netflix-checker";
 import { getConfig } from "@/lib/config";
+import { checkRateLimit, getClientIP } from "@/lib/security";
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const session = await getSession();
 
@@ -15,6 +16,19 @@ export async function POST() {
       return NextResponse.json(
         { success: false, error: "No autenticado" },
         { status: 401 }
+      );
+    }
+
+    // ── Rate limit per user: max 10 requests per minute ──
+    const rateCheck = checkRateLimit(`generate:${session.userId}`, {
+      maxRequests: 10,
+      windowMs: 60 * 1000,
+      blockDurationMs: 60 * 1000,
+    });
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { success: false, error: `Demasiadas peticiones. Espera ${rateCheck.retryAfter || 60} segundos.` },
+        { status: 429 }
       );
     }
 
@@ -90,7 +104,7 @@ export async function POST() {
     // Revisar cookie
     const result = await checkCookie(cookieDict);
 
-    // 👇 PARSEO DEL ERROR ESPECÍFICO
+    // PARSEO DEL ERROR ESPECÍFICO
     if (!result.success) {
       const errorMsg = result.error || "";
 
@@ -126,50 +140,45 @@ export async function POST() {
       });
     }
 
-    // Éxito
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: session.userId },
-        data: {
-          credits: { decrement: await getConfig("GENERATE_COST", 1) },
-        },
-      }),
+    // Éxito — atomic credit deduction using transaction with balance check
+    try {
+      const updatedUser = await prisma.$transaction(async (tx) => {
+        const u = await tx.user.update({
+          where: { id: session.userId, credits: { gte: GENERATE_COST } },
+          data: { credits: { decrement: GENERATE_COST } },
+        });
+        await tx.cookie.update({
+          where: { id: cookie.id },
+          data: { usedCount: { increment: 1 }, lastUsed: new Date() },
+        });
+        await tx.transaction.create({
+          data: {
+            userId: session.userId,
+            type: "GENERATE_TOKEN",
+            credits: -GENERATE_COST,
+            description: `Token generado con cookie #${cookie.id.slice(0, 6)}`,
+          },
+        });
+        return u;
+      });
 
-      prisma.cookie.update({
-        where: { id: cookie.id },
-        data: {
-          usedCount: { increment: 1 },
-          lastUsed: new Date(),
-        },
-      }),
-
-      prisma.transaction.create({
-        data: {
-          userId: session.userId,
-          type: "GENERATE_TOKEN",
-          credits: -await getConfig("GENERATE_COST", 1),
-          description: `Token generado con cookie #${cookie.id.slice(
-            0,
-            6
-          )}`,
-        },
-      }),
-    ]);
-
-    return NextResponse.json({
-      success: true,
-      token: result.token,
-      link: result.link,
-      remainingCredits: user.credits - await getConfig("GENERATE_COST", 1),
-    });
-  } catch (err: any) {
-    console.error("Generate token error:", err);
-
+      return NextResponse.json({
+        success: true,
+        token: result.token,
+        link: result.link,
+        remainingCredits: updatedUser.credits,
+      });
+    } catch {
+      // Race condition: credits changed between check and deduction
+      return NextResponse.json(
+        { success: false, error: "Créditos insuficientes. Intenta de nuevo." },
+        { status: 400 }
+      );
+    }
+  } catch {
+    console.error("Generate token error");
     return NextResponse.json(
-      {
-        success: false,
-        error: "Error del servidor",
-      },
+      { success: false, error: "Error del servidor" },
       { status: 500 }
     );
   }

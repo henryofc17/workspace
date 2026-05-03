@@ -2,11 +2,25 @@ import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ensureMigrations } from "@/lib/migrate";
+import { checkRateLimit } from "@/lib/security";
 
 export async function POST(request: Request) {
   try {
     const session = await requireAuth();
     await ensureMigrations();
+
+    // ── Rate limit: max 10 redeem attempts per user per hour ──
+    const rateCheck = checkRateLimit(`redeem-key:${session.userId}`, {
+      maxRequests: 10,
+      windowMs: 60 * 60 * 1000,
+      blockDurationMs: 30 * 60 * 1000,
+    });
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { success: false, error: `Demasiados intentos. Espera ${rateCheck.retryAfter || 30} segundos.` },
+        { status: 429 }
+      );
+    }
 
     const body = await request.json();
     const { code } = body;

@@ -131,6 +131,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [siteConfig, setSiteConfig] = useState({ REGISTER_BONUS: 3, REFERRAL_BONUS: 5 });
 
   const [regUsername, setRegUsername] = useState("");
   const [regPassword, setRegPassword] = useState("");
@@ -140,6 +141,20 @@ export default function LoginPage() {
 
   const [widgetReady, setWidgetReady] = useState(false);
   const [regWidgetId, setRegWidgetId] = useState<any>(null);
+
+  useEffect(() => {
+    fetch("/api/config")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && d.config) {
+          setSiteConfig({
+            REGISTER_BONUS: d.config.REGISTER_BONUS ?? 3,
+            REFERRAL_BONUS: d.config.REFERRAL_BONUS ?? 5,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     let tries = 0;
@@ -295,7 +310,7 @@ export default function LoginPage() {
             className="flex items-center justify-center gap-2 mb-6 flex-wrap"
           >
             <FeaturePill icon={Zap} text="Checker Gratis" />
-            <FeaturePill icon={Gift} text="+3 Creditos" />
+            <FeaturePill icon={Gift} text={`+${siteConfig.REGISTER_BONUS} Creditos`} />
             <FeaturePill icon={Users} text="Referidos" />
           </motion.div>
 
@@ -399,8 +414,8 @@ export default function LoginPage() {
                       >
                         <Gift className="h-4 w-4 text-yellow-500/70 shrink-0" />
                         <p className="text-[11px] text-yellow-500/60 leading-relaxed">
-                          Obten <span className="text-yellow-400 font-semibold">+3 creditos gratis</span> al registrarte.
-                          Usa un codigo de referido para ganar <span className="text-yellow-400 font-semibold">+5 creditos extra</span> a tu amigo.
+                          Obten <span className="text-yellow-400 font-semibold">+{siteConfig.REGISTER_BONUS} creditos gratis</span> al registrarte.
+                          Usa un codigo de referido para ganar <span className="text-yellow-400 font-semibold">+{siteConfig.REFERRAL_BONUS} creditos extra</span> a tu amigo.
                         </p>
                       </motion.div>
 

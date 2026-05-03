@@ -4,11 +4,10 @@ import { fullCheck } from "@/lib/netflix-checker";
 import type { CheckResult } from "@/lib/netflix-checker";
 import { prisma } from "@/lib/prisma";
 import { getConfig } from "@/lib/config";
+import { checkRateLimit } from "@/lib/security";
 
-// Simple in-memory rate limit per IP
-const rateLimit = new Map<string, { count: number; resetAt: number }>();
-const RATE_MAX = 15;
-const RATE_WINDOW = 60 * 1000;
+// Rate limit: max 15 checks per user per minute
+const CHECKER_RATE_LIMIT = { maxRequests: 15, windowMs: 60 * 1000, blockDurationMs: 60 * 1000 };
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,21 +15,13 @@ export async function POST(request: NextRequest) {
     const session = await requireAuth();
     const userId = session.userId;
 
-    // ── Rate limit by IP ──
-    const forwarded = request.headers.get("x-forwarded-for");
-    const clientIP = forwarded ? forwarded.split(",")[0].trim() : "unknown";
-    const now = Date.now();
-    const entry = rateLimit.get(clientIP);
-    if (!entry || now > entry.resetAt) {
-      rateLimit.set(clientIP, { count: 1, resetAt: now + RATE_WINDOW });
-    } else {
-      entry.count++;
-      if (entry.count > RATE_MAX) {
-        return NextResponse.json(
-          { success: false, error: "Demasiadas peticiones. Espera un momento." },
-          { status: 429 }
-        );
-      }
+    // ── Rate limit by user ──
+    const rateCheck = checkRateLimit(`check:${userId}`, CHECKER_RATE_LIMIT);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { success: false, error: `Demasiadas peticiones. Espera ${rateCheck.retryAfter || 60} segundos.` },
+        { status: 429 }
+      );
     }
 
     // ── Check daily limit ──
@@ -116,7 +107,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: `Error del servidor: ${err.message || "Desconocido"}`,
+        error: "Error del servidor",
       },
       { status: 500 }
     );

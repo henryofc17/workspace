@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { validateBody, redeemSchema } from "@/lib/validators";
-import { logSecurityEvent, SecurityEvents } from "@/lib/security";
+import { logSecurityEvent, SecurityEvents, checkRateLimit } from "@/lib/security";
 import { getConfig } from "@/lib/config";
 
 export async function POST(request: Request) {
@@ -10,6 +10,19 @@ export async function POST(request: Request) {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ success: false, error: "No autenticado" }, { status: 401 });
+    }
+
+    // ── Rate limit: max 5 redeem attempts per user per hour ──
+    const rateCheck = checkRateLimit(`redeem:${session.userId}`, {
+      maxRequests: 5,
+      windowMs: 60 * 60 * 1000,
+      blockDurationMs: 2 * 60 * 60 * 1000,
+    });
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { success: false, error: `Demasiados intentos. Espera ${rateCheck.retryAfter || 120} minutos.` },
+        { status: 429 }
+      );
     }
 
     // ── Validate body ──
@@ -121,8 +134,8 @@ export async function POST(request: Request) {
       message: `Código canjeado. Tú recibiste +${REDEEM_BONUS} créditos y ${referrer.username} recibió +${REFERRAL_BONUS} créditos.`,
       referrerUsername: referrer.username,
     });
-  } catch (err: any) {
-    console.error("Redeem error:", err);
+  } catch {
+    console.error("Redeem error");
     return NextResponse.json({ success: false, error: "Error del servidor" }, { status: 500 });
   }
 }

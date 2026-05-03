@@ -2,13 +2,33 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { getClientIP, logSecurityEvent, sanitizeString } from "@/lib/security";
+import { getClientIP, logSecurityEvent, sanitizeString, checkRateLimit } from "@/lib/security";
 
 export async function POST(request: Request) {
   try {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ success: false, error: "No autenticado" }, { status: 401 });
+    }
+
+    // ── Rate limit: max 3 password changes per hour per user ──
+    const rateCheck = checkRateLimit(`change-password:${session.userId}`, {
+      maxRequests: 3,
+      windowMs: 60 * 60 * 1000,
+      blockDurationMs: 2 * 60 * 60 * 1000,
+    });
+    if (!rateCheck.allowed) {
+      logSecurityEvent({
+        level: "warn",
+        event: "PASSWORD_CHANGE_RATE_LIMITED",
+        userId: session.userId,
+        username: session.username,
+        details: { retryAfter: rateCheck.retryAfter },
+      });
+      return NextResponse.json(
+        { success: false, error: `Demasiados cambios de contraseña. Espera ${rateCheck.retryAfter || 120} minutos.` },
+        { status: 429 }
+      );
     }
 
     const clientIP = getClientIP(request as any);

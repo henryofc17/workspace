@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { validateBody, tvActivateSchema } from "@/lib/validators";
 import { getConfig } from "@/lib/config";
+import { checkRateLimit } from "@/lib/security";
 
 const DESKTOP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
@@ -23,6 +24,19 @@ export async function POST(request: NextRequest) {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ success: false, error: "No autenticado" }, { status: 401 });
+    }
+
+    // ── Rate limit per user: max 5 activations per minute ──
+    const rateCheck = checkRateLimit(`tv-activate:${session.userId}`, {
+      maxRequests: 5,
+      windowMs: 60 * 1000,
+      blockDurationMs: 5 * 60 * 1000,
+    });
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { success: false, error: `Demasiadas activaciones. Espera ${rateCheck.retryAfter || 60} segundos.` },
+        { status: 429 }
+      );
     }
 
     // ── Validate body ──

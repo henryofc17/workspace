@@ -26,7 +26,7 @@ export async function GET() {
       credits: user?.credits || 0,
       transactions,
     });
-  } catch (err: any) {
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  } catch {
+    return NextResponse.json({ success: false, error: "Error del servidor" }, { status: 500 });
   }
 }

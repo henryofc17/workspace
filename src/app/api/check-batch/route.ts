@@ -7,11 +7,10 @@ import {
   getMetadata,
 } from "@/lib/netflix-checker";
 import type { CheckResult, NFTokenResult, NetflixMetadata } from "@/lib/netflix-checker";
+import { checkRateLimit } from "@/lib/security";
 
-// Rate limit
-const rateLimit = new Map<string, { count: number; resetAt: number }>();
-const RATE_MAX = 5;
-const RATE_WINDOW = 60 * 1000;
+// Rate limit: max 3 batch checks per user per 2 minutes
+const BATCH_RATE_LIMIT = { maxRequests: 3, windowMs: 2 * 60 * 1000, blockDurationMs: 5 * 60 * 1000 };
 
 interface BatchResult extends CheckResult {
   index: number;
@@ -131,21 +130,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Rate limit
-    const forwarded = request.headers.get("x-forwarded-for");
-    const clientIP = forwarded ? forwarded.split(",")[0].trim() : "unknown";
-    const now = Date.now();
-    const entry = rateLimit.get(clientIP);
-    if (!entry || now > entry.resetAt) {
-      rateLimit.set(clientIP, { count: 1, resetAt: now + RATE_WINDOW });
-    } else {
-      entry.count++;
-      if (entry.count > RATE_MAX) {
-        return NextResponse.json(
-          { success: false, error: "Demasiadas peticiones. Espera un momento." },
-          { status: 429 }
-        );
-      }
+    // ── Rate limit per user ──
+    const rateCheck = checkRateLimit(`batch:${session.userId}`, BATCH_RATE_LIMIT);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { success: false, error: `Demasiadas peticiones. Espera ${rateCheck.retryAfter || 60} segundos.` },
+        { status: 429 }
+      );
     }
 
     const contentType = request.headers.get("content-type") || "";
@@ -222,7 +213,7 @@ export async function POST(request: NextRequest) {
   } catch (err: any) {
     console.error("Batch check error:", err);
     return NextResponse.json(
-      { success: false, error: `Error del servidor: ${err.message || "Desconocido"}` },
+      { success: false, error: "Error del servidor" },
       { status: 500 }
     );
   }
