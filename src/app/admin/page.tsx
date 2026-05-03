@@ -44,6 +44,7 @@ import {
   EyeOff,
   Settings,
   Ticket,
+  MonitorPlay,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -1481,7 +1482,7 @@ export default function AdminPage() {
                       {[
                         { key: "GENERATE_COST", label: "Costo Token", icon: Zap, desc: "Créditos por generar token" },
                         { key: "COPY_COST", label: "Costo Cookie", icon: Copy, desc: "Créditos por copiar cookie" },
-                        { key: "TV_ACTIVATE_COST", label: "Costo Activar TV", icon: MonitorPlay || Tv, desc: "Créditos para activar TV" },
+                        { key: "TV_ACTIVATE_COST", label: "Costo Activar TV", icon: MonitorPlay, desc: "Créditos para activar TV" },
                         { key: "CHECKER_DAILY_LIMIT", label: "Límite Checker Diario", icon: Search, desc: "Verificaciones por día" },
                         { key: "CHECKER_RESET_COST", label: "Costo Reiniciar Checker", icon: RefreshCw, desc: "Créditos para reiniciar" },
                         { key: "REGISTER_BONUS", label: "Créditos por Registro", icon: UserPlus, desc: "Bonus al registrarse" },
