@@ -8,67 +8,64 @@ export default function OneSignalInit() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Avoid re-initializing if already loaded
-    if (window.OneSignal) return;
+    // Prevent double init
+    const TAG = "[OneSignal]";
+    if (window.__oneSignalInitialized) return;
+    window.__oneSignalInitialized = true;
 
-    const init = async () => {
+    console.log(`${TAG} Starting initialization...`);
+
+    // Load the SDK first, then init after it's ready
+    const script = document.createElement("script");
+    script.src = "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js";
+    script.async = true;
+    document.head.appendChild(script);
+
+    script.onload = () => {
+      console.log(`${TAG} SDK script loaded, calling init...`);
+
       try {
-        window.OneSignal = window.OneSignal || [];
-        window.OneSignal.push(function () {
-          window.OneSignal.init({
-            appId: ONESIGNAL_APP_ID,
-            notifyButton: {
-              enable: false,
+        window.OneSignal.init({
+          appId: ONESIGNAL_APP_ID,
+          notifyButton: {
+            enable: true,
+          },
+          promptOptions: {
+            slidedown: {
+              enabled: true,
+              autoPrompt: true,
+              timeDelay: 5,
+              pageViews: 1,
             },
-            allowLocalhostAsSecureOrigin: false,
-            serviceWorkerParam: {
-              scope: "/",
-            },
-            serviceWorkerPath: "OneSignalSDKWorker.js",
-            promptOptions: {
-              slidedown: {
-                prompts: [
-                  {
-                    type: "push",
-                    autoPrompt: true,
-                    text: {
-                      actionMessage: "Queremos enviarte notificaciones importantes.",
-                      acceptButton: "Permitir",
-                      cancelButton: "No, gracias",
-                      explanationMessage:
-                        "Recibe alertas de créditos, nuevas cookies y más.",
-                    },
-                    delay: {
-                      pageViews: 1,
-                      timeDelay: 5,
-                    },
-                  },
-                ],
-              },
-            },
-          });
+          },
+          allowLocalhostAsSecureOrigin: false,
+          serviceWorkerParam: {
+            scope: "/",
+          },
+          serviceWorkerPath: "OneSignalSDKWorker.js",
         });
 
-        // Load the SDK
-        const script = document.createElement("script");
-        script.src = "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js";
-        script.async = true;
-        script.defer = true;
-        document.head.appendChild(script);
+        console.log(`${TAG} init() called successfully`);
 
-        script.onload = () => {
-          console.log("[OneSignal] SDK loaded successfully");
-        };
+        // Verify subscription after a delay
+        setTimeout(async () => {
+          try {
+            const permission = await window.OneSignal.Notifications.permissionNative;
+            console.log(`${TAG} Notification permission:`, permission);
+          } catch (e) {
+            console.warn(`${TAG} Could not check permission:`, e);
+          }
+        }, 6000);
 
-        script.onerror = () => {
-          console.warn("[OneSignal] Failed to load SDK");
-        };
       } catch (err) {
-        console.warn("[OneSignal] Initialization failed:", err);
+        console.error(`${TAG} init() failed:`, err);
       }
     };
 
-    init();
+    script.onerror = (err) => {
+      console.error(`${TAG} Failed to load SDK script:`, err);
+      window.__oneSignalInitialized = false; // Allow retry
+    };
   }, []);
 
   return null;

@@ -239,6 +239,7 @@ export function getSecurityHeaders(): Record<string, string> {
       "img-src 'self' data: https://i.ibb.co https://assets.nflxext.com https://*.onesignal.com",
       "font-src 'self' https://fonts.gstatic.com",
       "connect-src 'self' https://challenges.cloudflare.com https://www.netflix.com https://*.onesignal.com",
+      "worker-src 'self' blob: https://cdn.onesignal.com",
       "frame-src https://challenges.cloudflare.com",
       "base-uri 'self'",
       "form-action 'self'",
