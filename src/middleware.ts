@@ -18,16 +18,6 @@ const ADMIN_PATHS = ["/admin", "/api/admin"];
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // ── Skip OneSignal SDK routes entirely (no auth, no rate limit, no security checks) ──
-  if (
-    pathname.includes("OneSignalSDK") ||
-    pathname.includes("onesignal") ||
-    pathname === "/OneSignalSDKWorker.js" ||
-    pathname === "/OneSignalSDK.page.js"
-  ) {
-    return NextResponse.next();
-  }
-
   // ── Block suspicious paths ──
   const blockedPatterns = [
     /\.(env|git|htaccess|htpasswd|ini|log|sh|sql|bak|config)$/i,
@@ -162,6 +152,6 @@ export const config = {
      * - favicon.ico, sitemap.xml, robots.txt
      * - public assets
      */
-    "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|logo\\.svg|OneSignalSDK).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|logo\\.svg).*)",
   ],
 };
