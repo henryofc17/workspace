@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ensureMigrations } from "@/lib/migrate";
 
 export async function POST(request: Request) {
   try {
     const session = await requireAuth();
+    await ensureMigrations();
 
     const body = await request.json();
     const { code } = body;
@@ -64,6 +66,7 @@ export async function POST(request: Request) {
     if (err.message === "UNAUTHORIZED") {
       return NextResponse.json({ success: false, error: "No autenticado" }, { status: 401 });
     }
+    console.error("Redeem key error:", err);
     return NextResponse.json({ success: false, error: "Error del servidor" }, { status: 500 });
   }
 }

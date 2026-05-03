@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ensureMigrations } from "@/lib/migrate";
 
 // ─── Generate random key code: HJFLIX-XXXXX ─────────────────────────────────
 function generateKeyCode(): string {
@@ -16,6 +17,7 @@ function generateKeyCode(): string {
 export async function POST(request: Request) {
   try {
     const admin = await requireAdmin();
+    await ensureMigrations();
 
     const body = await request.json();
     const { count, credits } = body;
@@ -56,6 +58,7 @@ export async function POST(request: Request) {
     if (err.message === "UNAUTHORIZED") {
       return NextResponse.json({ success: false, error: "No autenticado" }, { status: 401 });
     }
+    console.error("Generate keys error:", err);
     return NextResponse.json({ success: false, error: "Error del servidor" }, { status: 500 });
   }
 }
@@ -64,6 +67,7 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   try {
     await requireAdmin();
+    await ensureMigrations();
 
     const { searchParams } = new URL(request.url);
     const filter = searchParams.get("filter") || "all"; // all | available | redeemed
@@ -90,6 +94,7 @@ export async function GET(request: Request) {
     if (err.message === "UNAUTHORIZED") {
       return NextResponse.json({ success: false, error: "No autenticado" }, { status: 401 });
     }
+    console.error("List keys error:", err);
     return NextResponse.json({ success: false, error: "Error del servidor" }, { status: 500 });
   }
 }

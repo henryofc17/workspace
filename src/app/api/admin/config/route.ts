@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getConfig, clearConfigCache } from "@/lib/config";
+import { ensureMigrations } from "@/lib/migrate";
 
 // ─── GET: Return all config values ───────────────────────────────────────────
 export async function GET() {
@@ -40,6 +41,7 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     await requireAdmin();
+    await ensureMigrations();
 
     const body = await request.json();
     const updates = body.config;
