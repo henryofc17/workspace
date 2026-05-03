@@ -109,15 +109,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // ── ANTI-ABUSE: Fingerprint check ──
-    if (fingerprint) {
-      const fpCount = await prisma.user.count({ where: { fingerprint } });
-      if (fpCount >= 1) {
-        return NextResponse.json(
-          { success: false, error: "Ya tienes una cuenta registrada en este navegador." },
-          { status: 429 }
-        );
-      }
+    // ── ANTI-ABUSE: Fingerprint check (now required) ──
+    const fpCount = await prisma.user.count({ where: { fingerprint } });
+    if (fpCount >= 1) {
+      return NextResponse.json(
+        { success: false, error: "Ya tienes una cuenta registrada en este navegador." },
+        { status: 429 }
+      );
     }
 
     // ── Check username unique ──
@@ -200,7 +198,6 @@ export async function POST(request: Request) {
       data: {
         username,
         password: hashedPassword,
-        passwordPlain: password,
         role: "USER",
         credits: REGISTER_BONUS,
         referralCode: finalCode,

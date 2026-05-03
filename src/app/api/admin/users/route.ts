@@ -82,7 +82,6 @@ export async function POST(request: NextRequest) {
       data: {
         username,
         password: hashedPassword,
-        passwordPlain: password,
         role: "USER",
         credits: credits || 0,
         referralCode,

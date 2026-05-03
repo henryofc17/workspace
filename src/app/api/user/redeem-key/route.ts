@@ -31,51 +31,65 @@ export async function POST(request: Request) {
 
     const cleanCode = code.trim().toUpperCase();
 
-    // Find the key
-    const key = await prisma.giftKey.findUnique({ where: { code: cleanCode } });
+    // Atomic: find + validate + credit + mark redeemed in a single transaction
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        // Lock the key row for this transaction
+        const key = await tx.giftKey.findUnique({ where: { code: cleanCode } });
 
-    if (!key) {
-      return NextResponse.json({ success: false, error: "Key no encontrada" }, { status: 404 });
+        if (!key) {
+          return { error: "NOT_FOUND", status: 404 };
+        }
+
+        if (key.redeemedBy) {
+          return { error: "ALREADY_REDEEMED", status: 400 };
+        }
+
+        // Credit the user
+        const updatedUser = await tx.user.update({
+          where: { id: session.userId },
+          data: { credits: { increment: key.credits } },
+          select: { credits: true },
+        });
+
+        // Mark key as redeemed
+        await tx.giftKey.update({
+          where: { id: key.id },
+          data: {
+            redeemedBy: session.userId,
+            redeemedAt: new Date(),
+          },
+        });
+
+        // Create transaction record
+        await tx.transaction.create({
+          data: {
+            userId: session.userId,
+            type: "GIFT_KEY",
+            credits: key.credits,
+            description: `Key canjeada: ${cleanCode}`,
+          },
+        });
+
+        return { success: true, credits: key.credits, totalCredits: updatedUser.credits };
+      });
+
+      if (result.error === "NOT_FOUND") {
+        return NextResponse.json({ success: false, error: "Key no encontrada" }, { status: 404 });
+      }
+      if (result.error === "ALREADY_REDEEMED") {
+        return NextResponse.json({ success: false, error: "Esta key ya fue canjeada" }, { status: 400 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `¡+${result.credits} créditos! Key ${cleanCode} canjeada exitosamente`,
+        credits: result.totalCredits,
+      });
+    } catch (txErr) {
+      // Transaction conflict — another request won the race
+      return NextResponse.json({ success: false, error: "Esta key ya fue canjeada. Intenta de nuevo." }, { status: 409 });
     }
-
-    if (key.redeemedBy) {
-      return NextResponse.json({ success: false, error: "Esta key ya fue canjeada" }, { status: 400 });
-    }
-
-    // Credit the user and mark key as redeemed in a transaction
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: session.userId },
-        data: { credits: { increment: key.credits } },
-      }),
-      prisma.giftKey.update({
-        where: { id: key.id },
-        data: {
-          redeemedBy: session.userId,
-          redeemedAt: new Date(),
-        },
-      }),
-      prisma.transaction.create({
-        data: {
-          userId: session.userId,
-          type: "GIFT_KEY",
-          credits: key.credits,
-          description: `Key canjeada: ${cleanCode}`,
-        },
-      }),
-    ]);
-
-    // Get updated user credits
-    const user = await prisma.user.findUnique({
-      where: { id: session.userId },
-      select: { credits: true },
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: `¡+${key.credits} créditos! Key ${cleanCode} canjeada exitosamente`,
-      credits: user?.credits || 0,
-    });
   } catch (err: any) {
     if (err.message === "UNAUTHORIZED") {
       return NextResponse.json({ success: false, error: "No autenticado" }, { status: 401 });

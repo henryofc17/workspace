@@ -74,7 +74,6 @@ export async function POST(request: Request) {
       where: { id: session.userId },
       data: {
         password: hashedPassword,
-        passwordPlain: newPassword,
       },
     });
 

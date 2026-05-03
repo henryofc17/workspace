@@ -27,7 +27,6 @@ export async function GET(
         referralCode: true,
         referredBy: true,
         ipAddress: true,
-        passwordPlain: true,
         createdAt: true,
         updatedAt: true,
         referrer: {
@@ -112,7 +111,6 @@ export async function PUT(
       where: { id },
       data: {
         password: hashedPassword,
-        passwordPlain: newPassword,
       },
     });
 

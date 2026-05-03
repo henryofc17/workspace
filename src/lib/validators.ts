@@ -27,7 +27,7 @@ export const registerSchema = z.object({
     .max(20, "Código muy largo")
     .optional()
     .transform((v) => (v ? v.trim().toUpperCase() : undefined)),
-  fingerprint: z.string().max(200).optional(),
+  fingerprint: z.string().min(1, "Fingerprint requerido").max(200),
   turnstileToken: z.string().min(1, "Verificación requerida").max(1000),
 });
 

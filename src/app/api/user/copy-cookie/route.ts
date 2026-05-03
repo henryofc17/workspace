@@ -6,7 +6,6 @@ import {
   extractCookiesFromText,
 } from "@/lib/netflix-checker";
 import { getConfig } from "@/lib/config";
-import { checkRateLimit } from "@/lib/security";
 
 export async function POST(request: Request) {
   try {
@@ -16,19 +15,6 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { success: false, error: "No autenticado" },
         { status: 401 }
-      );
-    }
-
-    // ── Rate limit per user: max 10 requests per minute ──
-    const rateCheck = checkRateLimit(`copy-cookie:${session.userId}`, {
-      maxRequests: 10,
-      windowMs: 60 * 1000,
-      blockDurationMs: 60 * 1000,
-    });
-    if (!rateCheck.allowed) {
-      return NextResponse.json(
-        { success: false, error: `Demasiadas peticiones. Espera ${rateCheck.retryAfter || 60} segundos.` },
-        { status: 429 }
       );
     }
 

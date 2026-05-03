@@ -11,53 +11,65 @@ export async function POST() {
     const RESET_COST = await getConfig("CHECKER_RESET_COST", 2);
     const DAILY_LIMIT = await getConfig("CHECKER_DAILY_LIMIT", 10);
 
-    // Fetch user with lock-like pattern
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, credits: true, checkerUsesToday: true, checkerResetDate: true },
-    });
+    // Atomic: check balance + decrement + reset in a single transaction
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        const user = await tx.user.findUnique({
+          where: { id: userId },
+          select: { id: true, credits: true, checkerUsesToday: true, checkerResetDate: true },
+        });
 
-    if (!user) {
-      return NextResponse.json({ success: false, error: "Usuario no encontrado" }, { status: 404 });
-    }
+        if (!user) {
+          throw new Error("NOT_FOUND");
+        }
 
-    if (user.credits < RESET_COST) {
-      return NextResponse.json({
-        success: false,
-        error: `Créditos insuficientes. Necesitas ${RESET_COST} créditos para reiniciar tus verificaciones.`,
-        requiredCredits: RESET_COST,
-        currentCredits: user.credits,
+        if (user.credits < RESET_COST) {
+          throw new Error("INSUFFICIENT_CREDITS");
+        }
+
+        const u = await tx.user.update({
+          where: { id: userId, credits: { gte: RESET_COST } },
+          data: {
+            credits: { decrement: RESET_COST },
+            checkerUsesToday: 0,
+            checkerResetDate: new Date(),
+          },
+          select: { credits: true },
+        });
+
+        await tx.transaction.create({
+          data: {
+            userId,
+            type: "CHECKER_RESET",
+            credits: -RESET_COST,
+            description: `Reinicio de verificaciones diarias (+${DAILY_LIMIT} usos)`,
+          },
+        });
+
+        return u;
       });
+
+      return NextResponse.json({
+        success: true,
+        message: `¡${DAILY_LIMIT} verificaciones diarias reiniciadas! Se descontaron ${RESET_COST} créditos.`,
+        remainingCredits: updated.credits,
+        usesToday: 0,
+        dailyLimit: DAILY_LIMIT,
+        remainingToday: DAILY_LIMIT,
+      });
+    } catch (txErr: any) {
+      if (txErr.message === "NOT_FOUND") {
+        return NextResponse.json({ success: false, error: "Usuario no encontrado" }, { status: 404 });
+      }
+      if (txErr.message === "INSUFFICIENT_CREDITS") {
+        return NextResponse.json({
+          success: false,
+          error: `Créditos insuficientes. Necesitas ${RESET_COST} créditos para reiniciar tus verificaciones.`,
+        }, { status: 400 });
+      }
+      // Race condition: balance changed
+      return NextResponse.json({ success: false, error: "Créditos insuficientes. Intenta de nuevo." }, { status: 400 });
     }
-
-    // Deduct credits and reset checker uses
-    const updated = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        credits: { decrement: RESET_COST },
-        checkerUsesToday: 0,
-        checkerResetDate: new Date(),
-      },
-    });
-
-    // Create transaction record
-    await prisma.transaction.create({
-      data: {
-        userId,
-        type: "CHECKER_RESET",
-        credits: -RESET_COST,
-        description: `Reinicio de verificaciones diarias (+${DAILY_LIMIT} usos)`,
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: `¡${DAILY_LIMIT} verificaciones diarias reiniciadas! Se descontaron ${RESET_COST} créditos.`,
-      remainingCredits: updated.credits,
-      usesToday: 0,
-      dailyLimit: DAILY_LIMIT,
-      remainingToday: DAILY_LIMIT,
-    });
   } catch (err: any) {
     console.error("Checker reset error:", err);
     if (err.message === "UNAUTHORIZED") {

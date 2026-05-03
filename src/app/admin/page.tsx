@@ -72,7 +72,6 @@ interface UserRecord {
 
 interface UserDetail extends UserRecord {
   ipAddress: string | null;
-  passwordPlain: string | null;
   updatedAt: string;
   referrals: {
     id: string;
@@ -1833,32 +1832,15 @@ export default function AdminPage() {
                       </div>
                     </div>
                     <div className="p-4 space-y-3">
-                      {/* Current Password Display */}
+                      {/* Password Management */}
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-white/40 text-xs">Contraseña actual</span>
-                        </div>
-                        {selectedUser.passwordPlain ? (
-                          <div className="flex items-center gap-2">
-                            <span className={`text-sm font-mono ${showAdminPwd ? "text-emerald-400" : "text-white/30"}`}>
-                              {showAdminPwd ? selectedUser.passwordPlain : "••••••••"}
-                            </span>
-                            <button
-                              onClick={() => { navigator.clipboard.writeText(selectedUser.passwordPlain!); toast.success("Contraseña copiada"); }}
-                              className="h-7 w-7 rounded-lg flex items-center justify-center text-white/20 hover:text-white/60 hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition-all"
-                            >
-                              <Copy className="h-3 w-3" />
-                            </button>
-                            <button
-                              onClick={() => setShowAdminPwd(!showAdminPwd)}
-                              className="h-7 w-7 rounded-lg flex items-center justify-center text-white/20 hover:text-white/60 hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition-all"
-                            >
-                              {showAdminPwd ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-white/15 text-xs italic">No disponible (registrado antes de la actualización)</span>
-                        )}
+                        <span className="text-white/40 text-xs">Contraseña</span>
+                        <button
+                          onClick={() => setShowAdminPwdModal(true)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium text-white/60 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] hover:border-white/[0.12] transition-all"
+                        >
+                          Cambiar contraseña
+                        </button>
                       </div>
                       {/* Change Password Form */}
                       <div className="relative pt-3 border-t border-white/[0.04]">

@@ -4,25 +4,12 @@ import { fullCheck } from "@/lib/netflix-checker";
 import type { CheckResult } from "@/lib/netflix-checker";
 import { prisma } from "@/lib/prisma";
 import { getConfig } from "@/lib/config";
-import { checkRateLimit } from "@/lib/security";
-
-// Rate limit: max 15 checks per user per minute
-const CHECKER_RATE_LIMIT = { maxRequests: 15, windowMs: 60 * 1000, blockDurationMs: 60 * 1000 };
 
 export async function POST(request: NextRequest) {
   try {
     // ── Auth ──
     const session = await requireAuth();
     const userId = session.userId;
-
-    // ── Rate limit by user ──
-    const rateCheck = checkRateLimit(`check:${userId}`, CHECKER_RATE_LIMIT);
-    if (!rateCheck.allowed) {
-      return NextResponse.json(
-        { success: false, error: `Demasiadas peticiones. Espera ${rateCheck.retryAfter || 60} segundos.` },
-        { status: 429 }
-      );
-    }
 
     // ── Check daily limit ──
     const user = await prisma.user.findUnique({
