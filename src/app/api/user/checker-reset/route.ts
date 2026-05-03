@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-
-const RESET_COST = 2;
-const DAILY_LIMIT = 10;
+import { getConfig } from "@/lib/config";
 
 export async function POST() {
   try {
     const session = await requireAuth();
     const userId = session.userId;
+
+    const RESET_COST = await getConfig("CHECKER_RESET_COST", 2);
+    const DAILY_LIMIT = await getConfig("CHECKER_DAILY_LIMIT", 10);
 
     // Fetch user with lock-like pattern
     const user = await prisma.user.findUnique({

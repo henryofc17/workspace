@@ -161,6 +161,10 @@ export default function Home() {
   const [redeeming, setRedeeming] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
 
+  // Gift key state
+  const [giftKeyCode, setGiftKeyCode] = useState("");
+  const [redeemingKey, setRedeemingKey] = useState(false);
+
   // Change password state
   const [currentPwd, setCurrentPwd] = useState("");
   const [newPwd, setNewPwd] = useState("");
@@ -468,6 +472,35 @@ export default function Home() {
       setRedeeming(false);
     }
   }, [redeemCode, refreshCredits, loadBalance]);
+
+  // ── Redeem Gift Key ──
+  const handleRedeemGiftKey = useCallback(async () => {
+    if (!giftKeyCode.trim()) {
+      toast.error("Ingresa un código de gift key");
+      return;
+    }
+    setRedeemingKey(true);
+    try {
+      const res = await fetch("/api/user/redeem-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: giftKeyCode.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message);
+        setGiftKeyCode("");
+        refreshCredits();
+        loadBalance();
+      } else {
+        toast.error(data.error);
+      }
+    } catch {
+      toast.error("Error de conexión");
+    } finally {
+      setRedeemingKey(false);
+    }
+  }, [giftKeyCode, refreshCredits, loadBalance]);
 
   // ── Change Password ──
   const handleChangePassword = useCallback(async () => {
@@ -815,6 +848,45 @@ export default function Home() {
             {/* ═══ Gradient Section Divider ═══ */}
             <div className="relative h-px w-full">
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+            </div>
+
+            {/* ═══ Gradient Section Divider ═══ */}
+            <div className="relative h-px w-full">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+            </div>
+
+            {/* ═══ Gift Key Redemption Card ═══ */}
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
+              <div className="absolute inset-0 bg-gradient-to-br from-teal-950/10 via-transparent to-emerald-950/5" />
+              <div className="absolute -top-16 -left-16 w-32 h-32 bg-teal-500/5 rounded-full blur-3xl" />
+              <CardHeader className="pb-3 px-5 pt-5 relative">
+                <CardTitle className="text-teal-300 text-sm flex items-center gap-2.5">
+                  <div className="h-7 w-7 rounded-lg bg-teal-500/10 border border-teal-500/20 flex items-center justify-center">
+                    <KeyRound className="h-3.5 w-3.5 text-teal-400" />
+                  </div>
+                  Canjear Gift Key
+                </CardTitle>
+                <CardDescription className="text-white/25 text-xs ml-[38px]">
+                  Ingresa tu código <span className="text-white/60 font-semibold">HJFLIX-XXXXX</span> para obtener créditos.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="px-5 pb-5 relative">
+                <div className="flex gap-2">
+                  <Input
+                    value={giftKeyCode}
+                    onChange={(e) => setGiftKeyCode(e.target.value.toUpperCase())}
+                    placeholder="HJFLIX-XXXXX"
+                    className="flex-1 bg-[#050508]/80 border-white/[0.06] text-white/80 placeholder:text-white/15 uppercase font-mono rounded-xl focus:border-teal-500/30 focus:ring-1 focus:ring-teal-500/10 transition-all duration-300 text-sm"
+                  />
+                  <Button
+                    onClick={handleRedeemGiftKey}
+                    disabled={redeemingKey || !giftKeyCode.trim()}
+                    className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-medium h-10 px-5 disabled:opacity-40 shrink-0 rounded-xl shadow-[0_0_15px_rgba(20,184,166,0.15)] transition-all duration-300"
+                  >
+                    {redeemingKey ? <Loader2 className="h-4 w-4 animate-spin" /> : "Canjear Key"}
+                  </Button>
+                </div>
+              </CardContent>
             </div>
 
             {/* ═══ Buy Credits Notice ═══ */}

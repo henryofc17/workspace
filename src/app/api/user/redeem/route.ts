@@ -3,9 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { validateBody, redeemSchema } from "@/lib/validators";
 import { logSecurityEvent, SecurityEvents } from "@/lib/security";
-
-const REFERRAL_BONUS = 5;
-const REDEEM_BONUS = 3;
+import { getConfig } from "@/lib/config";
 
 export async function POST(request: Request) {
   try {
@@ -22,6 +20,9 @@ export async function POST(request: Request) {
     }
 
     const cleanCode = validation.data.code;
+
+    const REFERRAL_BONUS = await getConfig("REFERRAL_BONUS", 5);
+    const REDEEM_BONUS = await getConfig("REDEEM_BONUS", 3);
 
     // ── Cannot use own code ──
     const me = await prisma.user.findUnique({

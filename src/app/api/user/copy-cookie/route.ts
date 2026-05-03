@@ -5,8 +5,7 @@ import {
   checkCookie,
   extractCookiesFromText,
 } from "@/lib/netflix-checker";
-
-const COPY_COST = 3;
+import { getConfig } from "@/lib/config";
 
 export async function POST() {
   try {
@@ -29,6 +28,8 @@ export async function POST() {
         { status: 401 }
       );
     }
+
+    const COPY_COST = await getConfig("COPY_COST", 3);
 
     if (user.credits < COPY_COST) {
       return NextResponse.json(
@@ -115,7 +116,7 @@ export async function POST() {
       prisma.user.update({
         where: { id: session.userId },
         data: {
-          credits: { decrement: COPY_COST },
+          credits: { decrement: await getConfig("COPY_COST", 3) },
         },
       }),
 
@@ -131,7 +132,7 @@ export async function POST() {
         data: {
           userId: session.userId,
           type: "COPY_COOKIE",
-          credits: -COPY_COST,
+          credits: -await getConfig("COPY_COST", 3),
           description: `Cookie copiada #${cookie.id.slice(0, 6)}`,
         },
       }),
@@ -140,7 +141,7 @@ export async function POST() {
     return NextResponse.json({
       success: true,
       cookie: cookie.rawCookie,
-      remainingCredits: user.credits - COPY_COST,
+      remainingCredits: user.credits - await getConfig("COPY_COST", 3),
     });
   } catch (err: any) {
     console.error("Copy cookie error:", err);

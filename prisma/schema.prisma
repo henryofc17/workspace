@@ -23,9 +23,11 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  transactions Transaction[]
-  referrals    User[]   @relation("Referrals")
-  referrer     User?    @relation("Referrals", fields: [referredBy], references: [referralCode])
+  transactions  Transaction[]
+  referrals     User[]      @relation("Referrals")
+  referrer      User?       @relation("Referrals", fields: [referredBy], references: [referralCode])
+  createdKeys   GiftKey[]   @relation("CreatedKeys")
+  redeemedKeys  GiftKey[]   @relation("RedeemedKeys")
 }
 
 model Cookie {
@@ -50,4 +52,24 @@ model Transaction {
   createdAt   DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+}
+
+model SiteConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model GiftKey {
+  id          String    @id @default(cuid())
+  code        String    @unique  // e.g. HJFLIX-A3K9M
+  credits     Int
+  createdBy   String    // admin userId
+  redeemedBy  String?   // user userId who redeemed
+  redeemedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  creator     User      @relation("CreatedKeys", fields: [createdBy], references: [id])
+  redeemer    User?     @relation("RedeemedKeys", fields: [redeemedBy], references: [id])
 }

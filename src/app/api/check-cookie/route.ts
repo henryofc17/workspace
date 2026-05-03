@@ -3,9 +3,7 @@ import { requireAuth } from "@/lib/auth";
 import { fullCheck } from "@/lib/netflix-checker";
 import type { CheckResult } from "@/lib/netflix-checker";
 import { prisma } from "@/lib/prisma";
-
-const DAILY_LIMIT = 10;
-const RESET_COST = 2; // credits
+import { getConfig } from "@/lib/config";
 
 // Simple in-memory rate limit per IP
 const rateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -47,6 +45,9 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       );
     }
+
+    const DAILY_LIMIT = await getConfig("CHECKER_DAILY_LIMIT", 10);
+    const RESET_COST = await getConfig("CHECKER_RESET_COST", 2);
 
     // Reset counter if day changed (using UTC date comparison)
     const today = new Date();
@@ -152,8 +153,10 @@ export async function GET() {
       });
     }
 
+    const DAILY_LIMIT = await getConfig("CHECKER_DAILY_LIMIT", 10);
+    const RESET_COST = await getConfig("CHECKER_RESET_COST", 2);
+
     return NextResponse.json({
-      success: true,
       usesToday,
       dailyLimit: DAILY_LIMIT,
       remainingToday: DAILY_LIMIT - usesToday,

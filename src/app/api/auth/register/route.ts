@@ -10,9 +10,7 @@ import {
   sanitizeString,
 } from "@/lib/security";
 import { validateBody, registerSchema } from "@/lib/validators";
-
-const REGISTER_BONUS = 3;
-const REFERRAL_BONUS = 5;
+import { getConfig } from "@/lib/config";
 
 async function verifyTurnstile(token: string): Promise<boolean> {
   const secret = process.env.TURNSTILE_SECRET_KEY;
@@ -80,6 +78,9 @@ export async function POST(request: Request) {
     }
 
     const { username, password, referralCode, fingerprint, turnstileToken } = validation.data;
+
+    const REGISTER_BONUS = await getConfig("REGISTER_BONUS", 3);
+    const REFERRAL_BONUS = await getConfig("REFERRAL_BONUS", 5);
 
     // ── Verify Turnstile ──
     const turnstileValid = await verifyTurnstile(turnstileToken);

@@ -42,6 +42,8 @@ import {
   Filter,
   KeyRound,
   EyeOff,
+  Settings,
+  Ticket,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -290,8 +292,21 @@ export default function AdminPage() {
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const [deletingDuplicates, setDeletingDuplicates] = useState(false);
 
+  // Config state
+  const [siteConfig, setSiteConfig] = useState<Record<string, number>>({});
+  const [loadingConfig, setLoadingConfig] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+
+  // Gift keys state
+  const [giftKeys, setGiftKeys] = useState<any[]>([]);
+  const [keysFilter, setKeysFilter] = useState<"all" | "available" | "redeemed">("all");
+  const [keyCount, setKeyCount] = useState("1");
+  const [keyCredits, setKeyCredits] = useState("5");
+  const [generatingKeys, setGeneratingKeys] = useState(false);
+  const [loadingKeys, setLoadingKeys] = useState(false);
+
   // Active tab
-  const [tab, setTab] = useState<"dashboard" | "users" | "cookies">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "users" | "cookies" | "config">("dashboard");
 
   // User search
   const [userSearch, setUserSearch] = useState("");
@@ -661,11 +676,91 @@ export default function AdminPage() {
       }
     });
 
+  // ── Load Config ──
+  const loadConfig = useCallback(async () => {
+    setLoadingConfig(true);
+    try {
+      const res = await fetch("/api/admin/config");
+      const data = await res.json();
+      if (data.success) setSiteConfig(data.config);
+    } catch {}
+    setLoadingConfig(false);
+  }, []);
+
+  // ── Save Config ──
+  const handleSaveConfig = useCallback(async () => {
+    setSavingConfig(true);
+    try {
+      const res = await fetch("/api/admin/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config: siteConfig }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Configuración guardada");
+      } else {
+        toast.error(data.error);
+      }
+    } catch {
+      toast.error("Error al guardar");
+    }
+    setSavingConfig(false);
+  }, [siteConfig]);
+
+  // ── Load Gift Keys ──
+  const loadKeys = useCallback(async () => {
+    setLoadingKeys(true);
+    try {
+      const res = await fetch(`/api/admin/keys?filter=${keysFilter}`);
+      const data = await res.json();
+      if (data.success) setGiftKeys(data.keys);
+    } catch {}
+    setLoadingKeys(false);
+  }, [keysFilter]);
+
+  // ── Generate Keys ──
+  const handleGenerateKeys = useCallback(async () => {
+    const count = Number(keyCount);
+    const credits = Number(keyCredits);
+    if (!count || count < 1 || count > 100 || !credits || credits < 1) {
+      toast.error("Datos inválidos");
+      return;
+    }
+    setGeneratingKeys(true);
+    try {
+      const res = await fetch("/api/admin/keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count, credits }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message);
+        loadKeys();
+      } else {
+        toast.error(data.error);
+      }
+    } catch {
+      toast.error("Error al generar keys");
+    }
+    setGeneratingKeys(false);
+  }, [keyCount, keyCredits, loadKeys]);
+
+  // ── Load Config + Keys when switching to config tab ──
+  useEffect(() => {
+    if (tab === "config") {
+      loadConfig();
+      loadKeys();
+    }
+  }, [tab, loadConfig, loadKeys]);
+
   // Tab config
   const tabs = [
     { key: "dashboard" as const, label: "Dashboard", icon: Activity },
     { key: "users" as const, label: "Usuarios", icon: Users },
     { key: "cookies" as const, label: "Cookies", icon: Cookie },
+    { key: "config" as const, label: "Configuración", icon: Settings },
   ];
 
   const tabIndex = tabs.findIndex((t) => t.key === tab);
@@ -1340,6 +1435,200 @@ export default function AdminPage() {
                               </div>
                             )}
                           </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </PanelCard>
+            </motion.div>
+          )}
+
+          {/* ═══ CONFIG ═══ */}
+          {tab === "config" && (
+            <motion.div
+              key="config"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-6"
+            >
+              {/* Site Configuration Card */}
+              <PanelCard
+                icon={Settings}
+                iconColor="from-purple-500/20 to-violet-500/10"
+                title="Configuración del Sitio"
+                subtitle="Costos, límites y bonificaciones"
+                headerExtra={
+                  <button
+                    onClick={handleSaveConfig}
+                    disabled={savingConfig || loadingConfig}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white text-xs font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-purple-500/10 hover:shadow-purple-500/20 active:scale-[0.98] flex items-center gap-1.5"
+                  >
+                    {savingConfig ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Coins className="h-3.5 w-3.5" />}
+                    Guardar
+                  </button>
+                }
+              >
+                <div className="p-5">
+                  {loadingConfig ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-white/20" />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {[
+                        { key: "GENERATE_COST", label: "Costo Token", icon: Zap, desc: "Créditos por generar token" },
+                        { key: "COPY_COST", label: "Costo Cookie", icon: Copy, desc: "Créditos por copiar cookie" },
+                        { key: "TV_ACTIVATE_COST", label: "Costo Activar TV", icon: MonitorPlay || Tv, desc: "Créditos para activar TV" },
+                        { key: "CHECKER_DAILY_LIMIT", label: "Límite Checker Diario", icon: Search, desc: "Verificaciones por día" },
+                        { key: "CHECKER_RESET_COST", label: "Costo Reiniciar Checker", icon: RefreshCw, desc: "Créditos para reiniciar" },
+                        { key: "REGISTER_BONUS", label: "Créditos por Registro", icon: UserPlus, desc: "Bonus al registrarse" },
+                        { key: "REFERRAL_BONUS", label: "Créditos por Referido", icon: Gift, desc: "Bonus al referir usuario" },
+                        { key: "REDEEM_BONUS", label: "Créditos al Canjear Referido", icon: Ticket, desc: "Bonus al canjear código" },
+                      ].map(({ key, label, icon: Ic, desc }) => (
+                        <div key={key} className="rounded-xl bg-white/[0.02] border border-white/[0.06] p-3.5 hover:bg-white/[0.04] transition-all duration-200">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="h-6 w-6 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                              <Ic className="h-3 w-3 text-purple-400" />
+                            </div>
+                            <span className="text-white/70 text-xs font-medium">{label}</span>
+                          </div>
+                          <input
+                            type="number"
+                            min="0"
+                            value={siteConfig[key] ?? ""}
+                            onChange={(e) => setSiteConfig({ ...siteConfig, [key]: Number(e.target.value) || 0 })}
+                            className="premium-input w-full bg-[#050508]/60 border border-white/[0.08] rounded-lg px-3 py-2 text-white text-sm font-mono outline-none focus:border-purple-500/30 transition-all duration-300"
+                          />
+                          <p className="text-white/15 text-[9px] mt-1.5">{desc}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </PanelCard>
+
+              {/* Gift Keys Generator Card */}
+              <PanelCard
+                icon={Ticket}
+                iconColor="from-emerald-500/20 to-teal-500/10"
+                title="Generador de Gift Keys"
+                subtitle="Crea códigos de regalo HJFLIX-XXXXX"
+              >
+                <div className="p-5">
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex-1 space-y-1.5">
+                      <label className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Cantidad de keys</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={keyCount}
+                        onChange={(e) => setKeyCount(e.target.value)}
+                        placeholder="1-100"
+                        className="premium-input w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-emerald-500/30 transition-all duration-300"
+                      />
+                    </div>
+                    <div className="flex-1 space-y-1.5">
+                      <label className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Créditos por key</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={keyCredits}
+                        onChange={(e) => setKeyCredits(e.target.value)}
+                        placeholder="5"
+                        className="premium-input w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-emerald-500/30 transition-all duration-300"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        onClick={handleGenerateKeys}
+                        disabled={generatingKeys || !keyCount || !keyCredits}
+                        className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20 active:scale-[0.98] flex items-center justify-center gap-2"
+                      >
+                        {generatingKeys ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                        Generar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </PanelCard>
+
+              {/* Gift Keys Table */}
+              <PanelCard
+                icon={KeyRound}
+                iconColor="from-amber-500/20 to-yellow-500/10"
+                title="Gift Keys"
+                subtitle={`${giftKeys.length} keys`}
+                headerExtra={
+                  <div className="flex gap-1">
+                    {(["all", "available", "redeemed"] as const).map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => setKeysFilter(f)}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-all duration-200 ${
+                          keysFilter === f
+                            ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                            : "text-white/30 hover:text-white/50 border border-transparent"
+                        }`}
+                      >
+                        {f === "all" ? "Todas" : f === "available" ? "Disponibles" : "Canjeadas"}
+                      </button>
+                    ))}
+                  </div>
+                }
+              >
+                <div className="p-2 premium-scroll max-h-[500px] overflow-y-auto">
+                  {loadingKeys ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-6 w-6 animate-spin text-white/20" />
+                    </div>
+                  ) : giftKeys.length === 0 ? (
+                    <EmptyState icon={Ticket} text="Sin gift keys" subtext="Genera nuevas keys arriba" />
+                  ) : (
+                    <div className="space-y-1">
+                      {giftKeys.map((k: any) => (
+                        <motion.div
+                          key={k.id}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="group flex items-center justify-between p-3 rounded-xl hover:bg-white/[0.03] transition-colors duration-200"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
+                              k.redeemedBy ? "bg-red-500/10" : "bg-emerald-500/10"
+                            }`}>
+                              <Ticket className={`h-3.5 w-3.5 ${k.redeemedBy ? "text-red-400" : "text-emerald-400"}`} />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-white/80 text-sm font-mono font-bold tracking-wider">{k.code}</span>
+                                <button
+                                  onClick={() => copyToClipboard(k.code, "Key")}
+                                  className="h-6 w-6 rounded-md bg-white/[0.04] hover:bg-white/[0.08] flex items-center justify-center transition-colors"
+                                >
+                                  <Copy className="h-3 w-3 text-white/30 hover:text-white/60" />
+                                </button>
+                                <Badge className={`text-[9px] font-bold px-1.5 py-0 h-4 border-0 ${
+                                  k.redeemedBy ? "bg-red-500/10 text-red-400" : "bg-emerald-500/10 text-emerald-400"
+                                }`}>
+                                  {k.redeemedBy ? "Canjeada" : "Disponible"}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-3 mt-0.5">
+                                <span className="text-white/25 text-[10px]">+{k.credits} créditos</span>
+                                <span className="text-white/15 text-[10px]">por {k.creator?.username || "N/A"}</span>
+                                {k.redeemer && (
+                                  <span className="text-white/15 text-[10px]">→ {k.redeemer.username}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <span className="text-white/10 text-[10px] font-medium shrink-0">
+                            {new Date(k.createdAt).toLocaleDateString("es")}
+                          </span>
                         </motion.div>
                       ))}
                     </div>

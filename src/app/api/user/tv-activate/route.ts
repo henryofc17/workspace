@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { validateBody, tvActivateSchema } from "@/lib/validators";
-
-const TV_ACTIVATE_COST = 5;
+import { getConfig } from "@/lib/config";
 
 const DESKTOP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
@@ -40,6 +39,7 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ success: false, error: "Usuario no encontrado" }, { status: 401 });
     }
+    const TV_ACTIVATE_COST = await getConfig("TV_ACTIVATE_COST", 5);
     if (user.credits < TV_ACTIVATE_COST) {
       return NextResponse.json(
         { success: false, error: `Necesitas ${TV_ACTIVATE_COST} créditos. Tienes ${user.credits}` },
@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
       await prisma.$transaction([
         prisma.user.update({
           where: { id: session.userId },
-          data: { credits: { decrement: TV_ACTIVATE_COST } },
+          data: { credits: { decrement: await getConfig("TV_ACTIVATE_COST", 5) } },
         }),
         prisma.cookie.update({
           where: { id: cookie.id },
@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
           data: {
             userId: session.userId,
             type: "TV_ACTIVATE",
-            credits: -TV_ACTIVATE_COST,
+            credits: -await getConfig("TV_ACTIVATE_COST", 5),
             description: `Activación TV (${cleanCode}) con cookie #${cookie.id.slice(0, 6)}`,
           },
         }),
@@ -201,7 +201,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         message: resultMessage,
-        remainingCredits: user.credits - TV_ACTIVATE_COST,
+        remainingCredits: user.credits - await getConfig("TV_ACTIVATE_COST", 5),
       });
     }
 

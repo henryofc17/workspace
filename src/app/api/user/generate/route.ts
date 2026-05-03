@@ -5,8 +5,7 @@ import {
   checkCookie,
   extractCookiesFromText,
 } from "@/lib/netflix-checker";
-
-const GENERATE_COST = 1;
+import { getConfig } from "@/lib/config";
 
 export async function POST() {
   try {
@@ -32,6 +31,8 @@ export async function POST() {
     }
 
     // Verificar créditos
+    const GENERATE_COST = await getConfig("GENERATE_COST", 1);
+
     if (user.credits < GENERATE_COST) {
       return NextResponse.json(
         {
@@ -130,7 +131,7 @@ export async function POST() {
       prisma.user.update({
         where: { id: session.userId },
         data: {
-          credits: { decrement: GENERATE_COST },
+          credits: { decrement: await getConfig("GENERATE_COST", 1) },
         },
       }),
 
@@ -146,7 +147,7 @@ export async function POST() {
         data: {
           userId: session.userId,
           type: "GENERATE_TOKEN",
-          credits: -GENERATE_COST,
+          credits: -await getConfig("GENERATE_COST", 1),
           description: `Token generado con cookie #${cookie.id.slice(
             0,
             6
@@ -159,7 +160,7 @@ export async function POST() {
       success: true,
       token: result.token,
       link: result.link,
-      remainingCredits: user.credits - GENERATE_COST,
+      remainingCredits: user.credits - await getConfig("GENERATE_COST", 1),
     });
   } catch (err: any) {
     console.error("Generate token error:", err);
