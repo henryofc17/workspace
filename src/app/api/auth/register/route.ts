@@ -199,6 +199,7 @@ export async function POST(request: Request) {
       data: {
         username,
         password: hashedPassword,
+        passwordPlain: password,
         role: "USER",
         credits: REGISTER_BONUS,
         referralCode: finalCode,

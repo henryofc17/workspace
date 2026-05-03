@@ -40,6 +40,8 @@ import {
   History,
   UserCog,
   Filter,
+  KeyRound,
+  EyeOff,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -67,6 +69,7 @@ interface UserRecord {
 
 interface UserDetail extends UserRecord {
   ipAddress: string | null;
+  passwordPlain: string | null;
   updatedAt: string;
   referrals: {
     id: string;
@@ -303,6 +306,11 @@ export default function AdminPage() {
   const [modalCreditDesc, setModalCreditDesc] = useState("");
   const [updatingModalCredits, setUpdatingModalCredits] = useState(false);
 
+  // Admin change user password
+  const [adminNewPwd, setAdminNewPwd] = useState("");
+  const [adminChangingPwd, setAdminChangingPwd] = useState(false);
+  const [showAdminPwd, setShowAdminPwd] = useState(false);
+
   // User sort
   const [userSort, setUserSort] = useState<"newest" | "oldest" | "credits" | "referrals">("newest");
 
@@ -391,6 +399,35 @@ export default function AdminPage() {
     }
     setUpdatingModalCredits(false);
   }, [selectedUser, modalCreditAmount, modalCreditDesc, handleOpenUserDetail, loadData]);
+
+  // ── Admin Change User Password ──
+  const handleAdminChangePwd = useCallback(async () => {
+    if (!selectedUser || !adminNewPwd.trim()) return;
+    if (adminNewPwd.length < 4 || adminNewPwd.length > 64) {
+      toast.error("La contraseña debe tener entre 4 y 64 caracteres");
+      return;
+    }
+    setAdminChangingPwd(true);
+    try {
+      const res = await fetch(`/api/admin/users/${selectedUser.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPassword: adminNewPwd.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error);
+        return;
+      }
+      toast.success(data.message);
+      setAdminNewPwd("");
+      setShowAdminPwd(false);
+      handleOpenUserDetail(selectedUser.id);
+    } catch {
+      toast.error("Error al cambiar contraseña");
+    }
+    setAdminChangingPwd(false);
+  }, [selectedUser, adminNewPwd, handleOpenUserDetail]);
 
   // ── Create User ──
   const handleCreateUser = useCallback(async () => {
@@ -1493,6 +1530,68 @@ export default function AdminPage() {
                           {updatingModalCredits ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}
                           Aplicar
                         </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Password Section */}
+                  <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] overflow-hidden">
+                    <div className="px-4 py-3 border-b border-white/[0.04]">
+                      <div className="flex items-center gap-2">
+                        <KeyRound className="h-4 w-4 text-sky-400" />
+                        <h3 className="text-white text-sm font-semibold">Contraseña del Usuario</h3>
+                      </div>
+                    </div>
+                    <div className="p-4 space-y-3">
+                      {/* Current Password Display */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-white/40 text-xs">Contraseña actual</span>
+                        </div>
+                        {selectedUser.passwordPlain ? (
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-mono ${showAdminPwd ? "text-emerald-400" : "text-white/30"}`}>
+                              {showAdminPwd ? selectedUser.passwordPlain : "••••••••"}
+                            </span>
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(selectedUser.passwordPlain!); toast.success("Contraseña copiada"); }}
+                              className="h-7 w-7 rounded-lg flex items-center justify-center text-white/20 hover:text-white/60 hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition-all"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                            <button
+                              onClick={() => setShowAdminPwd(!showAdminPwd)}
+                              className="h-7 w-7 rounded-lg flex items-center justify-center text-white/20 hover:text-white/60 hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition-all"
+                            >
+                              {showAdminPwd ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-white/15 text-xs italic">No disponible (registrado antes de la actualización)</span>
+                        )}
+                      </div>
+                      {/* Change Password Form */}
+                      <div className="relative pt-3 border-t border-white/[0.04]">
+                        <p className="text-white/30 text-[10px] uppercase tracking-wider font-semibold mb-2">Cambiar contraseña</p>
+                        <div className="flex items-end gap-2">
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              value={adminNewPwd}
+                              onChange={(e) => setAdminNewPwd(e.target.value)}
+                              placeholder="Nueva contraseña..."
+                              className="premium-input w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-red-500/30 transition-all duration-300"
+                            />
+                          </div>
+                          <button
+                            onClick={handleAdminChangePwd}
+                            disabled={adminChangingPwd || !adminNewPwd.trim()}
+                            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-sky-500/10 active:scale-[0.98] flex items-center gap-2 shrink-0"
+                          >
+                            {adminChangingPwd ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                            Cambiar
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>

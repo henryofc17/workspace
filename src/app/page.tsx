@@ -34,6 +34,10 @@ import {
   MonitorPlay,
   Menu,
   ArrowLeft,
+  KeyRound,
+  EyeOff,
+  Eye,
+  User,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -152,6 +156,14 @@ export default function Home() {
   const [redeemCode, setRedeemCode] = useState("");
   const [redeeming, setRedeeming] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
+
+  // Change password state
+  const [currentPwd, setCurrentPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [changingPwd, setChangingPwd] = useState(false);
+  const [showPwdCurrent, setShowPwdCurrent] = useState(false);
+  const [showPwdNew, setShowPwdNew] = useState(false);
 
   // ── Auth Check ──
   const loadBalance = useCallback(async () => {
@@ -399,6 +411,43 @@ export default function Home() {
     }
   }, [redeemCode, refreshCredits, loadBalance]);
 
+  // ── Change Password ──
+  const handleChangePassword = useCallback(async () => {
+    if (!currentPwd.trim() || !newPwd.trim() || !confirmPwd.trim()) {
+      toast.error("Todos los campos son requeridos");
+      return;
+    }
+    if (newPwd.length < 4) {
+      toast.error("La nueva contraseña debe tener al menos 4 caracteres");
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      toast.error("Las contraseñas no coinciden");
+      return;
+    }
+    setChangingPwd(true);
+    try {
+      const res = await fetch("/api/user/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: currentPwd, newPassword: newPwd }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Contraseña actualizada correctamente");
+        setCurrentPwd("");
+        setNewPwd("");
+        setConfirmPwd("");
+      } else {
+        toast.error(data.error || "Error al cambiar contraseña");
+      }
+    } catch {
+      toast.error("Error de conexión");
+    } finally {
+      setChangingPwd(false);
+    }
+  }, [currentPwd, newPwd, confirmPwd]);
+
   // ── Logout ──
   const handleLogout = useCallback(async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -559,6 +608,25 @@ export default function Home() {
             ═══════════════════════════════════════════════════════════════════ */}
         {activeView === "dashboard" && (
           <>
+            {/* ═══ Welcome Greeting ═══ */}
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
+              <div className="absolute inset-0 bg-gradient-to-br from-[#E50914]/5 via-transparent to-purple-950/5" />
+              <div className="absolute top-0 right-0 w-32 h-32 bg-[#E50914]/5 rounded-full blur-3xl" />
+              <CardContent className="relative p-5">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-[#E50914]/20 to-purple-500/10 border border-[#E50914]/20 flex items-center justify-center">
+                    <User className="h-5 w-5 text-[#E50914]" />
+                  </div>
+                  <div>
+                    <p className="text-white/30 text-[10px] uppercase tracking-widest">Bienvenido de vuelta</p>
+                    <h2 className="text-white/90 text-xl font-bold tracking-tight">
+                      Hola, <span className="bg-gradient-to-r from-[#E50914] via-purple-400 to-[#3B82F6] bg-clip-text text-transparent">{username}</span>
+                    </h2>
+                  </div>
+                </div>
+              </CardContent>
+            </div>
+
             {/* ═══ Premium Credit Banner ═══ */}
             <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
               <div className="absolute inset-0 bg-gradient-to-br from-amber-950/10 via-transparent to-orange-950/5" />
@@ -801,6 +869,75 @@ export default function Home() {
                     ))
                   )}
                 </div>
+              </CardContent>
+            </div>
+
+            {/* ═══ Change Password ═══ */}
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
+              <div className="absolute inset-0 bg-gradient-to-br from-sky-950/10 via-transparent to-indigo-950/5" />
+              <div className="absolute -bottom-16 -right-16 w-32 h-32 bg-sky-500/5 rounded-full blur-3xl" />
+              <CardHeader className="pb-3 px-5 pt-5 relative">
+                <CardTitle className="text-sky-300 text-sm flex items-center gap-2.5">
+                  <div className="h-7 w-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center">
+                    <KeyRound className="h-3.5 w-3.5 text-sky-400" />
+                  </div>
+                  Cambiar Contraseña
+                </CardTitle>
+                <CardDescription className="text-white/25 text-xs ml-[38px]">
+                  Actualiza tu contraseña para mantener tu cuenta segura
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 px-5 pb-5 relative">
+                {/* Current Password */}
+                <div className="relative">
+                  <Input
+                    type={showPwdCurrent ? "text" : "password"}
+                    value={currentPwd}
+                    onChange={(e) => setCurrentPwd(e.target.value)}
+                    placeholder="Contraseña actual"
+                    className="bg-[#050508]/80 border-white/[0.06] text-white/80 placeholder:text-white/15 pr-10 rounded-xl focus:border-sky-500/30 focus:ring-1 focus:ring-sky-500/10 transition-all duration-300 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPwdCurrent(!showPwdCurrent)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/20 hover:text-white/50 transition-colors"
+                  >
+                    {showPwdCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {/* New Password */}
+                <div className="relative">
+                  <Input
+                    type={showPwdNew ? "text" : "password"}
+                    value={newPwd}
+                    onChange={(e) => setNewPwd(e.target.value)}
+                    placeholder="Nueva contraseña"
+                    className="bg-[#050508]/80 border-white/[0.06] text-white/80 placeholder:text-white/15 pr-10 rounded-xl focus:border-sky-500/30 focus:ring-1 focus:ring-sky-500/10 transition-all duration-300 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPwdNew(!showPwdNew)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/20 hover:text-white/50 transition-colors"
+                  >
+                    {showPwdNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {/* Confirm New Password */}
+                <Input
+                  type="password"
+                  value={confirmPwd}
+                  onChange={(e) => setConfirmPwd(e.target.value)}
+                  placeholder="Confirmar nueva contraseña"
+                  className="bg-[#050508]/80 border-white/[0.06] text-white/80 placeholder:text-white/15 rounded-xl focus:border-sky-500/30 focus:ring-1 focus:ring-sky-500/10 transition-all duration-300 text-sm"
+                />
+                <Button
+                  onClick={handleChangePassword}
+                  disabled={changingPwd || !currentPwd.trim() || !newPwd.trim() || !confirmPwd.trim()}
+                  className="w-full bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white font-medium h-10 rounded-xl shadow-[0_0_15px_rgba(56,189,248,0.15)] transition-all duration-300 disabled:opacity-40"
+                >
+                  {changingPwd ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <KeyRound className="h-4 w-4 mr-2" />}
+                  Actualizar Contraseña
+                </Button>
               </CardContent>
             </div>
           </>
