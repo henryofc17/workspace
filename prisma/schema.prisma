@@ -16,6 +16,8 @@ model User {
   credits      Int      @default(0)
   referralCode String   @unique // e.g. NF-XXXXXX
   referredBy   String?  // referral code of who invited them
+  checkerUsesToday Int      @default(0)
+  checkerResetDate DateTime @default(now())
   ipAddress    String?  // IP at registration
   fingerprint  String?  // browser fingerprint
   createdAt    DateTime @default(now())

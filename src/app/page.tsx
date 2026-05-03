@@ -131,6 +131,10 @@ export default function Home() {
   const [cookieText, setCookieText] = useState("");
   const [checking, setChecking] = useState(false);
   const [checkerResult, setCheckerResult] = useState<CheckerResult | null>(null);
+  const [checkerUsesToday, setCheckerUsesToday] = useState(0);
+  const checkerDailyLimit = 10;
+  const [checkerLimitReached, setCheckerLimitReached] = useState(false);
+  const [resettingChecker, setResettingChecker] = useState(false);
 
   // Generate token state
   const [generating, setGenerating] = useState(false);
@@ -165,7 +169,21 @@ export default function Home() {
   const [showPwdCurrent, setShowPwdCurrent] = useState(false);
   const [showPwdNew, setShowPwdNew] = useState(false);
 
-  // ── Auth Check ──
+  // ── Load Checker Usage ──
+  const loadCheckerUsage = useCallback(async () => {
+    try {
+      const res = await fetch("/api/check-cookie");
+      const data = await res.json();
+      if (data.success) {
+        setCheckerUsesToday(data.usesToday || 0);
+        setCheckerLimitReached(data.dailyLimitReached || false);
+      }
+    } catch {
+      // silent
+    }
+  }, []);
+
+  // ── Load Balance ──
   const loadBalance = useCallback(async () => {
     try {
       const res = await fetch("/api/user/balance");
@@ -210,6 +228,7 @@ export default function Home() {
           setCredits(data.user.credits ?? 0);
           loadBalance();
           loadReferral();
+          loadCheckerUsage();
           setLoading(false);
         }
       })
@@ -217,7 +236,7 @@ export default function Home() {
         if (!cancelled) router.push("/login");
       });
     return () => { cancelled = true; };
-  }, [router, loadBalance, loadReferral]);
+  }, [router, loadBalance, loadReferral, loadCheckerUsage]);
 
 
   const refreshCredits = useCallback(() => {
@@ -274,10 +293,41 @@ export default function Home() {
   }, [tvCode, credits, refreshCredits, loadBalance]);
 
 
-  // ── Checker: Verify own cookie (free) ──
+  // ── Checker Reset (2 credits) ──
+  const handleCheckerReset = useCallback(async () => {
+    if (credits < 2) {
+      toast.error("Necesitas al menos 2 créditos para reiniciar");
+      return;
+    }
+    setResettingChecker(true);
+    try {
+      const res = await fetch("/api/user/checker-reset", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setCheckerUsesToday(0);
+        setCheckerLimitReached(false);
+        setCredits(data.remainingCredits);
+        refreshCredits();
+        loadBalance();
+        toast.success(data.message);
+      } else {
+        toast.error(data.error || "Error al reiniciar verificaciones");
+      }
+    } catch {
+      toast.error("Error de conexión");
+    } finally {
+      setResettingChecker(false);
+    }
+  }, [credits, refreshCredits, loadBalance]);
+
+  // ── Checker: Verify own cookie (10 daily, only valid count) ──
   const handleCheck = useCallback(async () => {
     if (!cookieText.trim()) {
       toast.error("Pega una cookie para verificar");
+      return;
+    }
+    if (checkerLimitReached) {
+      toast.error("Límite diario alcanzado. Reinicia con 2 créditos.");
       return;
     }
     setChecking(true);
@@ -289,8 +339,16 @@ export default function Home() {
         body: JSON.stringify({ cookieText: cookieText.trim() }),
       });
       const data = await res.json();
+      if (data.dailyLimitReached) {
+        setCheckerLimitReached(true);
+        setCheckerUsesToday(data.usesToday);
+        setCheckerResult(data);
+        toast.error(data.error || "Límite diario alcanzado");
+        return;
+      }
       setCheckerResult(data);
       if (data.success) {
+        setCheckerUsesToday(data.usesToday);
         toast.success("Cookie válida");
       } else {
         toast.error(data.error || "Cookie inválida");
@@ -300,7 +358,7 @@ export default function Home() {
     } finally {
       setChecking(false);
     }
-  }, [cookieText]);
+  }, [cookieText, checkerLimitReached]);
 
   // ── Generate Token (1 credit) ──
   const handleGenerate = useCallback(async () => {
@@ -656,7 +714,7 @@ export default function Home() {
                     </div>
                     <div className="flex items-center gap-2 justify-end">
                       <div className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.5)]" />
-                      <span className="text-white/40 text-[11px]">Checker: <span className="text-emerald-400/80 font-medium">Gratis</span></span>
+                      <span className="text-white/40 text-[11px]">Checker: <span className="text-white/70 font-medium">10/día</span></span>
                     </div>
                     <div className="flex items-center gap-2 justify-end">
                       <div className="h-1.5 w-1.5 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(251,113,133,0.5)]" />
@@ -961,6 +1019,70 @@ export default function Home() {
         {/* ═══ TOOL: CHECKER ═══ */}
         {activeView === "checker" && (
           <div className="space-y-4">
+            {/* ═══ Checker Daily Usage Banner ═══ */}
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
+              <div className="absolute inset-0 bg-gradient-to-br from-sky-950/10 via-transparent to-blue-950/5" />
+              <CardContent className="relative p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-sky-500/20 to-blue-600/10 border border-sky-500/20 flex items-center justify-center">
+                      <Search className="h-4.5 w-4.5 text-sky-400" />
+                    </div>
+                    <div>
+                      <p className="text-white/70 text-sm font-semibold">Verificaciones Diarias</p>
+                      <p className="text-white/25 text-[10px]">
+                        {checkerLimitReached
+                          ? "Límite alcanzado — reinicia para continuar"
+                          : "Solo se cuentan cookies válidas"
+                        }
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {/* Progress circle / count */}
+                    <div className="flex flex-col items-center">
+                      <div className={`text-lg font-bold tabular-nums tracking-tight ${checkerLimitReached ? "text-red-400" : checkerUsesToday > 7 ? "text-amber-400" : "text-sky-300"}`}>
+                        {checkerUsesToday}<span className="text-white/25 text-xs font-normal">/{checkerDailyLimit}</span>
+                      </div>
+                      {/* Mini progress bar */}
+                      <div className="w-16 h-1 bg-white/[0.06] rounded-full mt-1 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            checkerLimitReached
+                              ? "bg-red-500"
+                              : checkerUsesToday > 7
+                                ? "bg-amber-500"
+                                : "bg-sky-500"
+                          }`}
+                          style={{ width: `${Math.min((checkerUsesToday / checkerDailyLimit) * 100, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                    {/* Reset button (only when limit reached) */}
+                    {checkerLimitReached && (
+                      <Button
+                        onClick={handleCheckerReset}
+                        disabled={resettingChecker || credits < 2}
+                        className="h-9 px-3.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-500 hover:from-amber-500 hover:to-orange-400 text-white text-xs font-semibold flex items-center gap-1.5 disabled:opacity-40 shadow-[0_0_15px_rgba(234,88,12,0.15)] transition-all duration-300 shrink-0"
+                      >
+                        {resettingChecker ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        )}
+                        <span className="hidden sm:inline">
+                          {credits < 2 ? "Sin créditos" : "+10 por 2 créditos"}
+                        </span>
+                        <span className="sm:hidden">
+                          <Coins className="h-3.5 w-3.5" /> 2
+                        </span>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </div>
+
             <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
               <CardHeader className="pb-3 px-5 pt-5">
                 <CardTitle className="text-white/90 text-sm flex items-center gap-2.5">
@@ -970,7 +1092,7 @@ export default function Home() {
                   Verificar Cookie Individual
                 </CardTitle>
                 <CardDescription className="text-white/25 text-xs ml-[38px]">
-                  Pega tu cookie de Netflix para verificarla y extraer metadatos. Completamente gratis.
+                  Pega tu cookie de Netflix para verificarla. 10 verificaciones diarias — solo cookies válidas cuentan.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-5 pb-5">
@@ -982,11 +1104,13 @@ export default function Home() {
                 />
                 <Button
                   onClick={handleCheck}
-                  disabled={checking || !cookieText.trim()}
+                  disabled={checking || !cookieText.trim() || checkerLimitReached}
                   className="w-full bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 text-white font-semibold h-11 transition-all duration-300 disabled:opacity-40 rounded-xl shadow-[0_0_20px_rgba(56,189,248,0.15)] hover:shadow-[0_0_30px_rgba(56,189,248,0.25)]"
                 >
                   {checking ? (
                     <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Verificando...</>
+                  ) : checkerLimitReached ? (
+                    <><X className="h-4 w-4 mr-2" /> Límite diario alcanzado</>
                   ) : (
                     <><Search className="h-4 w-4 mr-2" /> Verificar Cookie</>
                   )}
