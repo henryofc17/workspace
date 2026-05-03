@@ -132,7 +132,7 @@ export default function Home() {
   const [checking, setChecking] = useState(false);
   const [checkerResult, setCheckerResult] = useState<CheckerResult | null>(null);
   const [checkerUsesToday, setCheckerUsesToday] = useState(0);
-  const checkerDailyLimit = 10;
+  // checkerDailyLimit is now dynamic from siteConfig.CHECKER_DAILY_LIMIT
   const [checkerLimitReached, setCheckerLimitReached] = useState(false);
   const [resettingChecker, setResettingChecker] = useState(false);
 
@@ -160,6 +160,16 @@ export default function Home() {
   const [redeemCode, setRedeemCode] = useState("");
   const [redeeming, setRedeeming] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
+
+  // Site config (dynamic pricing)
+  const [siteConfig, setSiteConfig] = useState({
+    GENERATE_COST: 1,
+    COPY_COST: 3,
+    TV_ACTIVATE_COST: 5,
+    CHECKER_DAILY_LIMIT: 10,
+    CHECKER_RESET_COST: 2,
+    REFERRAL_BONUS: 5,
+  });
 
   // Gift key state
   const [giftKeyCode, setGiftKeyCode] = useState("");
@@ -203,6 +213,19 @@ export default function Home() {
     }
   }, []);
 
+  // ── Load Site Config ──
+  const loadSiteConfig = useCallback(async () => {
+    try {
+      const res = await fetch("/api/config");
+      const data = await res.json();
+      if (data.success && data.config) {
+        setSiteConfig(data.config);
+      }
+    } catch {
+      // silent — defaults already set
+    }
+  }, []);
+
   const loadReferral = useCallback(async () => {
     try {
       const res = await fetch("/api/user/referral");
@@ -233,6 +256,7 @@ export default function Home() {
           loadBalance();
           loadReferral();
           loadCheckerUsage();
+          loadSiteConfig();
           setLoading(false);
         }
       })
@@ -240,7 +264,7 @@ export default function Home() {
         if (!cancelled) router.push("/login");
       });
     return () => { cancelled = true; };
-  }, [router, loadBalance, loadReferral, loadCheckerUsage]);
+  }, [router, loadBalance, loadReferral, loadCheckerUsage, loadSiteConfig]);
 
 
   const refreshCredits = useCallback(() => {
@@ -261,8 +285,8 @@ export default function Home() {
       toast.error("El código debe tener exactamente 8 números");
       return;
     }
-    if (credits < 5) {
-      toast.error("Créditos insuficientes. Necesitas 5 créditos.");
+    if (credits < siteConfig.TV_ACTIVATE_COST) {
+      toast.error(`Créditos insuficientes. Necesitas ${siteConfig.TV_ACTIVATE_COST} créditos.`);
       return;
     }
     setTvActivating(true);
@@ -299,8 +323,8 @@ export default function Home() {
 
   // ── Checker Reset (2 credits) ──
   const handleCheckerReset = useCallback(async () => {
-    if (credits < 2) {
-      toast.error("Necesitas al menos 2 créditos para reiniciar");
+    if (credits < siteConfig.CHECKER_RESET_COST) {
+      toast.error(`Necesitas al menos ${siteConfig.CHECKER_RESET_COST} créditos para reiniciar`);
       return;
     }
     setResettingChecker(true);
@@ -331,7 +355,7 @@ export default function Home() {
       return;
     }
     if (checkerLimitReached) {
-      toast.error("Límite diario alcanzado. Reinicia con 2 créditos.");
+      toast.error(`Límite diario alcanzado. Reinicia con ${siteConfig.CHECKER_RESET_COST} créditos.`);
       return;
     }
     setChecking(true);
@@ -366,8 +390,8 @@ export default function Home() {
 
   // ── Generate Token (1 credit) ──
   const handleGenerate = useCallback(async () => {
-    if (credits < 1) {
-      toast.error("Créditos insuficientes. Pide más al administrador.");
+    if (credits < siteConfig.GENERATE_COST) {
+      toast.error(`Créditos insuficientes. Necesitas ${siteConfig.GENERATE_COST} crédito(s).`);
       return;
     }
     setGenerating(true);
@@ -400,8 +424,8 @@ export default function Home() {
 
   // ── Copy Cookie (3 credits) ──
   const handleCopyCookie = useCallback(async () => {
-    if (credits < 3) {
-      toast.error("Créditos insuficientes. Necesitas 3 créditos.");
+    if (credits < siteConfig.COPY_COST) {
+      toast.error(`Créditos insuficientes. Necesitas ${siteConfig.COPY_COST} créditos.`);
       return;
     }
     setCopying(true);
@@ -739,19 +763,19 @@ export default function Home() {
                   <div className="text-right space-y-2">
                     <div className="flex items-center gap-2 justify-end">
                       <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
-                      <span className="text-white/40 text-[11px]">Token: <span className="text-white/70 font-medium">1 crédito</span></span>
+                      <span className="text-white/40 text-[11px]">Token: <span className="text-white/70 font-medium">{siteConfig.GENERATE_COST} crédito{siteConfig.GENERATE_COST !== 1 ? "s" : ""}</span></span>
                     </div>
                     <div className="flex items-center gap-2 justify-end">
                       <div className="h-1.5 w-1.5 rounded-full bg-violet-400 shadow-[0_0_6px_rgba(167,139,250,0.5)]" />
-                      <span className="text-white/40 text-[11px]">Cookie: <span className="text-white/70 font-medium">3 créditos</span></span>
+                      <span className="text-white/40 text-[11px]">Cookie: <span className="text-white/70 font-medium">{siteConfig.COPY_COST} crédito{siteConfig.COPY_COST !== 1 ? "s" : ""}</span></span>
                     </div>
                     <div className="flex items-center gap-2 justify-end">
                       <div className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.5)]" />
-                      <span className="text-white/40 text-[11px]">Checker: <span className="text-white/70 font-medium">10/día</span></span>
+                      <span className="text-white/40 text-[11px]">Checker: <span className="text-white/70 font-medium">{siteConfig.CHECKER_DAILY_LIMIT}/día</span></span>
                     </div>
                     <div className="flex items-center gap-2 justify-end">
                       <div className="h-1.5 w-1.5 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(251,113,133,0.5)]" />
-                      <span className="text-white/40 text-[11px]">Activar TV: <span className="text-white/70 font-medium">5 créditos</span></span>
+                      <span className="text-white/40 text-[11px]">Activar TV: <span className="text-white/70 font-medium">{siteConfig.TV_ACTIVATE_COST} crédito{siteConfig.TV_ACTIVATE_COST !== 1 ? "s" : ""}</span></span>
                     </div>
                   </div>
                 </div>
@@ -775,7 +799,7 @@ export default function Home() {
                   Sistema de Referidos
                 </CardTitle>
                 <CardDescription className="text-white/25 text-xs ml-[38px]">
-                  Comparte tu código y gana <span className="text-white/60 font-semibold">+5 créditos</span> por cada persona que se registre.
+                  Comparte tu código y gana <span className="text-white/60 font-semibold">+{siteConfig.REFERRAL_BONUS} créditos</span> por cada persona que se registre.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-5 pb-5 relative">
@@ -815,7 +839,7 @@ export default function Home() {
                     <p className="text-white/20 text-[10px] uppercase tracking-widest mt-0.5">Referidos</p>
                   </div>
                   <div className="rounded-xl bg-[#050508]/60 border border-white/[0.04] p-3 text-center">
-                    <p className="text-amber-300 font-bold text-xl tabular-nums">{totalReferrals * 5}</p>
+                    <p className="text-amber-300 font-bold text-xl tabular-nums">{totalReferrals * siteConfig.REFERRAL_BONUS}</p>
                     <p className="text-white/20 text-[10px] uppercase tracking-widest mt-0.5">Créditos ganados</p>
                   </div>
                 </div>
@@ -1113,8 +1137,8 @@ export default function Home() {
                   <div className="flex items-center gap-3">
                     {/* Progress circle / count */}
                     <div className="flex flex-col items-center">
-                      <div className={`text-lg font-bold tabular-nums tracking-tight ${checkerLimitReached ? "text-red-400" : checkerUsesToday > 7 ? "text-amber-400" : "text-sky-300"}`}>
-                        {checkerUsesToday}<span className="text-white/25 text-xs font-normal">/{checkerDailyLimit}</span>
+                      <div className={`text-lg font-bold tabular-nums tracking-tight ${checkerLimitReached ? "text-red-400" : checkerUsesToday > Math.floor(siteConfig.CHECKER_DAILY_LIMIT * 0.7) ? "text-amber-400" : "text-sky-300"}`}>
+                        {checkerUsesToday}<span className="text-white/25 text-xs font-normal">/{siteConfig.CHECKER_DAILY_LIMIT}</span>
                       </div>
                       {/* Mini progress bar */}
                       <div className="w-16 h-1 bg-white/[0.06] rounded-full mt-1 overflow-hidden">
@@ -1122,11 +1146,11 @@ export default function Home() {
                           className={`h-full rounded-full transition-all duration-500 ${
                             checkerLimitReached
                               ? "bg-red-500"
-                              : checkerUsesToday > 7
+                              : checkerUsesToday > Math.floor(siteConfig.CHECKER_DAILY_LIMIT * 0.7)
                                 ? "bg-amber-500"
                                 : "bg-sky-500"
                           }`}
-                          style={{ width: `${Math.min((checkerUsesToday / checkerDailyLimit) * 100, 100)}%` }}
+                          style={{ width: `${Math.min((checkerUsesToday / siteConfig.CHECKER_DAILY_LIMIT) * 100, 100)}%` }}
                         />
                       </div>
                     </div>
@@ -1134,7 +1158,7 @@ export default function Home() {
                     {checkerLimitReached && (
                       <Button
                         onClick={handleCheckerReset}
-                        disabled={resettingChecker || credits < 2}
+                        disabled={resettingChecker || credits < siteConfig.CHECKER_RESET_COST}
                         className="h-9 px-3.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-500 hover:from-amber-500 hover:to-orange-400 text-white text-xs font-semibold flex items-center gap-1.5 disabled:opacity-40 shadow-[0_0_15px_rgba(234,88,12,0.15)] transition-all duration-300 shrink-0"
                       >
                         {resettingChecker ? (
@@ -1143,10 +1167,10 @@ export default function Home() {
                           <RotateCcw className="h-3.5 w-3.5" />
                         )}
                         <span className="hidden sm:inline">
-                          {credits < 2 ? "Sin créditos" : "+10 por 2 créditos"}
+                          {credits < siteConfig.CHECKER_RESET_COST ? "Sin créditos" : `+${siteConfig.CHECKER_DAILY_LIMIT} por ${siteConfig.CHECKER_RESET_COST} crédito${siteConfig.CHECKER_RESET_COST !== 1 ? "s" : ""}`}
                         </span>
                         <span className="sm:hidden">
-                          <Coins className="h-3.5 w-3.5" /> 2
+                          <Coins className="h-3.5 w-3.5" /> {siteConfig.CHECKER_RESET_COST}
                         </span>
                       </Button>
                     )}
@@ -1164,7 +1188,7 @@ export default function Home() {
                   Verificar Cookie Individual
                 </CardTitle>
                 <CardDescription className="text-white/25 text-xs ml-[38px]">
-                  Pega tu cookie de Netflix para verificarla. 10 verificaciones diarias — solo cookies válidas cuentan.
+                  Pega tu cookie de Netflix para verificarla. {siteConfig.CHECKER_DAILY_LIMIT} verificaciones diarias — solo cookies válidas cuentan.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-5 pb-5">
@@ -1306,7 +1330,7 @@ export default function Home() {
                   Generar Token de Netflix
                 </CardTitle>
                 <CardDescription className="text-white/25 text-xs ml-[38px]">
-                  Se usa una cookie del servidor para generar tu link de acceso. Cuesta <span className="text-white/60 font-semibold">1 crédito</span>.
+                  Se usa una cookie del servidor para generar tu link de acceso. Cuesta <span className="text-white/60 font-semibold">{siteConfig.GENERATE_COST} crédito{siteConfig.GENERATE_COST !== 1 ? "s" : ""}</span>.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-5 pb-5 relative">
@@ -1315,14 +1339,14 @@ export default function Home() {
                     <Coins className="h-4 w-4 text-amber-400" />
                     <span className="text-white/40 text-sm">Tu saldo:</span>
                   </div>
-                  <span className={`text-xl font-bold tabular-nums ${credits >= 1 ? "text-emerald-400" : "text-red-400"}`}>
+                  <span className={`text-xl font-bold tabular-nums ${credits >= siteConfig.GENERATE_COST ? "text-emerald-400" : "text-red-400"}`}>
                     {credits} <span className="text-xs text-white/20 font-normal">créditos</span>
                   </span>
                 </div>
 
                 <Button
                   onClick={handleGenerate}
-                  disabled={generating || credits < 1}
+                  disabled={generating || credits < siteConfig.GENERATE_COST}
                   className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-semibold h-12 transition-all duration-300 disabled:opacity-40 rounded-xl shadow-[0_0_20px_rgba(52,211,153,0.15)] hover:shadow-[0_0_30px_rgba(52,211,153,0.25)] text-base"
                 >
                   {generating ? (
@@ -1332,7 +1356,7 @@ export default function Home() {
                   )}
                 </Button>
 
-                {credits < 1 && (
+                {credits < siteConfig.GENERATE_COST && (
                   <p className="text-red-400/40 text-xs text-center">
                     Créditos insuficientes. Contacta al administrador para obtener más.
                   </p>
@@ -1395,7 +1419,7 @@ export default function Home() {
                   Generar Cookie de Netflix
                 </CardTitle>
                 <CardDescription className="text-white/25 text-xs ml-[38px]">
-                  Genera una cookie funcional del servidor. Cuesta <span className="text-white/60 font-semibold">3 créditos</span>.
+                  Genera una cookie funcional del servidor. Cuesta <span className="text-white/60 font-semibold">{siteConfig.COPY_COST} crédito{siteConfig.COPY_COST !== 1 ? "s" : ""}</span>.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-5 pb-5 relative">
@@ -1404,14 +1428,14 @@ export default function Home() {
                     <Coins className="h-4 w-4 text-amber-400" />
                     <span className="text-white/40 text-sm">Tu saldo:</span>
                   </div>
-                  <span className={`text-xl font-bold tabular-nums ${credits >= 3 ? "text-emerald-400" : "text-red-400"}`}>
+                  <span className={`text-xl font-bold tabular-nums ${credits >= siteConfig.COPY_COST ? "text-emerald-400" : "text-red-400"}`}>
                     {credits} <span className="text-xs text-white/20 font-normal">créditos</span>
                   </span>
                 </div>
 
                 <Button
                   onClick={handleCopyCookie}
-                  disabled={copying || credits < 3}
+                  disabled={copying || credits < siteConfig.COPY_COST}
                   className="w-full bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 text-white font-semibold h-12 transition-all duration-300 disabled:opacity-40 rounded-xl shadow-[0_0_20px_rgba(167,139,250,0.15)] hover:shadow-[0_0_30px_rgba(167,139,250,0.25)] text-base"
                 >
                   {copying ? (
@@ -1421,9 +1445,9 @@ export default function Home() {
                   )}
                 </Button>
 
-                {credits < 3 && (
+                {credits < siteConfig.COPY_COST && (
                   <p className="text-red-400/40 text-xs text-center">
-                    Necesitas al menos 3 créditos. Contacta al administrador.
+                    Necesitas al menos {siteConfig.COPY_COST} créditos. Contacta al administrador.
                   </p>
                 )}
               </CardContent>
@@ -1473,7 +1497,7 @@ export default function Home() {
                   Activar Netflix en TV
                 </CardTitle>
                 <CardDescription className="text-white/25 text-xs ml-[38px]">
-                  Ingresa el código de 8 dígitos que aparece en tu TV. Se usa una cookie del servidor. Cuesta <span className="text-white/60 font-semibold">5 créditos</span>.
+                  Ingresa el código de 8 dígitos que aparece en tu TV. Se usa una cookie del servidor. Cuesta <span className="text-white/60 font-semibold">{siteConfig.TV_ACTIVATE_COST} crédito{siteConfig.TV_ACTIVATE_COST !== 1 ? "s" : ""}</span>.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-5 pb-5 relative">
@@ -1513,10 +1537,10 @@ export default function Home() {
                     <span className="text-white/40 text-sm">Costo:</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-rose-400 font-bold text-lg tabular-nums">5</span>
+                    <span className="text-rose-400 font-bold text-lg tabular-nums">{siteConfig.TV_ACTIVATE_COST}</span>
                     <span className="text-white/20 text-xs">créditos</span>
                     <span className="text-white/10 mx-1">|</span>
-                    <span className={`text-sm font-bold tabular-nums ${credits >= 5 ? "text-emerald-400" : "text-red-400"}`}>
+                    <span className={`text-sm font-bold tabular-nums ${credits >= siteConfig.TV_ACTIVATE_COST ? "text-emerald-400" : "text-red-400"}`}>
                       {credits}
                     </span>
                     <span className="text-white/20 text-xs">disponibles</span>
@@ -1526,7 +1550,7 @@ export default function Home() {
                 {/* Activate Button */}
                 <Button
                   onClick={handleTvActivate}
-                  disabled={tvActivating || tvCode.length !== 8 || credits < 5}
+                  disabled={tvActivating || tvCode.length !== 8 || credits < siteConfig.TV_ACTIVATE_COST}
                   className="w-full bg-gradient-to-r from-rose-600 via-red-500 to-rose-600 hover:from-rose-500 hover:via-red-400 hover:to-rose-500 text-white font-semibold h-12 transition-all duration-300 disabled:opacity-40 rounded-xl shadow-[0_0_20px_rgba(251,113,133,0.15)] hover:shadow-[0_0_30px_rgba(251,113,133,0.25)] text-base"
                 >
                   {tvActivating ? (
@@ -1539,9 +1563,9 @@ export default function Home() {
                   )}
                 </Button>
 
-                {credits < 5 && (
+                {credits < siteConfig.TV_ACTIVATE_COST && (
                   <p className="text-red-400/40 text-xs text-center">
-                    Necesitas al menos 5 créditos. Contacta al administrador.
+                    Necesitas al menos {siteConfig.TV_ACTIVATE_COST} créditos. Contacta al administrador.
                   </p>
                 )}
 
