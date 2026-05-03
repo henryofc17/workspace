@@ -25,7 +25,7 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://cdn.onesignal.com",
+      "script-src 'self' 'unsafe-eval' https://challenges.cloudflare.com https://cdn.onesignal.com",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https://i.ibb.co https://assets.nflxext.com https://*.onesignal.com",
       "font-src 'self' https://fonts.gstatic.com",
