@@ -127,7 +127,7 @@ export default function Home() {
 
   // Navigation state
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [activeView, setActiveView] = useState<"dashboard" | "checker" | "generate" | "copy" | "tv">("dashboard");
+  const [activeView, setActiveView] = useState<"dashboard" | "checker" | "generate" | "copy" | "tv" | "region">("dashboard");
 
   // Checker state
   const [cookieText, setCookieText] = useState("");
@@ -157,6 +157,7 @@ export default function Home() {
 
   // Region state
   const [userRegion, setUserRegion] = useState<string | null>(null);
+  const [availableCountries, setAvailableCountries] = useState<{ code: string; name: string; flag: string }[]>([]);
   const [regionSearch, setRegionSearch] = useState("");
   const [savingRegion, setSavingRegion] = useState(false);
   const [regionDropdownOpen, setRegionDropdownOpen] = useState(false);
@@ -174,6 +175,7 @@ export default function Home() {
     GENERATE_COST: 1,
     COPY_COST: 3,
     TV_ACTIVATE_COST: 5,
+    REGION_COST: 3,
     CHECKER_DAILY_LIMIT: 10,
     CHECKER_RESET_COST: 2,
     REFERRAL_BONUS: 5,
@@ -234,13 +236,14 @@ export default function Home() {
     }
   }, []);
 
-  // ── Load User Region ──
+  // ── Load User Region + Available Countries ──
   const loadRegion = useCallback(async () => {
     try {
       const res = await fetch("/api/user/region");
       const data = await res.json();
       if (data.success) {
         setUserRegion(data.region || null);
+        setAvailableCountries(data.availableCountries || []);
       }
     } catch {
       // silent
@@ -261,6 +264,11 @@ export default function Home() {
         setUserRegion(data.region || null);
         setRegionDropdownOpen(false);
         setRegionSearch("");
+        if (data.remainingCredits !== undefined) {
+          setCredits(data.remainingCredits);
+        }
+        refreshCredits();
+        loadBalance();
         toast.success(data.message);
       } else {
         toast.error(data.error);
@@ -270,7 +278,7 @@ export default function Home() {
     } finally {
       setSavingRegion(false);
     }
-  }, []);
+  }, [refreshCredits, loadBalance]);
 
   const loadReferral = useCallback(async () => {
     try {
@@ -759,6 +767,18 @@ export default function Home() {
             <MonitorPlay className="h-3.5 w-3.5" />
             Activar TV
           </button>
+          {/* Cambiar Region */}
+          <button
+            onClick={() => { setActiveView("region"); setDrawerOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-xs font-medium transition-all duration-300 rounded-lg border ${
+              activeView === "region"
+                ? "bg-sky-500/15 text-sky-400 border-sky-500/20 shadow-[0_0_20px_rgba(56,189,248,0.08)]"
+                : "text-white/40 border-transparent hover:bg-white/[0.04] hover:text-white/60"
+            }`}
+          >
+            <Globe2 className="h-3.5 w-3.5" />
+            Cambiar Región
+          </button>
         </div>
       </div>
 
@@ -823,6 +843,10 @@ export default function Home() {
                     <div className="flex items-center gap-2 justify-end">
                       <div className="h-1.5 w-1.5 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(251,113,133,0.5)]" />
                       <span className="text-white/40 text-[11px]">Activar TV: <span className="text-white/70 font-medium">{siteConfig.TV_ACTIVATE_COST} crédito{siteConfig.TV_ACTIVATE_COST !== 1 ? "s" : ""}</span></span>
+                    </div>
+                    <div className="flex items-center gap-2 justify-end">
+                      <div className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.5)]" />
+                      <span className="text-white/40 text-[11px]">Región: <span className="text-white/70 font-medium">{siteConfig.REGION_COST} crédito{siteConfig.REGION_COST !== 1 ? "s" : ""}</span></span>
                     </div>
                   </div>
                 </div>
@@ -1672,119 +1696,154 @@ export default function Home() {
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════════════════════════════
-            CHANGE REGION — Below TV Activate
-            ═══════════════════════════════════════════════════════════════════ */}
-        <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
-          <div className="absolute inset-0 bg-gradient-to-br from-sky-950/10 via-transparent to-indigo-950/5 pointer-events-none" />
-          <CardHeader className="pb-3 px-5 pt-5 relative">
-            <CardTitle className="text-sky-300 text-sm flex items-center gap-2.5">
-              <div className="h-7 w-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center">
-                <Globe2 className="h-3.5 w-3.5 text-sky-400" />
-              </div>
-              Cambiar Región
-            </CardTitle>
-            <CardDescription className="text-white/25 text-xs ml-[38px]">
-              Selecciona un país para usar solo cookies de esa región en las funciones que cobran créditos (Generar Cookie, etc.).
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 px-5 pb-5 relative">
-            {/* Current region display */}
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#050508]/80 border border-white/[0.04]">
-              <div className="flex items-center gap-3">
-                <span className="text-xl">{userRegion ? getCountryFlag(userRegion) : "🌐"}</span>
-                <div>
-                  <p className="text-white/20 text-[10px] uppercase tracking-widest">Región actual</p>
-                  <p className="text-white/90 text-sm font-medium">
-                    {userRegion ? `${getCountryName(userRegion)} (${userRegion})` : "Todas las regiones"}
-                  </p>
+        {activeView === "region" && (
+          <div className="space-y-4">
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-sky-950/10 to-transparent pointer-events-none" />
+              <CardHeader className="pb-3 px-5 pt-5 relative">
+                <CardTitle className="text-sky-300 text-sm flex items-center gap-2.5">
+                  <div className="h-7 w-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center">
+                    <Globe2 className="h-3.5 w-3.5 text-sky-400" />
+                  </div>
+                  Cambiar Región
+                </CardTitle>
+                <CardDescription className="text-white/25 text-xs ml-[38px]">
+                  Selecciona un país para usar solo cookies de esa región. Cuesta <span className="text-white/60 font-semibold">{siteConfig.REGION_COST} crédito{siteConfig.REGION_COST !== 1 ? "s" : ""}</span>.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 px-5 pb-5 relative">
+                {/* Current region display */}
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#050508]/60 border border-white/[0.04]">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">{userRegion ? getCountryFlag(userRegion) : "🌐"}</span>
+                    <div>
+                      <p className="text-white/20 text-[10px] uppercase tracking-widest">Región actual</p>
+                      <p className="text-white/90 text-sm font-medium">
+                        {userRegion ? `${getCountryName(userRegion)} (${userRegion})` : "Todas las regiones"}
+                      </p>
+                    </div>
+                  </div>
+                  {userRegion && (
+                    <button
+                      onClick={() => handleSaveRegion(null)}
+                      disabled={savingRegion}
+                      className="h-8 px-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/20 transition-all duration-300 disabled:opacity-40"
+                    >
+                      {savingRegion ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Limpiar"}
+                    </button>
+                  )}
                 </div>
-              </div>
-              {userRegion && (
-                <button
-                  onClick={() => handleSaveRegion(null)}
-                  disabled={savingRegion}
-                  className="h-8 px-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/20 transition-all duration-300 disabled:opacity-40"
-                >
-                  {savingRegion ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Limpiar"}
-                </button>
-              )}
-            </div>
 
-            {/* Country selector */}
-            <div className="relative">
-              <div className="relative">
-                <input
-                  type="text"
-                  value={regionSearch}
-                  onChange={(e) => { setRegionSearch(e.target.value); setRegionDropdownOpen(true); }}
-                  onFocus={() => setRegionDropdownOpen(true)}
-                  placeholder="Buscar país... (ej: Perú, México, Argentina)"
-                  className="w-full bg-[#050508]/80 border border-white/[0.06] text-white/80 placeholder:text-white/15 rounded-xl px-4 py-3 text-sm outline-none focus:border-sky-500/30 focus:ring-1 focus:ring-sky-500/10 transition-all duration-300"
-                />
-                <Globe2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/20" />
-              </div>
+                {/* Balance */}
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#050508]/80 border border-white/[0.04]">
+                  <div className="flex items-center gap-2">
+                    <Coins className="h-4 w-4 text-amber-400" />
+                    <span className="text-white/40 text-sm">Costo por cambio:</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sky-400 font-bold text-lg tabular-nums">{siteConfig.REGION_COST}</span>
+                    <span className="text-white/20 text-xs">créditos</span>
+                    <span className="text-white/10 mx-1">|</span>
+                    <span className={`text-sm font-bold tabular-nums ${credits >= siteConfig.REGION_COST ? "text-emerald-400" : "text-red-400"}`}>
+                      {credits}
+                    </span>
+                    <span className="text-white/20 text-xs">disponibles</span>
+                  </div>
+                </div>
 
-              {/* Dropdown */}
-              {regionDropdownOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 max-h-72 overflow-y-auto rounded-xl border border-white/[0.08] bg-[#0a0a12]/98 backdrop-blur-xl shadow-2xl shadow-black/50 z-50 premium-scroll">
-                  <div className="sticky top-0 bg-[#0a0a12]/95 backdrop-blur-sm border-b border-white/[0.04] px-3 py-2 z-10">
-                    <p className="text-white/30 text-[10px] font-medium uppercase tracking-widest">
-                      {regionSearch
-                        ? `${COUNTRIES.filter(c =>
+                {/* Country selector — only available countries from cookies */}
+                <div className="relative">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={regionSearch}
+                      onChange={(e) => { setRegionSearch(e.target.value); setRegionDropdownOpen(true); }}
+                      onFocus={() => { setRegionDropdownOpen(true); loadRegion(); }}
+                      placeholder="Buscar país disponible..."
+                      className="w-full bg-[#050508]/80 border border-white/[0.06] text-white/80 placeholder:text-white/15 rounded-xl px-4 py-3 text-sm outline-none focus:border-sky-500/30 focus:ring-1 focus:ring-sky-500/10 transition-all duration-300"
+                    />
+                    <Globe2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/20" />
+                  </div>
+
+                  {/* Dropdown */}
+                  {regionDropdownOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-1 max-h-72 overflow-y-auto rounded-xl border border-white/[0.08] bg-[#0a0a12]/98 backdrop-blur-xl shadow-2xl shadow-black/50 z-50 premium-scroll">
+                      <div className="sticky top-0 bg-[#0a0a12]/95 backdrop-blur-sm border-b border-white/[0.04] px-3 py-2 z-10">
+                        <p className="text-white/30 text-[10px] font-medium uppercase tracking-widest">
+                          {regionSearch
+                            ? `${availableCountries.filter(c =>
+                                c.name.toLowerCase().includes(regionSearch.toLowerCase()) ||
+                                c.code.toLowerCase().includes(regionSearch.toLowerCase())
+                              ).length} resultado(s)`
+                            : `${availableCountries.length} región(es) disponible(s)`
+                          }
+                        </p>
+                      </div>
+                      {availableCountries.length === 0 ? (
+                        <div className="px-4 py-8 text-center">
+                          <p className="text-white/20 text-xs">No hay regiones disponibles</p>
+                          <p className="text-white/10 text-[10px] mt-1">Las regiones se muestran según las cookies del servidor</p>
+                        </div>
+                      ) : (
+                        availableCountries
+                          .filter(c =>
+                            !regionSearch ||
                             c.name.toLowerCase().includes(regionSearch.toLowerCase()) ||
                             c.code.toLowerCase().includes(regionSearch.toLowerCase())
-                          ).length} resultados`
-                        : "193 países"
-                      }
-                    </p>
-                  </div>
-                  {COUNTRIES
-                    .filter(c =>
-                      !regionSearch ||
-                      c.name.toLowerCase().includes(regionSearch.toLowerCase()) ||
-                      c.code.toLowerCase().includes(regionSearch.toLowerCase())
-                    )
-                    .slice(0, 50)
-                    .map((country) => (
-                      <button
-                        key={country.code}
-                        onClick={() => handleSaveRegion(country.code)}
-                        disabled={savingRegion || userRegion === country.code}
-                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs transition-all duration-200 hover:bg-white/[0.04] disabled:opacity-40 border-b border-white/[0.02] last:border-0 ${
-                          userRegion === country.code
-                            ? "bg-sky-500/5 text-sky-300"
-                            : "text-white/70"
-                        }`}
-                      >
-                        <span className="text-base">{country.flag}</span>
-                        <span className="flex-1 text-left font-medium">{country.name}</span>
-                        <span className="text-white/20 font-mono text-[10px]">{country.code}</span>
-                        {userRegion === country.code && (
-                          <Check className="h-3.5 w-3.5 text-sky-400" />
-                        )}
-                      </button>
-                    ))
-                  }
+                          )
+                          .map((country) => (
+                            <button
+                              key={country.code}
+                              onClick={() => {
+                                if (credits < siteConfig.REGION_COST) {
+                                  toast.error(`Necesitas ${siteConfig.REGION_COST} créditos para cambiar región`);
+                                  return;
+                                }
+                                handleSaveRegion(country.code);
+                              }}
+                              disabled={savingRegion || userRegion === country.code}
+                              className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs transition-all duration-200 hover:bg-white/[0.04] disabled:opacity-40 border-b border-white/[0.02] last:border-0 ${
+                                userRegion === country.code
+                                  ? "bg-sky-500/5 text-sky-300"
+                                  : "text-white/70"
+                              }`}
+                            >
+                              <span className="text-base">{country.flag}</span>
+                              <span className="flex-1 text-left font-medium">{country.name}</span>
+                              <span className="text-white/20 font-mono text-[10px]">{country.code}</span>
+                              {userRegion === country.code && (
+                                <Check className="h-3.5 w-3.5 text-sky-400" />
+                              )}
+                            </button>
+                          ))
+                      )}
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {/* Info note */}
+                <p className="text-white/20 text-[10px] text-center flex items-center justify-center gap-1.5">
+                  <div className="h-1.5 w-1.5 rounded-full bg-sky-400/40" />
+                  Solo se muestran los países que tienen cookies activas en el servidor.
+                </p>
+
+                {credits < siteConfig.REGION_COST && (
+                  <p className="text-red-400/40 text-xs text-center">
+                    Necesitas al menos {siteConfig.REGION_COST} créditos para cambiar de región.
+                  </p>
+                )}
+
+                {/* Click outside to close dropdown */}
+                {regionDropdownOpen && (
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => { setRegionDropdownOpen(false); setRegionSearch(""); }}
+                  />
+                )}
+              </CardContent>
             </div>
-
-            {/* Info note */}
-            <p className="text-white/20 text-[10px] text-center flex items-center justify-center gap-1.5">
-              <div className="h-1.5 w-1.5 rounded-full bg-sky-400/40" />
-              Si no hay cookies de la región seleccionada, se usarán cookies de cualquier país automáticamente.
-            </p>
-
-            {/* Click outside to close dropdown */}
-            {regionDropdownOpen && (
-              <div
-                className="fixed inset-0 z-40"
-                onClick={() => { setRegionDropdownOpen(false); setRegionSearch(""); }}
-              />
-            )}
-          </CardContent>
-        </div>
+          </div>
+        )}
       </main>
 
       {/* ─── Footer ─── */}
