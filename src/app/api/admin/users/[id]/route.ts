@@ -27,6 +27,7 @@ export async function GET(
         referralCode: true,
         referredBy: true,
         ipAddress: true,
+        region: true,
         createdAt: true,
         updatedAt: true,
         referrer: {

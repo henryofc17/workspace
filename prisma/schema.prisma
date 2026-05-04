@@ -19,6 +19,7 @@ model User {
   checkerResetDate DateTime @default(now())
   ipAddress    String?  // IP at registration
   fingerprint  String?  // browser fingerprint
+  region       String?  // ISO country code (e.g., PE, MX)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

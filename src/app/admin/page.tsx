@@ -46,6 +46,7 @@ import {
   Ticket,
   MonitorPlay,
   MessageCircle,
+  Globe,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -73,6 +74,7 @@ interface UserRecord {
 
 interface UserDetail extends UserRecord {
   ipAddress: string | null;
+  region: string | null;
   updatedAt: string;
   referrals: {
     id: string;
@@ -1805,6 +1807,16 @@ export default function AdminPage() {
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Registro</span>
                       </div>
                       <p className="text-sm font-bold text-emerald-400">{new Date(selectedUser.createdAt).toLocaleDateString("es")}</p>
+                    </div>
+                    {/* Region */}
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <Globe className="h-3 w-3 text-sky-400/60" />
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Región</span>
+                      </div>
+                      <p className="text-sm font-bold text-sky-400">
+                        {selectedUser.region ? selectedUser.region : "Todas"}
+                      </p>
                     </div>
                   </div>
 

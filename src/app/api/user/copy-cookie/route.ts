@@ -41,8 +41,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const cookies = await prisma.cookie.findMany({
-      where: { status: "ACTIVE" },
+    const whereClause: any = { status: "ACTIVE" };
+    if (user.region) {
+      whereClause.country = user.region;
+    }
+
+    let cookies = await prisma.cookie.findMany({
+      where: whereClause,
       orderBy: [
         { usedCount: "asc" },
         { lastUsed: "asc" },
@@ -50,11 +55,28 @@ export async function POST(request: Request) {
       take: 3,
     });
 
+    // If no cookies found for the region, fall back to all countries
+    if (user.region && (!cookies || cookies.length === 0)) {
+      const fallback = await prisma.cookie.findMany({
+        where: { status: "ACTIVE" },
+        orderBy: [
+          { usedCount: "asc" },
+          { lastUsed: "asc" },
+        ],
+        take: 3,
+      });
+      if (fallback && fallback.length > 0) {
+        cookies = fallback;
+      }
+    }
+
     if (!cookies || cookies.length === 0) {
       return NextResponse.json(
         {
           success: false,
-          error: "No hay cookies disponibles. Se ha notificado al administrador.",
+          error: user.region
+            ? `No hay cookies disponibles para ${user.region}. Se ha notificado al administrador.`
+            : "No hay cookies disponibles. Se ha notificado al administrador.",
           noCookies: true,
         },
         { status: 503 }

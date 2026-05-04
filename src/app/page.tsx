@@ -38,7 +38,9 @@ import {
   EyeOff,
   Eye,
   User,
+  Globe2,
 } from "lucide-react";
+import { COUNTRIES, getCountryName, getCountryFlag } from "@/lib/countries";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -153,6 +155,12 @@ export default function Home() {
   const [tvActivating, setTvActivating] = useState(false);
   const [tvResult, setTvResult] = useState<{ success: boolean; message: string } | null>(null);
 
+  // Region state
+  const [userRegion, setUserRegion] = useState<string | null>(null);
+  const [regionSearch, setRegionSearch] = useState("");
+  const [savingRegion, setSavingRegion] = useState(false);
+  const [regionDropdownOpen, setRegionDropdownOpen] = useState(false);
+
   // Referral state
   const [referralCode, setReferralCode] = useState("");
   const [totalReferrals, setTotalReferrals] = useState(0);
@@ -226,6 +234,44 @@ export default function Home() {
     }
   }, []);
 
+  // ── Load User Region ──
+  const loadRegion = useCallback(async () => {
+    try {
+      const res = await fetch("/api/user/region");
+      const data = await res.json();
+      if (data.success) {
+        setUserRegion(data.region || null);
+      }
+    } catch {
+      // silent
+    }
+  }, []);
+
+  // ── Save User Region ──
+  const handleSaveRegion = useCallback(async (code: string | null) => {
+    setSavingRegion(true);
+    try {
+      const res = await fetch("/api/user/region", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ region: code }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUserRegion(data.region || null);
+        setRegionDropdownOpen(false);
+        setRegionSearch("");
+        toast.success(data.message);
+      } else {
+        toast.error(data.error);
+      }
+    } catch {
+      toast.error("Error de conexión");
+    } finally {
+      setSavingRegion(false);
+    }
+  }, []);
+
   const loadReferral = useCallback(async () => {
     try {
       const res = await fetch("/api/user/referral");
@@ -257,6 +303,7 @@ export default function Home() {
           loadReferral();
           loadCheckerUsage();
           loadSiteConfig();
+          loadRegion();
           setLoading(false);
         }
       })
@@ -264,7 +311,7 @@ export default function Home() {
         if (!cancelled) router.push("/login");
       });
     return () => { cancelled = true; };
-  }, [router, loadBalance, loadReferral, loadCheckerUsage, loadSiteConfig]);
+  }, [router, loadBalance, loadReferral, loadCheckerUsage, loadSiteConfig, loadRegion]);
 
 
   const refreshCredits = useCallback(() => {
@@ -1624,6 +1671,120 @@ export default function Home() {
             </div>
           </div>
         )}
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            CHANGE REGION — Below TV Activate
+            ═══════════════════════════════════════════════════════════════════ */}
+        <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
+          <div className="absolute inset-0 bg-gradient-to-br from-sky-950/10 via-transparent to-indigo-950/5 pointer-events-none" />
+          <CardHeader className="pb-3 px-5 pt-5 relative">
+            <CardTitle className="text-sky-300 text-sm flex items-center gap-2.5">
+              <div className="h-7 w-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center">
+                <Globe2 className="h-3.5 w-3.5 text-sky-400" />
+              </div>
+              Cambiar Región
+            </CardTitle>
+            <CardDescription className="text-white/25 text-xs ml-[38px]">
+              Selecciona un país para usar solo cookies de esa región en las funciones que cobran créditos (Generar Cookie, etc.).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 px-5 pb-5 relative">
+            {/* Current region display */}
+            <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#050508]/80 border border-white/[0.04]">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">{userRegion ? getCountryFlag(userRegion) : "🌐"}</span>
+                <div>
+                  <p className="text-white/20 text-[10px] uppercase tracking-widest">Región actual</p>
+                  <p className="text-white/90 text-sm font-medium">
+                    {userRegion ? `${getCountryName(userRegion)} (${userRegion})` : "Todas las regiones"}
+                  </p>
+                </div>
+              </div>
+              {userRegion && (
+                <button
+                  onClick={() => handleSaveRegion(null)}
+                  disabled={savingRegion}
+                  className="h-8 px-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/20 transition-all duration-300 disabled:opacity-40"
+                >
+                  {savingRegion ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Limpiar"}
+                </button>
+              )}
+            </div>
+
+            {/* Country selector */}
+            <div className="relative">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={regionSearch}
+                  onChange={(e) => { setRegionSearch(e.target.value); setRegionDropdownOpen(true); }}
+                  onFocus={() => setRegionDropdownOpen(true)}
+                  placeholder="Buscar país... (ej: Perú, México, Argentina)"
+                  className="w-full bg-[#050508]/80 border border-white/[0.06] text-white/80 placeholder:text-white/15 rounded-xl px-4 py-3 text-sm outline-none focus:border-sky-500/30 focus:ring-1 focus:ring-sky-500/10 transition-all duration-300"
+                />
+                <Globe2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/20" />
+              </div>
+
+              {/* Dropdown */}
+              {regionDropdownOpen && (
+                <div className="absolute top-full left-0 right-0 mt-1 max-h-72 overflow-y-auto rounded-xl border border-white/[0.08] bg-[#0a0a12]/98 backdrop-blur-xl shadow-2xl shadow-black/50 z-50 premium-scroll">
+                  <div className="sticky top-0 bg-[#0a0a12]/95 backdrop-blur-sm border-b border-white/[0.04] px-3 py-2 z-10">
+                    <p className="text-white/30 text-[10px] font-medium uppercase tracking-widest">
+                      {regionSearch
+                        ? `${COUNTRIES.filter(c =>
+                            c.name.toLowerCase().includes(regionSearch.toLowerCase()) ||
+                            c.code.toLowerCase().includes(regionSearch.toLowerCase())
+                          ).length} resultados`
+                        : "193 países"
+                      }
+                    </p>
+                  </div>
+                  {COUNTRIES
+                    .filter(c =>
+                      !regionSearch ||
+                      c.name.toLowerCase().includes(regionSearch.toLowerCase()) ||
+                      c.code.toLowerCase().includes(regionSearch.toLowerCase())
+                    )
+                    .slice(0, 50)
+                    .map((country) => (
+                      <button
+                        key={country.code}
+                        onClick={() => handleSaveRegion(country.code)}
+                        disabled={savingRegion || userRegion === country.code}
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs transition-all duration-200 hover:bg-white/[0.04] disabled:opacity-40 border-b border-white/[0.02] last:border-0 ${
+                          userRegion === country.code
+                            ? "bg-sky-500/5 text-sky-300"
+                            : "text-white/70"
+                        }`}
+                      >
+                        <span className="text-base">{country.flag}</span>
+                        <span className="flex-1 text-left font-medium">{country.name}</span>
+                        <span className="text-white/20 font-mono text-[10px]">{country.code}</span>
+                        {userRegion === country.code && (
+                          <Check className="h-3.5 w-3.5 text-sky-400" />
+                        )}
+                      </button>
+                    ))
+                  }
+                </div>
+              )}
+            </div>
+
+            {/* Info note */}
+            <p className="text-white/20 text-[10px] text-center flex items-center justify-center gap-1.5">
+              <div className="h-1.5 w-1.5 rounded-full bg-sky-400/40" />
+              Si no hay cookies de la región seleccionada, se usarán cookies de cualquier país automáticamente.
+            </p>
+
+            {/* Click outside to close dropdown */}
+            {regionDropdownOpen && (
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => { setRegionDropdownOpen(false); setRegionSearch(""); }}
+              />
+            )}
+          </CardContent>
+        </div>
       </main>
 
       {/* ─── Footer ─── */}
