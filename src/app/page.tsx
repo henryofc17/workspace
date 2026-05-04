@@ -40,7 +40,7 @@ import {
   User,
   Globe2,
 } from "lucide-react";
-import { COUNTRIES, getCountryName, getCountryFlag } from "@/lib/countries";
+import { COUNTRIES, getCountryName } from "@/lib/countries";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -157,7 +157,7 @@ export default function Home() {
 
   // Region state
   const [userRegion, setUserRegion] = useState<string | null>(null);
-  const [availableCountries, setAvailableCountries] = useState<{ code: string; name: string; flag: string }[]>([]);
+  const [availableCountries, setAvailableCountries] = useState<{ code: string; name: string }[]>([]);
   const [regionSearch, setRegionSearch] = useState("");
   const [savingRegion, setSavingRegion] = useState(false);
   const [regionDropdownOpen, setRegionDropdownOpen] = useState(false);
@@ -1717,7 +1717,7 @@ export default function Home() {
                 {/* Current region display */}
                 <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#050508]/60 border border-white/[0.04]">
                   <div className="flex items-center gap-3">
-                    <span className="text-xl">{userRegion ? getCountryFlag(userRegion) : "🌐"}</span>
+                    <Globe2 className="h-5 w-5 text-sky-400" />
                     <div>
                       <p className="text-white/20 text-[10px] uppercase tracking-widest">Región actual</p>
                       <p className="text-white/90 text-sm font-medium">
@@ -1761,7 +1761,7 @@ export default function Home() {
                       value={regionSearch}
                       onChange={(e) => { setRegionSearch(e.target.value); setRegionDropdownOpen(true); }}
                       onFocus={() => { setRegionDropdownOpen(true); loadRegion(); }}
-                      placeholder="Buscar país disponible..."
+                      placeholder="Buscar país..."
                       className="w-full bg-[#050508]/80 border border-white/[0.06] text-white/80 placeholder:text-white/15 rounded-xl px-4 py-3 text-sm outline-none focus:border-sky-500/30 focus:ring-1 focus:ring-sky-500/10 transition-all duration-300"
                     />
                     <Globe2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/20" />
@@ -1784,7 +1784,6 @@ export default function Home() {
                       {availableCountries.length === 0 ? (
                         <div className="px-4 py-8 text-center">
                           <p className="text-white/20 text-xs">No hay regiones disponibles</p>
-                          <p className="text-white/10 text-[10px] mt-1">Las regiones se muestran según las cookies del servidor</p>
                         </div>
                       ) : (
                         availableCountries
@@ -1810,7 +1809,6 @@ export default function Home() {
                                   : "text-white/70"
                               }`}
                             >
-                              <span className="text-base">{country.flag}</span>
                               <span className="flex-1 text-left font-medium">{country.name}</span>
                               <span className="text-white/20 font-mono text-[10px]">{country.code}</span>
                               {userRegion === country.code && (
@@ -1826,7 +1824,7 @@ export default function Home() {
                 {/* Info note */}
                 <p className="text-white/20 text-[10px] text-center flex items-center justify-center gap-1.5">
                   <div className="h-1.5 w-1.5 rounded-full bg-sky-400/40" />
-                  Solo se muestran los países que tienen cookies activas en el servidor.
+                  Selecciona un país para filtrar las cookies de esa región.
                 </p>
 
                 {credits < siteConfig.REGION_COST && (

@@ -1494,6 +1494,7 @@ export default function AdminPage() {
                         { key: "TV_ACTIVATE_COST", label: "Costo Activar TV", icon: MonitorPlay, desc: "Créditos para activar TV" },
                         { key: "CHECKER_DAILY_LIMIT", label: "Límite Checker Diario", icon: Search, desc: "Verificaciones por día" },
                         { key: "CHECKER_RESET_COST", label: "Costo Reiniciar Checker", icon: RefreshCw, desc: "Créditos para reiniciar" },
+                        { key: "REGION_COST", label: "Costo Cambiar Región", icon: Globe, desc: "Créditos por cambiar región" },
                         { key: "REGISTER_BONUS", label: "Créditos por Registro", icon: UserPlus, desc: "Bonus al registrarse" },
                         { key: "REFERRAL_BONUS", label: "Créditos por Referido", icon: Gift, desc: "Bonus al referir usuario" },
                         { key: "REDEEM_BONUS", label: "Créditos al Canjear Referido", icon: Ticket, desc: "Bonus al canjear código" },

@@ -17,18 +17,8 @@ export async function GET() {
       select: { region: true },
     });
 
-    // Get distinct country codes from active cookies
-    const cookieCountries = await prisma.cookie.findMany({
-      where: { status: "ACTIVE", country: { not: null } },
-      select: { country: true },
-      distinct: ["country"],
-    });
-
-    // Build available countries list
-    const availableCodes = new Set(cookieCountries.map(c => c.country).filter(Boolean) as string[]);
-    const availableCountries = COUNTRIES
-      .filter(c => availableCodes.has(c.code))
-      .map(c => ({ code: c.code, name: c.name, flag: c.flag }));
+    // Return all 193 countries
+    const availableCountries = COUNTRIES.map(c => ({ code: c.code, name: c.name }));
 
     return NextResponse.json({
       success: true,
