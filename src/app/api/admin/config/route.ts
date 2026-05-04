@@ -21,8 +21,8 @@ export async function GET() {
     ];
 
     const stringKeys = [
-      { key: "WHATSAPP_LINK", defaultValue: "https://chat.whatsapp.com/CQMqkEcB0LwFLlG0uIyEOX?mode=gi_t" },
-      { key: "WHATSAPP_VISIBLE", defaultValue: "true" },
+      { key: "WHATSAPP_LINK", defaultValue: "" },
+      { key: "WHATSAPP_VISIBLE", defaultValue: "false" },
     ];
 
     const result: Record<string, string | number> = {};

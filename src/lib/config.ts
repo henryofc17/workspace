@@ -9,7 +9,7 @@ interface CacheEntry {
 }
 
 const cache = new Map<string, CacheEntry>();
-const TTL_MS = 30_000; // 30 seconds
+const TTL_MS = 5_000; // 5 seconds
 
 /**
  * Read a numeric config value from the SiteConfig table.

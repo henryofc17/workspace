@@ -14,8 +14,8 @@ export async function GET() {
       REGISTER_BONUS: await getConfig("REGISTER_BONUS", 3),
       REFERRAL_BONUS: await getConfig("REFERRAL_BONUS", 5),
       REDEEM_BONUS: await getConfig("REDEEM_BONUS", 3),
-      WHATSAPP_LINK: await getConfigString("WHATSAPP_LINK", "https://chat.whatsapp.com/CQMqkEcB0LwFLlG0uIyEOX?mode=gi_t"),
-      WHATSAPP_VISIBLE: await getConfigString("WHATSAPP_VISIBLE", "true") === "true",
+      WHATSAPP_LINK: await getConfigString("WHATSAPP_LINK", ""),
+      WHATSAPP_VISIBLE: await getConfigString("WHATSAPP_VISIBLE", "false") === "true",
     };
 
     return NextResponse.json({ success: true, config });
@@ -32,8 +32,8 @@ export async function GET() {
         REGISTER_BONUS: 3,
         REFERRAL_BONUS: 5,
         REDEEM_BONUS: 3,
-        WHATSAPP_LINK: "https://chat.whatsapp.com/CQMqkEcB0LwFLlG0uIyEOX?mode=gi_t",
-        WHATSAPP_VISIBLE: true,
+        WHATSAPP_LINK: "",
+        WHATSAPP_VISIBLE: false,
       },
     });
   }

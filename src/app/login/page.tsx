@@ -131,7 +131,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [siteConfig, setSiteConfig] = useState({ REGISTER_BONUS: 3, REFERRAL_BONUS: 5, WHATSAPP_LINK: "", WHATSAPP_VISIBLE: false });
+  const [siteConfig, setSiteConfig] = useState({ REGISTER_BONUS: 3, REFERRAL_BONUS: 5, WHATSAPP_LINK: "", WHATSAPP_VISIBLE: "false" });
   const [configLoaded, setConfigLoaded] = useState(false);
 
   const [regUsername, setRegUsername] = useState("");
@@ -152,7 +152,7 @@ export default function LoginPage() {
             REGISTER_BONUS: d.config.REGISTER_BONUS ?? 3,
             REFERRAL_BONUS: d.config.REFERRAL_BONUS ?? 5,
             WHATSAPP_LINK: d.config.WHATSAPP_LINK ?? "",
-            WHATSAPP_VISIBLE: !!d.config.WHATSAPP_VISIBLE,
+            WHATSAPP_VISIBLE: d.config.WHATSAPP_VISIBLE === true ? "true" : "false",
           });
         }
         setConfigLoaded(true);
@@ -468,7 +468,7 @@ export default function LoginPage() {
               Desarrollado por{" "}
               <span className="text-gray-400 font-semibold">HacheJota</span>
             </p>
-            {configLoaded && siteConfig.WHATSAPP_VISIBLE && siteConfig.WHATSAPP_LINK && (
+            {configLoaded && siteConfig.WHATSAPP_VISIBLE === "true" && siteConfig.WHATSAPP_LINK && (
             <motion.a
               href={siteConfig.WHATSAPP_LINK}
               target="_blank"
