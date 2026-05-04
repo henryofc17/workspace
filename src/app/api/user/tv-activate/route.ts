@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { validateBody, tvActivateSchema } from "@/lib/validators";
 import { getConfig } from "@/lib/config";
+import { pickCookie } from "@/lib/cookie-picker";
 
 const DESKTOP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
@@ -47,23 +48,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Pick cookie with rotation ──
-    const cookies = await prisma.cookie.findMany({
-      where: { status: "ACTIVE" },
-      orderBy: [{ usedCount: "asc" }, { lastUsed: "asc" }],
-      take: 5,
-    });
+    // ── Pick random cookie with region filtering (no fallback) ──
+    const picked = await pickCookie(user.region);
 
-    if (!cookies || cookies.length === 0) {
+    if (!picked.success) {
       return NextResponse.json(
-        { success: false, error: "No hay cookies disponibles.", noCookies: true },
+        { success: false, error: picked.error, noCookies: picked.noCookies },
         { status: 503 }
       );
     }
 
+    const cookie = picked.cookie;
+
     const { extractCookiesFromText, buildCookieString } = await import("@/lib/netflix-checker");
 
-    const cookie = cookies[Math.floor(Math.random() * cookies.length)];
     const cookieDict = extractCookiesFromText(cookie.rawCookie);
 
     if (!cookieDict || !cookieDict["NetflixId"] || !cookieDict["SecureNetflixId"]) {
@@ -197,7 +195,7 @@ export async function POST(request: NextRequest) {
               userId: session.userId,
               type: "TV_ACTIVATE",
               credits: -TV_COST,
-              description: `Activación TV (${cleanCode}) con cookie #${cookie.id.slice(0, 6)}`,
+              description: `Activación TV (${cleanCode}) con cookie #${cookie.id.slice(0, 6)}${picked.regionName ? ` [${picked.regionName}]` : ""}`,
             },
           });
           return u;
@@ -207,6 +205,7 @@ export async function POST(request: NextRequest) {
           success: true,
           message: resultMessage,
           remainingCredits: updated.credits,
+          ...(picked.regionName && { region: picked.regionName }),
         });
       } catch {
         return NextResponse.json({ success: false, error: "Créditos insuficientes. Intenta de nuevo." }, { status: 400 });

@@ -6,6 +6,7 @@ import {
   extractCookiesFromText,
 } from "@/lib/netflix-checker";
 import { getConfig } from "@/lib/config";
+import { pickCookie } from "@/lib/cookie-picker";
 
 export async function POST(request: Request) {
   try {
@@ -43,51 +44,17 @@ export async function POST(request: Request) {
       );
     }
 
-    // ROTACIÓN INTELIGENTE — filter by user region if set
-    const whereClause: any = { status: "ACTIVE" };
-    if (user.region) {
-      whereClause.country = user.region;
-    }
+    // ── Pick random cookie with region filtering (no fallback) ──
+    const picked = await pickCookie(user.region);
 
-    let cookies = await prisma.cookie.findMany({
-      where: whereClause,
-      orderBy: [
-        { usedCount: "asc" },
-        { lastUsed: "asc" },
-      ],
-      take: 3,
-    });
-
-    // If no cookies found for the region, fall back to all countries
-    if (user.region && (!cookies || cookies.length === 0)) {
-      const fallback = await prisma.cookie.findMany({
-        where: { status: "ACTIVE" },
-        orderBy: [
-          { usedCount: "asc" },
-          { lastUsed: "asc" },
-        ],
-        take: 3,
-      });
-      if (fallback && fallback.length > 0) {
-        cookies = fallback;
-      }
-    }
-
-    if (!cookies || cookies.length === 0) {
+    if (!picked.success) {
       return NextResponse.json(
-        {
-          success: false,
-          error: user.region
-            ? `No hay cookies disponibles para ${user.region}. Se ha notificado al administrador.`
-            : "No hay cookies disponibles. Se ha notificado al administrador.",
-          noCookies: true,
-        },
+        { success: false, error: picked.error, noCookies: picked.noCookies },
         { status: 503 }
       );
     }
 
-    const cookie =
-      cookies[Math.floor(Math.random() * cookies.length)];
+    const cookie = picked.cookie;
 
     // Parsear cookie
     const cookieDict = extractCookiesFromText(cookie.rawCookie);
@@ -164,7 +131,7 @@ export async function POST(request: Request) {
             userId: session.userId,
             type: "GENERATE_TOKEN",
             credits: -GENERATE_COST,
-            description: `Token generado con cookie #${cookie.id.slice(0, 6)}`,
+            description: `Token generado con cookie #${cookie.id.slice(0, 6)}${picked.regionName ? ` [${picked.regionName}]` : ""}`,
           },
         });
         return u;
@@ -175,6 +142,7 @@ export async function POST(request: Request) {
         token: result.token,
         link: result.link,
         remainingCredits: updatedUser.credits,
+        ...(picked.regionName && { region: picked.regionName }),
       });
     } catch {
       // Race condition: credits changed between check and deduction
