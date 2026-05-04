@@ -7,6 +7,8 @@ export interface PickedCookie {
   id: string;
   rawCookie: string;
   usedCount: number;
+  country: string | null;
+  plan: string | null;
 }
 
 export interface CookiePickerResult {
@@ -78,6 +80,8 @@ export async function pickCookie(
       id: true,
       rawCookie: true,
       usedCount: true,
+      country: true,
+      plan: true,
     },
   });
 

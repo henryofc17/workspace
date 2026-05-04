@@ -141,11 +141,13 @@ export default function Home() {
   // Generate token state
   const [generating, setGenerating] = useState(false);
   const [generatedLink, setGeneratedLink] = useState("");
+  const [generatedInfo, setGeneratedInfo] = useState<{ countryName: string | null; plan: string | null } | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
 
   // Copy cookie state
   const [copying, setCopying] = useState(false);
   const [copiedCookie, setCopiedCookie] = useState("");
+  const [copiedCookieInfo, setCopiedCookieInfo] = useState<{ countryName: string | null; plan: string | null } | null>(null);
   const [copiedCookieClip, setCopiedCookieClip] = useState(false);
 
   const [historyCleared, setHistoryCleared] = useState(false);
@@ -453,11 +455,13 @@ export default function Home() {
     }
     setGenerating(true);
     setGeneratedLink("");
+    setGeneratedInfo(null);
     try {
       const res = await fetch("/api/user/generate", { method: "POST" });
       const data = await res.json();
       if (data.success) {
         setGeneratedLink(data.link);
+        setGeneratedInfo({ countryName: data.countryName || null, plan: data.plan || null });
         setCredits(data.remainingCredits);
         refreshCredits();
         loadBalance();
@@ -487,11 +491,13 @@ export default function Home() {
     }
     setCopying(true);
     setCopiedCookie("");
+    setCopiedCookieInfo(null);
     try {
       const res = await fetch("/api/user/copy-cookie", { method: "POST" });
       const data = await res.json();
       if (data.success) {
         setCopiedCookie(data.cookie);
+        setCopiedCookieInfo({ countryName: data.countryName || null, plan: data.plan || null });
         setCredits(data.remainingCredits);
         refreshCredits();
         loadBalance();
@@ -1449,6 +1455,21 @@ export default function Home() {
                       <p className="text-white/25 text-xs">Créditos restantes: {credits}</p>
                     </div>
                   </div>
+                  {(generatedInfo?.countryName || generatedInfo?.plan) && (
+                    <div className="flex items-center gap-2">
+                      {generatedInfo?.countryName && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-500/10 border border-sky-500/15 text-sky-300 text-[11px] font-medium">
+                          <Globe2 className="h-3 w-3" />
+                          {generatedInfo.countryName}
+                        </span>
+                      )}
+                      {generatedInfo?.plan && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/15 text-emerald-300 text-[11px] font-medium">
+                          {generatedInfo.plan}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div className="bg-[#050508]/60 rounded-xl p-3 border border-white/[0.04]">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1.5">
@@ -1546,6 +1567,21 @@ export default function Home() {
                       {copiedCookieClip ? <><Check className="h-3.5 w-3.5" /> Copiado</> : <><CopyIcon className="h-3.5 w-3.5" /> Copiar Cookie</>}
                     </button>
                   </div>
+                  {(copiedCookieInfo?.countryName || copiedCookieInfo?.plan) && (
+                    <div className="flex items-center gap-2">
+                      {copiedCookieInfo?.countryName && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-500/10 border border-sky-500/15 text-sky-300 text-[11px] font-medium">
+                          <Globe2 className="h-3 w-3" />
+                          {copiedCookieInfo.countryName}
+                        </span>
+                      )}
+                      {copiedCookieInfo?.plan && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/15 text-emerald-300 text-[11px] font-medium">
+                          {copiedCookieInfo.plan}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div className="bg-[#050508]/60 rounded-xl p-3 border border-white/[0.04]">
                     <p className="text-[10px] text-white/15 font-mono break-all leading-relaxed max-h-24 overflow-y-auto premium-scrollbar">
                       {copiedCookie}

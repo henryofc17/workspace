@@ -7,6 +7,7 @@ import {
 } from "@/lib/netflix-checker";
 import { getConfig } from "@/lib/config";
 import { pickCookie } from "@/lib/cookie-picker";
+import { getCountryName } from "@/lib/countries";
 
 export async function POST(request: Request) {
   try {
@@ -142,7 +143,9 @@ export async function POST(request: Request) {
         token: result.token,
         link: result.link,
         remainingCredits: updatedUser.credits,
-        ...(picked.regionName && { region: picked.regionName }),
+        country: cookie.country || null,
+        countryName: cookie.country ? getCountryName(cookie.country) : null,
+        plan: cookie.plan || null,
       });
     } catch {
       // Race condition: credits changed between check and deduction
