@@ -15,7 +15,7 @@ const PUBLIC_PATHS = [
 // Routes that require ADMIN role
 const ADMIN_PATHS = ["/admin", "/api/admin"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // ── Block suspicious paths ──

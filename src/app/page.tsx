@@ -250,6 +250,16 @@ export default function Home() {
     }
   }, []);
 
+  // ── Refresh Credits (must be defined before callbacks that reference it) ──
+  const refreshCredits = useCallback(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) setCredits(data.user.credits ?? 0);
+      })
+      .catch(() => {});
+  }, []);
+
   // ── Save User Region ──
   const handleSaveRegion = useCallback(async (code: string | null) => {
     setSavingRegion(true);
@@ -322,14 +332,6 @@ export default function Home() {
   }, [router, loadBalance, loadReferral, loadCheckerUsage, loadSiteConfig, loadRegion]);
 
 
-  const refreshCredits = useCallback(() => {
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.success) setCredits(data.user.credits ?? 0);
-      })
-      .catch(() => {});
-  }, []);
   // ── TV Activate (5 credits) ──
   const handleTvActivate = useCallback(async () => {
     if (!tvCode.trim()) {
