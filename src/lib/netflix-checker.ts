@@ -352,6 +352,71 @@ export async function checkCookie(
   }
 }
 
+// ─── NetflixId Country Fallback (no HTTP) ─────────────────────────────────────
+
+/**
+ * Decode NetflixId cookie to extract country code without HTTP request.
+ * NetflixId format: v2|timestamp|base64(JSON)|signature
+ * The JSON typically contains: customerInfo.country, user.country, etc.
+ */
+export function extractCountryFromNetflixId(cookieDict: Record<string, string>): string | null {
+  const netflixId = cookieDict["NetflixId"];
+  if (!netflixId) return null;
+
+  try {
+    // NetflixId is pipe-separated: version|timestamp|base64data|signature
+    const parts = netflixId.split("|");
+    // The base64 data is typically the 3rd part (index 2)
+    const b64Candidates: string[] = [];
+    if (parts.length >= 3) {
+      b64Candidates.push(parts[2]); // base64 user data
+    }
+    // Also try the whole string as raw base64
+    b64Candidates.push(netflixId);
+
+    for (const b64 of b64Candidates) {
+      try {
+        const decoded = Buffer.from(b64, "base64").toString("utf-8");
+        if (!decoded || decoded.length < 5) continue;
+
+        // Try to find and parse JSON within the decoded string
+        let jsonStr = decoded;
+        const jsonStart = decoded.indexOf("{");
+        const jsonEnd = decoded.lastIndexOf("}");
+        if (jsonStart !== -1 && jsonEnd > jsonStart) {
+          jsonStr = decoded.substring(jsonStart, jsonEnd + 1);
+        }
+
+        try {
+          const obj = JSON.parse(jsonStr);
+          const country =
+            obj?.customerInfo?.country ||
+            obj?.user?.country ||
+            obj?.geo?.country ||
+            obj?.country ||
+            obj?.billingCountry ||
+            obj?.currentCountry;
+          if (country && typeof country === "string" && /^[A-Z]{2}$/i.test(country)) {
+            return country.toUpperCase();
+          }
+        } catch {
+          // Not valid JSON, try regex
+        }
+
+        // Regex fallback on raw decoded string
+        const m = decoded.match(/"country"\s*:\s*"([A-Z]{2})"/i);
+        if (m) return m[1].toUpperCase();
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    // Decoding failed entirely
+  }
+
+  return null;
+}
+
 // ─── Metadata Extraction ─────────────────────────────────────────────────────
 
 /** Fetch Netflix membership page and extract metadata */

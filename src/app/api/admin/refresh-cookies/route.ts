@@ -22,11 +22,12 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const { checkCookie, getMetadata } = await import("@/lib/netflix-checker");
+    const { checkCookie, getMetadata, extractCountryFromNetflixId } = await import("@/lib/netflix-checker");
+    const { getCountryName } = await import("@/lib/countries");
     let alive = 0;
     let dead = 0;
     const countriesSet = new Set<string>();
-    const countriesList: { code: string; name: string; count: number }[] = {};
+    const countriesList: Record<string, { code: string; name: string; count: number }> = {};
     let metadataErrors = 0;
 
     for (const cookie of cookies) {
@@ -87,6 +88,20 @@ export async function POST(request: NextRequest) {
         } catch {
           // Metadata extraction failed but cookie is still valid
           metadataErrors++;
+        }
+
+        // Step 2b: Fallback — extract country from NetflixId if still unknown
+        if (!country) {
+          const fallbackCountry = extractCountryFromNetflixId(dict);
+          if (fallbackCountry) {
+            country = fallbackCountry;
+            countriesSet.add(country);
+            if (countriesList[country]) {
+              countriesList[country].count++;
+            } else {
+              countriesList[country] = { code: country, name: getCountryName(country), count: 1 };
+            }
+          }
         }
 
         // Step 3: Update cookie with ACTIVE status + metadata
