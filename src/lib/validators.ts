@@ -28,7 +28,7 @@ export const registerSchema = z.object({
     .optional()
     .transform((v) => (v ? v.trim().toUpperCase() : undefined)),
   fingerprint: z.string().min(1, "Fingerprint requerido").max(200),
-  turnstileToken: z.string().min(1, "Verificación requerida").max(1000),
+  turnstileToken: z.string().min(1, "Verificación requerida").max(5000),
 });
 
 // ─── User API Schemas ───────────────────────────────────────────────────────
@@ -69,7 +69,11 @@ export const updateCreditsSchema = z.object({
 
 // ─── Validation Helpers ──────────────────────────────────────────────────────
 
-export function validateBody<T>(schema: z.ZodSchema<T>, body: unknown) {
+export type ValidationFailure = { success: false; error: string };
+export type ValidationSuccess<T> = { success: true; data: T };
+export type ValidationResult<T> = ValidationFailure | ValidationSuccess<T>;
+
+export function validateBody<T>(schema: z.ZodSchema<T>, body: unknown): ValidationResult<T> {
   const result = schema.safeParse(body);
   if (!result.success) {
     const firstError = result.error.issues[0];

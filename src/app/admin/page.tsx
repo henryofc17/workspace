@@ -2036,7 +2036,7 @@ export default function AdminPage() {
                       <div className="flex items-center justify-between">
                         <span className="text-white/40 text-xs">Contraseña</span>
                         <button
-                          onClick={() => setShowAdminPwdModal(true)}
+                          onClick={() => setShowAdminPwd(true)}
                           className="px-3 py-1.5 rounded-lg text-xs font-medium text-white/60 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] hover:border-white/[0.12] transition-all"
                         >
                           Cambiar contraseña

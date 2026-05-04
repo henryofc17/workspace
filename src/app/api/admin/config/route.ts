@@ -76,7 +76,7 @@ export async function PUT(request: Request) {
       "WHATSAPP_VISIBLE",
     ]);
 
-    const ops = [];
+    const ops: Promise<any>[] = [];
     for (const [key, value] of Object.entries(updates)) {
       if (allowedNumKeys.has(key)) {
         const numVal = Number(value);
@@ -102,7 +102,7 @@ export async function PUT(request: Request) {
     }
 
     if (ops.length > 0) {
-      await prisma.$transaction(ops);
+      await Promise.all(ops);
       clearConfigCache();
     }
 

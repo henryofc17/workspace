@@ -117,7 +117,7 @@ export function checkRateLimit(
     entry.blockedUntil = now + (cfg.blockDurationMs || cfg.windowMs);
     return {
       allowed: false,
-      retryAfter: Math.ceil((entry.blockDurationMs || cfg.windowMs) / 1000),
+      retryAfter: Math.ceil((cfg.blockDurationMs || cfg.windowMs) / 1000),
     };
   }
 

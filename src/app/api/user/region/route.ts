@@ -107,7 +107,7 @@ export async function PUT(request: Request) {
               userId: session.userId,
               type: "CHANGE_REGION",
               credits: -REGION_COST,
-              description: `Región cambiada a ${getCountryName(regionValue)} (${regionValue})`,
+              description: `Región cambiada a ${regionValue ? getCountryName(regionValue) : "Todas"} (${regionValue || "Global"})`,
             },
           });
           return u;
@@ -117,7 +117,7 @@ export async function PUT(request: Request) {
           success: true,
           region: updated.region,
           remainingCredits: updated.credits,
-          message: `Región cambiada a ${getCountryName(regionValue)}`,
+          message: `Región cambiada a ${regionValue ? getCountryName(regionValue) : "Todas"}`,
         });
       } catch {
         return NextResponse.json(
