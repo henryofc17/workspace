@@ -48,6 +48,7 @@ import {
   MessageCircle,
   Globe,
 } from "lucide-react";
+import { getCountryName } from "@/lib/countries";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -560,16 +561,23 @@ export default function AdminPage() {
     }
   }, [loadData]);
 
+  // Refresh results state
+  const [refreshResults, setRefreshResults] = useState<{ countries: { code: string; name: string; count: number }[] } | null>(null);
+
   // ── Refresh Cookies ──
   const handleRefreshCookies = useCallback(async () => {
-    if (!confirm("¿Validar todas las cookies activas? Esto puede tardar varios minutos.")) return;
+    if (!confirm("¿Validar todas las cookies activas? Esto extraerá la región de cada cookie. Puede tardar varios minutos.")) return;
     setRefreshing(true);
+    setRefreshResults(null);
     try {
       const res = await fetch("/api/admin/refresh-cookies?active=true", { method: "POST" });
       const data = await res.json();
       if (data.success) {
         const r = data.results;
-        toast.success(`Validación: ${r.alive} vivas, ${r.dead} muertas (${r.checked} revisadas)`);
+        toast.success(`Validación: ${r.alive} vivas, ${r.dead} muertas, ${r.countriesFound || 0} región(es)`);
+        if (data.countries && data.countries.length > 0) {
+          setRefreshResults({ countries: data.countries });
+        }
         loadData();
       } else {
         toast.error(data.error);
@@ -1433,12 +1441,13 @@ export default function AdminPage() {
                             {(c.country || c.plan) && (
                               <div className="flex items-center gap-1.5">
                                 {c.country && (
-                                  <Badge className="bg-white/[0.04] text-white/30 border border-white/[0.06] text-[9px] px-1.5 py-0 h-4">
-                                    {c.country}
+                                  <Badge className="bg-sky-500/10 text-sky-300/70 border border-sky-500/15 text-[9px] px-1.5 py-0 h-4">
+                                    <Globe className="h-2.5 w-2.5 mr-1" />
+                                    {getCountryName(c.country) || c.country}
                                   </Badge>
                                 )}
                                 {c.plan && (
-                                  <Badge className="bg-white/[0.04] text-white/30 border border-white/[0.06] text-[9px] px-1.5 py-0 h-4">
+                                  <Badge className="bg-emerald-500/10 text-emerald-300/70 border border-emerald-500/15 text-[9px] px-1.5 py-0 h-4">
                                     {c.plan}
                                   </Badge>
                                 )}
@@ -1451,6 +1460,114 @@ export default function AdminPage() {
                   )}
                 </div>
               </PanelCard>
+
+              {/* Regions Summary Card — shows after refresh */}
+              {refreshResults && refreshResults.countries.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.1 }}
+                >
+                  <PanelCard
+                    icon={Globe}
+                    iconColor="from-sky-500/20 to-blue-500/10"
+                    title="Regiones Detectadas"
+                    subtitle={`${refreshResults.countries.length} región(es) única(s) con cookies activas`}
+                    headerExtra={
+                      <button
+                        onClick={() => setRefreshResults(null)}
+                        className="h-7 w-7 rounded-lg border border-white/[0.06] bg-white/[0.03] flex items-center justify-center text-white/30 hover:text-white/60 transition-all duration-200"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    }
+                  >
+                    <div className="p-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                        {refreshResults.countries.map((country) => (
+                          <motion.div
+                            key={country.code}
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="flex items-center gap-2.5 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] transition-all duration-200"
+                          >
+                            <div className="h-8 w-8 rounded-lg bg-sky-500/10 border border-sky-500/15 flex items-center justify-center shrink-0">
+                              <Globe className="h-3.5 w-3.5 text-sky-400" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-white/80 text-xs font-medium truncate">{country.name}</p>
+                              <p className="text-white/25 text-[10px]">{country.count} cookie(s)</p>
+                            </div>
+                            <Badge className="bg-white/[0.04] text-white/30 border border-white/[0.06] text-[9px] px-1.5 py-0 h-4 font-mono shrink-0">
+                              {country.code}
+                            </Badge>
+                          </motion.div>
+                        ))}
+                      </div>
+                      <div className="mt-3 px-1">
+                        <p className="text-white/20 text-[10px] text-center flex items-center justify-center gap-1.5">
+                          <div className="h-1.5 w-1.5 rounded-full bg-sky-400/40" />
+                          Estas regiones están disponibles para que los usuarios seleccionen en su panel
+                        </p>
+                      </div>
+                    </div>
+                  </PanelCard>
+                </motion.div>
+              )}
+
+              {/* Static Regions Overview — always visible in cookies tab */}
+              {!refreshResults && cookies.length > 0 && (
+                <PanelCard
+                  icon={Globe}
+                  iconColor="from-sky-500/20 to-blue-500/10"
+                  title="Regiones Disponibles"
+                  subtitle="Países con cookies activas"
+                >
+                  <div className="p-3">
+                    {(() => {
+                      const activeCookies = cookies.filter(c => c.status === "ACTIVE" && c.country);
+                      const regionMap = new Map<string, { name: string; code: string; count: number }>();
+                      for (const c of activeCookies) {
+                        const existing = regionMap.get(c.country!);
+                        if (existing) {
+                          existing.count++;
+                        } else {
+                          regionMap.set(c.country!, { name: getCountryName(c.country!) || c.country!, code: c.country!, count: 1 });
+                        }
+                      }
+                      const regions = Array.from(regionMap.values()).sort((a, b) => b.count - a.count);
+                      if (regions.length === 0) {
+                        return (
+                          <div className="px-4 py-6 text-center">
+                            <p className="text-white/20 text-xs">No se han detectado regiones aún. Presiona "Refrescar Cookies" para detectar las regiones automáticamente.</p>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                          {regions.map((region) => (
+                            <div
+                              key={region.code}
+                              className="flex items-center gap-2.5 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]"
+                            >
+                              <div className="h-8 w-8 rounded-lg bg-sky-500/10 border border-sky-500/15 flex items-center justify-center shrink-0">
+                                <Globe className="h-3.5 w-3.5 text-sky-400" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-white/80 text-xs font-medium truncate">{region.name}</p>
+                                <p className="text-white/25 text-[10px]">{region.count} cookie(s)</p>
+                              </div>
+                              <Badge className="bg-white/[0.04] text-white/30 border border-white/[0.06] text-[9px] px-1.5 py-0 h-4 font-mono shrink-0">
+                                {region.code}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </PanelCard>
+              )}
             </motion.div>
           )}
 
@@ -1816,7 +1933,7 @@ export default function AdminPage() {
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Región</span>
                       </div>
                       <p className="text-sm font-bold text-sky-400">
-                        {selectedUser.region ? selectedUser.region : "Todas"}
+                        {selectedUser.region ? `${getCountryName(selectedUser.region) || selectedUser.region} (${selectedUser.region})` : "Todas"}
                       </p>
                     </div>
                   </div>

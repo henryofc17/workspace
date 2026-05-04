@@ -17,13 +17,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         message: "No hay cookies para validar",
-        results: { checked: 0, alive: 0, dead: 0 },
+        results: { checked: 0, alive: 0, dead: 0, countriesFound: 0 },
+        countries: [],
       });
     }
 
-    const { checkCookie } = await import("@/lib/netflix-checker");
+    const { checkCookie, getMetadata } = await import("@/lib/netflix-checker");
     let alive = 0;
     let dead = 0;
+    const countriesSet = new Set<string>();
+    const countriesList: { code: string; name: string; count: number }[] = {};
+    let metadataErrors = 0;
 
     for (const cookie of cookies) {
       const dict = extractCookiesFromText(cookie.rawCookie);
@@ -38,20 +42,64 @@ export async function POST(request: NextRequest) {
       }
 
       try {
+        // Step 1: Validate cookie can generate token
         const result = await checkCookie(dict);
-        if (result.success) {
+
+        if (!result.success) {
           await prisma.cookie.update({
             where: { id: cookie.id },
-            data: { status: "ACTIVE", lastUsed: new Date() },
-          });
-          alive++;
-        } else {
-          await prisma.cookie.update({
-            where: { id: cookie.id },
-            data: { status: "DEAD", lastError: result.error || "Cookie inválida", lastUsed: new Date() },
+            data: {
+              status: "DEAD",
+              lastError: result.error || "Cookie inválida",
+              lastUsed: new Date(),
+            },
           });
           dead++;
+          continue;
         }
+
+        // Step 2: Extract metadata (country, plan, etc.) from Netflix membership page
+        let country: string | null = null;
+        let plan: string | null = null;
+
+        try {
+          const metadata = await getMetadata(dict);
+
+          if (metadata.country) {
+            country = metadata.country;
+            countriesSet.add(country);
+
+            // Track country counts
+            if (countriesList[country]) {
+              countriesList[country].count++;
+            } else {
+              countriesList[country] = {
+                code: country,
+                name: metadata.countryName || country,
+                count: 1,
+              };
+            }
+          }
+
+          if (metadata.plan) {
+            plan = metadata.plan;
+          }
+        } catch {
+          // Metadata extraction failed but cookie is still valid
+          metadataErrors++;
+        }
+
+        // Step 3: Update cookie with ACTIVE status + metadata
+        await prisma.cookie.update({
+          where: { id: cookie.id },
+          data: {
+            status: "ACTIVE",
+            lastUsed: new Date(),
+            ...(country && { country }),
+            ...(plan && { plan }),
+          },
+        });
+        alive++;
       } catch (err: any) {
         await prisma.cookie.update({
           where: { id: cookie.id },
@@ -61,10 +109,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Build sorted countries list
+    const countries = Object.values(countriesList).sort((a, b) => b.count - a.count);
+
     return NextResponse.json({
       success: true,
-      message: `Validación completa: ${alive} vivas, ${dead} muertas`,
-      results: { checked: cookies.length, alive, dead },
+      message: `Validación completa: ${alive} vivas, ${dead} muertas, ${countries.length} región(es) detectada(s)`,
+      results: {
+        checked: cookies.length,
+        alive,
+        dead,
+        countriesFound: countries.length,
+        metadataErrors,
+      },
+      countries,
     });
   } catch (err: any) {
     if (err.message === "UNAUTHORIZED") {
