@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getConfig, clearConfigCache } from "@/lib/config";
+import { getConfig, getConfigString, clearConfigCache } from "@/lib/config";
 import { ensureMigrations } from "@/lib/migrate";
 
 // ─── GET: Return all config values ───────────────────────────────────────────
@@ -9,7 +9,7 @@ export async function GET() {
   try {
     await requireAdmin();
 
-    const allKeys = [
+    const numKeys = [
       { key: "GENERATE_COST", defaultValue: 1 },
       { key: "COPY_COST", defaultValue: 3 },
       { key: "TV_ACTIVATE_COST", defaultValue: 5 },
@@ -20,9 +20,17 @@ export async function GET() {
       { key: "REDEEM_BONUS", defaultValue: 3 },
     ];
 
-    const result: Record<string, number> = {};
-    for (const { key, defaultValue } of allKeys) {
+    const stringKeys = [
+      { key: "WHATSAPP_LINK", defaultValue: "https://chat.whatsapp.com/CQMqkEcB0LwFLlG0uIyEOX?mode=gi_t" },
+      { key: "WHATSAPP_VISIBLE", defaultValue: "true" },
+    ];
+
+    const result: Record<string, string | number> = {};
+    for (const { key, defaultValue } of numKeys) {
       result[key] = await getConfig(key, defaultValue);
+    }
+    for (const { key, defaultValue } of stringKeys) {
+      result[key] = await getConfigString(key, defaultValue);
     }
 
     return NextResponse.json({ success: true, config: result });
@@ -50,7 +58,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "Config inválida" }, { status: 400 });
     }
 
-    const allowedKeys = new Set([
+    const allowedNumKeys = new Set([
       "GENERATE_COST",
       "COPY_COST",
       "TV_ACTIVATE_COST",
@@ -61,18 +69,34 @@ export async function PUT(request: Request) {
       "REDEEM_BONUS",
     ]);
 
+    const allowedStringKeys = new Set([
+      "WHATSAPP_LINK",
+      "WHATSAPP_VISIBLE",
+    ]);
+
     const ops = [];
     for (const [key, value] of Object.entries(updates)) {
-      if (!allowedKeys.has(key)) continue;
-      const numVal = Number(value);
-      if (isNaN(numVal) || numVal < 0) continue;
-      ops.push(
-        prisma.siteConfig.upsert({
-          where: { key },
-          update: { value: String(numVal) },
-          create: { key, value: String(numVal) },
-        })
-      );
+      if (allowedNumKeys.has(key)) {
+        const numVal = Number(value);
+        if (isNaN(numVal) || numVal < 0) continue;
+        ops.push(
+          prisma.siteConfig.upsert({
+            where: { key },
+            update: { value: String(numVal) },
+            create: { key, value: String(numVal) },
+          })
+        );
+      } else if (allowedStringKeys.has(key)) {
+        const strVal = String(value ?? "").trim();
+        if (!strVal) continue;
+        ops.push(
+          prisma.siteConfig.upsert({
+            where: { key },
+            update: { value: strVal },
+            create: { key, value: strVal },
+          })
+        );
+      }
     }
 
     if (ops.length > 0) {

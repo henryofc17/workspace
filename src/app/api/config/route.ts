@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { getConfig } from "@/lib/config";
+import { getConfig, getConfigString } from "@/lib/config";
 
 // ─── GET: Public config — no auth required ──────────────────────────────────
-// Returns costs, limits and bonuses so the UI can display dynamic pricing.
+// Returns costs, limits, bonuses and WhatsApp settings so the UI can display dynamic pricing.
 export async function GET() {
   try {
     const config = {
@@ -14,6 +14,8 @@ export async function GET() {
       REGISTER_BONUS: await getConfig("REGISTER_BONUS", 3),
       REFERRAL_BONUS: await getConfig("REFERRAL_BONUS", 5),
       REDEEM_BONUS: await getConfig("REDEEM_BONUS", 3),
+      WHATSAPP_LINK: await getConfigString("WHATSAPP_LINK", "https://chat.whatsapp.com/CQMqkEcB0LwFLlG0uIyEOX?mode=gi_t"),
+      WHATSAPP_VISIBLE: await getConfigString("WHATSAPP_VISIBLE", "true") === "true",
     };
 
     return NextResponse.json({ success: true, config });
@@ -30,6 +32,8 @@ export async function GET() {
         REGISTER_BONUS: 3,
         REFERRAL_BONUS: 5,
         REDEEM_BONUS: 3,
+        WHATSAPP_LINK: "https://chat.whatsapp.com/CQMqkEcB0LwFLlG0uIyEOX?mode=gi_t",
+        WHATSAPP_VISIBLE: true,
       },
     });
   }
