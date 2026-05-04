@@ -50,48 +50,7 @@ const FETCH_TIMEOUT = 30000;
 const DROID_USER_AGENT =
   "com.netflix.mediaclient/63884 (Linux; U; Android 13; ro; M2007J3SG; Build/TQ1A.230205.001.A2; Cronet/143.0.7445.0)";
 
-const COUNTRY_NAMES: Record<string, string> = {
-  US: "Estados Unidos",
-  GB: "Reino Unido",
-  CA: "Canadá",
-  AU: "Australia",
-  FR: "Francia",
-  DE: "Alemania",
-  JP: "Japón",
-  BR: "Brasil",
-  MX: "México",
-  AR: "Argentina",
-  CO: "Colombia",
-  CL: "Chile",
-  ES: "España",
-  IT: "Italia",
-  KR: "Corea del Sur",
-  IN: "India",
-  TR: "Turquía",
-  SE: "Suecia",
-  NL: "Países Bajos",
-  PL: "Polonia",
-  TH: "Tailandia",
-  PH: "Filipinas",
-  ID: "Indonesia",
-  MY: "Malasia",
-  SG: "Singapur",
-  NZ: "Nueva Zelanda",
-  IE: "Irlanda",
-  PT: "Portugal",
-  BE: "Bélgica",
-  AT: "Austria",
-  CH: "Suiza",
-  DK: "Dinamarca",
-  FI: "Finlandia",
-  NO: "Noruega",
-  ZA: "Sudáfrica",
-  NG: "Nigeria",
-  EG: "Egipto",
-  SA: "Arabia Saudita",
-  AE: "Emiratos Árabes",
-  IL: "Israel",
-};
+import { getCountryName } from "@/lib/countries";
 
 // ─── JSON Utilities ──────────────────────────────────────────────────────────
 
@@ -437,7 +396,7 @@ export async function getMetadata(
         const country = dig(userInfo, "countryOfSignup");
         if (country) {
           metadata.country = country;
-          metadata.countryName = COUNTRY_NAMES[country] || country;
+          metadata.countryName = getCountryName(country);
         }
 
         const membership = dig(userInfo, "membership");
@@ -506,7 +465,7 @@ export async function getMetadata(
       const countryMatch = html.match(countryRegex);
       if (countryMatch) {
         metadata.country = countryMatch[1];
-        metadata.countryName = COUNTRY_NAMES[countryMatch[1]] || countryMatch[1];
+        metadata.countryName = getCountryName(countryMatch[1]);
       }
     }
 

@@ -1824,7 +1824,7 @@ export default function Home() {
                 {/* Info note */}
                 <p className="text-white/20 text-[10px] text-center flex items-center justify-center gap-1.5">
                   <div className="h-1.5 w-1.5 rounded-full bg-sky-400/40" />
-                  Selecciona un país para filtrar las cookies de esa región.
+                  Selecciona un país para filtrar las cookies de esa región. Solo se muestran los países con cookies disponibles.
                 </p>
 
                 {credits < siteConfig.REGION_COST && (
