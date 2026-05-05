@@ -11,11 +11,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "No autenticado" }, { status: 401 });
     }
 
-    // ── Rate limit: max 3 password changes per hour per user ──
+    // ── Rate limit: max 3 password changes per 30 minutes per user ──
     const rateCheck = checkRateLimit(`change-password:${session.userId}`, {
       maxRequests: 3,
-      windowMs: 60 * 60 * 1000,
-      blockDurationMs: 2 * 60 * 60 * 1000,
+      windowMs: 30 * 60 * 1000,
+      blockDurationMs: 30 * 60 * 1000,
     });
     if (!rateCheck.allowed) {
       logSecurityEvent({

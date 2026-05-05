@@ -12,11 +12,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "No autenticado" }, { status: 401 });
     }
 
-    // ── Rate limit: max 5 redeem attempts per user per hour ──
+    // ── Rate limit: max 5 redeem attempts per user per 30 minutes ──
     const rateCheck = checkRateLimit(`redeem:${session.userId}`, {
       maxRequests: 5,
-      windowMs: 60 * 60 * 1000,
-      blockDurationMs: 2 * 60 * 60 * 1000,
+      windowMs: 30 * 60 * 1000,
+      blockDurationMs: 30 * 60 * 1000,
     });
     if (!rateCheck.allowed) {
       return NextResponse.json(

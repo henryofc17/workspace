@@ -9,10 +9,10 @@ export async function POST(request: Request) {
     const session = await requireAuth();
     await ensureMigrations();
 
-    // ── Rate limit: max 10 redeem attempts per user per hour ──
+    // ── Rate limit: max 10 redeem attempts per user per 30 minutes ──
     const rateCheck = checkRateLimit(`redeem-key:${session.userId}`, {
       maxRequests: 10,
-      windowMs: 60 * 60 * 1000,
+      windowMs: 30 * 60 * 1000,
       blockDurationMs: 30 * 60 * 1000,
     });
     if (!rateCheck.allowed) {

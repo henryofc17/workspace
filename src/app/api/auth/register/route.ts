@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     const rateCheck = checkRateLimit(`register:${clientIP}`, {
       maxRequests: 3,
       windowMs: 15 * 60 * 1000,
-      blockDurationMs: 60 * 60 * 1000, // 1 hour block
+      blockDurationMs: 30 * 60 * 1000, // 30 min block
     });
 
     if (!rateCheck.allowed) {
