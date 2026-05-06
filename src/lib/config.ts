@@ -46,6 +46,23 @@ export async function getConfigString(key: string, defaultValue: string): Promis
   }
 }
 
+/**
+ * Set (upsert) a config value in the SiteConfig table and update cache.
+ */
+export async function setConfig(key: string, value: string): Promise<void> {
+  try {
+    await ensureMigrations();
+    await prisma.siteConfig.upsert({
+      where: { key },
+      update: { value, updatedAt: new Date() },
+      create: { key, value },
+    });
+    cache.set(key, { value, expiresAt: Date.now() + TTL_MS });
+  } catch {
+    // Silently fail — config persistence is non-critical
+  }
+}
+
 /** Clear all cached config values (call after admin updates) */
 export function clearConfigCache(): void {
   cache.clear();

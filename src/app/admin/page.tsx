@@ -288,8 +288,10 @@ export default function AdminPage() {
   // Upload
   const [uploadingCookies, setUploadingCookies] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [detectingCountries, setDetectingCountries] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [autoRefreshStatus, setAutoRefreshStatus] = useState<{ lastRefresh: string | null; nextRefreshIn: number; isRunning: boolean } | null>(null);
 
   // Duplicates
   const [duplicateCount, setDuplicateCount] = useState<number | null>(null);
@@ -344,6 +346,7 @@ export default function AdminPage() {
           router.push("/login");
         } else {
           loadData();
+          checkAutoRefresh();
         }
       })
       .catch(() => router.push("/login"));
@@ -365,6 +368,28 @@ export default function AdminPage() {
       if (cookiesRes.success) setCookies(cookiesRes.cookies);
     } catch {}
     setLoading(false);
+  }, []);
+
+  const checkAutoRefresh = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/auto-refresh");
+      const data = await res.json();
+      if (data.success) {
+        setAutoRefreshStatus(data.status);
+        // Auto-trigger if needed and not running
+        if (data.status.needsRefresh && !data.status.isRunning) {
+          fetch("/api/admin/auto-refresh", { method: "POST" })
+            .then(r => r.json())
+            .then(d => {
+              if (d.success) {
+                toast.info("Refresco automático de 24h iniciado");
+                setTimeout(() => { loadData(); checkAutoRefresh(); }, 60000);
+              }
+            })
+            .catch(() => {});
+        }
+      }
+    } catch {}
   }, []);
 
   // ── User Detail ──
@@ -586,6 +611,30 @@ export default function AdminPage() {
       toast.error("Error al refrescar cookies");
     } finally {
       setRefreshing(false);
+    }
+  }, [loadData]);
+
+  // ── Detect Countries ──
+  const handleDetectCountries = useCallback(async () => {
+    if (!confirm("¿Detectar países faltantes? Solo se verificarán las cookies activas sin país asignado.")) return;
+    setDetectingCountries(true);
+    try {
+      const res = await fetch("/api/admin/detect-countries", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        const r = data.results;
+        toast.success(`País detectado en ${r.detected} de ${r.processed} cookies`);
+        if (data.countries && data.countries.length > 0) {
+          setRefreshResults({ countries: data.countries });
+        }
+        loadData();
+      } else {
+        toast.error(data.error);
+      }
+    } catch {
+      toast.error("Error al detectar países");
+    } finally {
+      setDetectingCountries(false);
     }
   }, [loadData]);
 
@@ -1268,6 +1317,23 @@ export default function AdminPage() {
                 iconColor="from-purple-500/20 to-violet-500/10"
                 title="Subir Cookies"
                 subtitle="Archivo .txt o .zip · Duplicados detectados automáticamente"
+                headerExtra={
+                  autoRefreshStatus && (
+                    <div className="flex items-center gap-1.5 text-[10px]">
+                      {autoRefreshStatus.isRunning ? (
+                        <Badge className="bg-amber-500/10 text-amber-400 border border-amber-500/15 text-[10px] font-bold px-2 py-0 h-5 flex items-center gap-1">
+                          <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                          Auto-refrescando...
+                        </Badge>
+                      ) : autoRefreshStatus.lastRefresh ? (
+                        <Badge className="bg-white/[0.04] text-white/30 border border-white/[0.06] text-[10px] font-bold px-2 py-0 h-5 flex items-center gap-1">
+                          <Clock className="h-2.5 w-2.5" />
+                          Auto-refresco: {autoRefreshStatus.nextRefreshIn > 0 ? `${Math.floor(autoRefreshStatus.nextRefreshIn / 3600)}h ${Math.floor((autoRefreshStatus.nextRefreshIn % 3600) / 60)}m` : "Listo"}
+                        </Badge>
+                      ) : null}
+                    </div>
+                  )
+                }
               >
                 <div className="p-5 space-y-4">
                   {/* Drag & Drop Upload Area */}
@@ -1329,6 +1395,14 @@ export default function AdminPage() {
                     >
                       {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                       Refrescar Cookies
+                    </button>
+                    <button
+                      onClick={handleDetectCountries}
+                      disabled={detectingCountries || refreshing || uploadingCookies}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-sky-500/20 bg-sky-500/[0.05] text-sky-400 text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-sky-500/10 active:scale-[0.98]"
+                    >
+                      {detectingCountries ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+                      Sacar País
                     </button>
                     <button
                       onClick={handleCleanDead}
@@ -1522,6 +1596,12 @@ export default function AdminPage() {
                   iconColor="from-sky-500/20 to-blue-500/10"
                   title="Regiones Disponibles"
                   subtitle="Países con cookies activas"
+                  headerExtra={
+                    <Badge className="bg-sky-500/10 text-sky-400 border border-sky-500/15 text-[10px] font-bold px-2 py-0 h-5 flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-sky-400 pulse-dot" />
+                      {cookies.filter(c => c.status === "ACTIVE" && c.country).length}
+                    </Badge>
+                  }
                 >
                   <div className="p-3">
                     {(() => {
