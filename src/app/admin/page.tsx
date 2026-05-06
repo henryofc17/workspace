@@ -291,6 +291,7 @@ export default function AdminPage() {
   const [detectingCountries, setDetectingCountries] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [deletingAllCookies, setDeletingAllCookies] = useState(false);
 
   // Duplicates
   const [duplicateCount, setDuplicateCount] = useState<number | null>(null);
@@ -630,6 +631,28 @@ export default function AdminPage() {
       toast.error("Error");
     }
   }, [loadData]);
+
+  // ── Delete All Cookies ──
+  const handleDeleteAllCookies = useCallback(async () => {
+    const totalCookies = cookies.length;
+    if (!confirm(`¿Estás seguro de que deseas ELIMINAR TODAS las cookies (${totalCookies} en total)? Esta acción no se puede deshacer.`)) return;
+    if (!confirm("Esta acción es irreversible. ¿Confirmas que deseas continuar?")) return;
+    setDeletingAllCookies(true);
+    try {
+      const res = await fetch("/api/admin/cookies?type=all", { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`${data.deleted} cookies eliminadas correctamente`);
+        loadData();
+      } else {
+        toast.error(data.error || "Error al eliminar");
+      }
+    } catch {
+      toast.error("Error al eliminar cookies");
+    } finally {
+      setDeletingAllCookies(false);
+    }
+  }, [cookies.length, loadData]);
 
   // ── Check Duplicates ──
   const handleCheckDuplicates = useCallback(async () => {
@@ -1391,6 +1414,14 @@ export default function AdminPage() {
                         Eliminar Repetidas ({duplicateCount})
                       </button>
                     )}
+                    <button
+                      onClick={handleDeleteAllCookies}
+                      disabled={deletingAllCookies || refreshing || uploadingCookies}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-700 to-red-900 hover:from-red-600 hover:to-red-800 text-white text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-red-700/15 hover:shadow-red-600/25 active:scale-[0.98] border border-red-500/20"
+                    >
+                      {deletingAllCookies ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      Eliminar Todas
+                    </button>
                   </div>
                 </div>
               </PanelCard>
