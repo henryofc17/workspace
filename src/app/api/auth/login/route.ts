@@ -10,11 +10,28 @@ import {
   sanitizeObject,
 } from "@/lib/security";
 import { validateBody, loginSchema } from "@/lib/validators";
+import { checkIPRisk } from "@/lib/ip-guard";
 
 export async function POST(req: Request) {
   try {
-    // ── Rate limit by IP: max 5 attempts per minute ──
     const clientIP = getClientIP(req as any);
+
+    // ── IP Fraud Check (fail-open — never blocks on API error) ──
+    const ipRisk = await checkIPRisk(clientIP);
+    if (ipRisk.blocked) {
+      logSecurityEvent({
+        level: "error",
+        event: SecurityEvents.LOGIN_BLOCKED,
+        ip: clientIP,
+        details: { reason: "ip_risk", ipRiskScore: ipRisk.score, ipRiskReason: ipRisk.reason },
+      });
+      return NextResponse.json(
+        { error: "No se permite el acceso desde esta red." },
+        { status: 403 }
+      );
+    }
+
+    // ── Rate limit by IP: max 5 attempts per minute ──
     const rateCheck = checkRateLimit(`login:${clientIP}`, {
       maxRequests: 5,
       windowMs: 60 * 1000, // 1 min

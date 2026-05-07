@@ -11,6 +11,7 @@ import {
 } from "@/lib/security";
 import { validateBody, registerSchema } from "@/lib/validators";
 import { getConfig } from "@/lib/config";
+import { checkIPRisk } from "@/lib/ip-guard";
 
 async function verifyTurnstile(token: string): Promise<boolean> {
   const secret = process.env.TURNSTILE_SECRET_KEY;
@@ -40,6 +41,15 @@ function generateReferralCode(): string {
 export async function POST(request: Request) {
   try {
     const clientIP = getClientIP(request as any);
+
+    // ── IP Fraud Check (fail-open — never blocks on API error) ──
+    const ipRisk = await checkIPRisk(clientIP);
+    if (ipRisk.blocked) {
+      return NextResponse.json(
+        { success: false, error: "No se permite el registro desde esta red." },
+        { status: 403 }
+      );
+    }
 
     // ── Rate limit: max 3 registrations per IP per 15 min ──
     const rateCheck = checkRateLimit(`register:${clientIP}`, {
