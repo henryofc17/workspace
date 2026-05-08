@@ -32,10 +32,8 @@ import {
   ArrowLeft,
   UserPlus,
   Calendar,
-  Link2,
   Clock,
   Zap,
-  Hash,
   Gift,
   History,
   UserCog,
@@ -66,25 +64,15 @@ interface UserRecord {
   username: string;
   role: string;
   credits: number;
-  referralCode: string;
-  referredBy: string | null;
   createdAt: string;
-  _count: { transactions: number; referrals: number };
-  referrer: { username: string; id: string } | null;
+  _count: { transactions: number };
 }
 
 interface UserDetail extends UserRecord {
   ipAddress: string | null;
+  fingerprint: string | null;
   region: string | null;
   updatedAt: string;
-  referrals: {
-    id: string;
-    username: string;
-    credits: number;
-    role: string;
-    createdAt: string;
-    _count: { referrals: number; transactions: number };
-  }[];
   transactions: {
     id: string;
     type: string;
@@ -335,7 +323,7 @@ export default function AdminPage() {
   const [showAdminPwd, setShowAdminPwd] = useState(false);
 
   // User sort
-  const [userSort, setUserSort] = useState<"newest" | "oldest" | "credits" | "referrals">("newest");
+  const [userSort, setUserSort] = useState<"newest" | "oldest" | "credits">("newest");
 
   // ── Auth Check ──
   useEffect(() => {
@@ -775,8 +763,7 @@ export default function AdminPage() {
   // ── Filtered + sorted users ──
   const filteredUsers = users
     .filter((u) => {
-      const matchSearch = u.username.toLowerCase().includes(userSearch.toLowerCase()) ||
-        u.referralCode.toLowerCase().includes(userSearch.toLowerCase());
+      const matchSearch = u.username.toLowerCase().includes(userSearch.toLowerCase());
       const matchFilter = userFilter === "all" ||
         (userFilter === "admin" && u.role === "ADMIN") ||
         (userFilter === "user" && u.role === "USER");
@@ -786,7 +773,6 @@ export default function AdminPage() {
       switch (userSort) {
         case "oldest": return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         case "credits": return b.credits - a.credits;
-        case "referrals": return b._count.referrals - a._count.referrals;
         default: return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       }
     });
@@ -1228,13 +1214,6 @@ export default function AdminPage() {
                 title="Todos los Usuarios"
                 subtitle={`${filteredUsers.length} de ${users.length}`}
                 className="lg:col-span-2"
-                headerExtra={
-                  <div className="flex items-center gap-1.5">
-                    <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 text-[10px] font-bold px-2 py-0 h-5">
-                      {users.filter(u => u._count.referrals > 0).length} con referidos
-                    </Badge>
-                  </div>
-                }
               >
                 {/* Search + Filters */}
                 <div className="px-5 py-3 border-b border-white/[0.04] space-y-3">
@@ -1244,7 +1223,7 @@ export default function AdminPage() {
                     <input
                       value={userSearch}
                       onChange={(e) => setUserSearch(e.target.value)}
-                      placeholder="Buscar por usuario o código de referido..."
+                      placeholder="Buscar por usuario..."
                       className="premium-input w-full bg-white/[0.03] border border-white/[0.08] rounded-xl pl-10 pr-4 py-2.5 text-sm text-white outline-none focus:border-red-500/30 transition-all duration-300"
                     />
                   </div>
@@ -1266,7 +1245,7 @@ export default function AdminPage() {
                       ))}
                     </div>
                     <div className="flex items-center gap-1 bg-white/[0.03] rounded-lg border border-white/[0.06] p-0.5">
-                      {([["newest", "Recientes"], ["oldest", "Antiguos"], ["credits", "Créditos"], ["referrals", "Referidos"]] as const).map(([key, label]) => (
+                      {([["newest", "Recientes"], ["oldest", "Antiguos"], ["credits", "Créditos"]] as const).map(([key, label]) => (
                         <button
                           key={key}
                           onClick={() => setUserSort(key)}
@@ -1317,15 +1296,6 @@ export default function AdminPage() {
                                   <Badge className="bg-white/[0.04] text-white/30 border border-white/[0.06] text-[9px] font-bold px-1.5 py-0 h-4">
                                     USER
                                   </Badge>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-white/15 text-[10px] font-mono">{u.referralCode}</span>
-                                {u._count.referrals > 0 && (
-                                  <span className="text-purple-400/50 text-[10px] font-medium">
-                                    <Gift className="h-2.5 w-2.5 inline -mt-px mr-0.5" />
-                                    {u._count.referrals} referidos
-                                  </span>
                                 )}
                               </div>
                             </div>
@@ -1843,8 +1813,6 @@ export default function AdminPage() {
                         { key: "CHECKER_RESET_COST", label: "Costo Reiniciar Checker", icon: RefreshCw, desc: "Créditos para reiniciar" },
                         { key: "REGION_COST", label: "Costo Cambiar Región", icon: Globe, desc: "Créditos por cambiar región" },
                         { key: "REGISTER_BONUS", label: "Créditos por Registro", icon: UserPlus, desc: "Bonus al registrarse" },
-                        { key: "REFERRAL_BONUS", label: "Créditos por Referido", icon: Gift, desc: "Bonus al referir usuario" },
-                        { key: "REDEEM_BONUS", label: "Créditos al Canjear Referido", icon: Ticket, desc: "Bonus al canjear código" },
                       ].map(({ key, label, icon: Ic, desc }) => (
                         <div key={key} className="rounded-xl bg-white/[0.02] border border-white/[0.06] p-3.5 hover:bg-white/[0.04] transition-all duration-200">
                           <div className="flex items-center gap-2 mb-2">
@@ -2144,13 +2112,6 @@ export default function AdminPage() {
                     </div>
                     <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 space-y-1.5">
                       <div className="flex items-center gap-1.5">
-                        <Gift className="h-3 w-3 text-purple-400/60" />
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Referidos</span>
-                      </div>
-                      <p className="text-xl font-bold text-purple-400 tabular-nums">{selectedUser._count.referrals}</p>
-                    </div>
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 space-y-1.5">
-                      <div className="flex items-center gap-1.5">
                         <Calendar className="h-3 w-3 text-emerald-400/60" />
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Registro</span>
                       </div>
@@ -2165,50 +2126,6 @@ export default function AdminPage() {
                       <p className="text-sm font-bold text-sky-400">
                         {selectedUser.region ? `${getCountryName(selectedUser.region) || selectedUser.region} (${selectedUser.region})` : "Todas"}
                       </p>
-                    </div>
-                  </div>
-
-                  {/* Referral Info */}
-                  <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] overflow-hidden">
-                    <div className="px-4 py-3 border-b border-white/[0.04]">
-                      <div className="flex items-center gap-2">
-                        <Link2 className="h-4 w-4 text-purple-400" />
-                        <h3 className="text-white text-sm font-semibold">Sistema de Referidos</h3>
-                      </div>
-                    </div>
-                    <div className="p-4 space-y-3">
-                      {/* Referral Code */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Hash className="h-3.5 w-3.5 text-white/25" />
-                          <span className="text-white/40 text-xs">Código de referido</span>
-                        </div>
-                        <button
-                          onClick={() => copyToClipboard(selectedUser.referralCode, "Código")}
-                          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.06] transition-all group"
-                        >
-                          <span className="text-white/70 text-xs font-mono font-bold">{selectedUser.referralCode}</span>
-                          <Copy className="h-3 w-3 text-white/20 group-hover:text-white/50 transition-colors" />
-                        </button>
-                      </div>
-                      {/* Referrer */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <UserPlusIcon className="h-3.5 w-3.5 text-white/25" />
-                          <span className="text-white/40 text-xs">Referido por</span>
-                        </div>
-                        {selectedUser.referrer ? (
-                          <button
-                            onClick={() => { handleCloseUserDetail(); setTimeout(() => handleOpenUserDetail(selectedUser.referrer!.id), 300); }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.06] transition-all group"
-                          >
-                            <span className="text-white/70 text-xs font-semibold">{selectedUser.referrer.username}</span>
-                            <ChevronRight className="h-3 w-3 text-white/20 group-hover:text-white/50 transition-colors" />
-                          </button>
-                        ) : (
-                          <span className="text-white/15 text-xs italic">Ninguno</span>
-                        )}
-                      </div>
                     </div>
                   </div>
 
@@ -2295,59 +2212,6 @@ export default function AdminPage() {
                           </button>
                         </div>
                       </div>
-                    </div>
-                  </div>
-
-                  {/* Referrals List */}
-                  <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] overflow-hidden">
-                    <div className="px-4 py-3 border-b border-white/[0.04]">
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4 text-blue-400" />
-                        <h3 className="text-white text-sm font-semibold">
-                          Referidos
-                          <span className="text-white/20 ml-1.5 font-normal">({selectedUser.referrals.length})</span>
-                        </h3>
-                      </div>
-                    </div>
-                    <div className="p-2 premium-scroll max-h-[280px] overflow-y-auto">
-                      {selectedUser.referrals.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-10 gap-2">
-                          <Gift className="h-8 w-8 text-white/10" />
-                          <p className="text-white/20 text-xs">Este usuario no tiene referidos aún</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-1">
-                          {selectedUser.referrals.map((ref) => (
-                            <div
-                              key={ref.id}
-                              className="flex items-center justify-between p-3 rounded-xl hover:bg-white/[0.03] transition-colors cursor-pointer group"
-                              onClick={() => { handleCloseUserDetail(); setTimeout(() => handleOpenUserDetail(ref.id), 300); }}
-                            >
-                              <div className="flex items-center gap-3 min-w-0">
-                                <div className="h-8 w-8 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/10 flex items-center justify-center text-xs font-bold shrink-0">
-                                  {ref.username[0].toUpperCase()}
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-white/80 text-sm font-medium truncate">{ref.username}</span>
-                                    <span className="text-white/15 text-[10px]">{ref._count.referrals} referidos</span>
-                                  </div>
-                                  <p className="text-white/15 text-[10px] mt-0.5">
-                                    Registrado: {new Date(ref.createdAt).toLocaleDateString("es")}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/5 border border-amber-500/10">
-                                  <Coins className="h-2.5 w-2.5 text-amber-400/50" />
-                                  <span className="text-amber-400/70 text-[11px] font-semibold tabular-nums">{ref.credits}</span>
-                                </div>
-                                <ChevronRight className="h-3.5 w-3.5 text-white/10 group-hover:text-white/30 transition-colors" />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   </div>
 

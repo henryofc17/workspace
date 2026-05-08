@@ -6,7 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { Loader2, User, Lock, Gift, ArrowRight, Eye, EyeOff, Zap, Users, ChevronRight, ShieldCheck } from "lucide-react";
+import { Loader2, User, Lock, Gift, ArrowRight, Eye, EyeOff, Zap, ChevronRight, ShieldCheck } from "lucide-react";
 
 declare global {
   interface Window {
@@ -131,12 +131,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [siteConfig, setSiteConfig] = useState({ REGISTER_BONUS: 3, REFERRAL_BONUS: 5, WHATSAPP_LINK: "", WHATSAPP_VISIBLE: "false" });
+  const [siteConfig, setSiteConfig] = useState({ REGISTER_BONUS: 3, WHATSAPP_LINK: "", WHATSAPP_VISIBLE: "false" });
   const [configLoaded, setConfigLoaded] = useState(false);
 
   const [regUsername, setRegUsername] = useState("");
   const [regPassword, setRegPassword] = useState("");
-  const [regReferral, setRegReferral] = useState("");
+
   const [regLoading, setRegLoading] = useState(false);
   const [showRegPassword, setShowRegPassword] = useState(false);
 
@@ -150,7 +150,6 @@ export default function LoginPage() {
         if (d.success && d.config) {
           setSiteConfig({
             REGISTER_BONUS: d.config.REGISTER_BONUS ?? 3,
-            REFERRAL_BONUS: d.config.REFERRAL_BONUS ?? 5,
             WHATSAPP_LINK: d.config.WHATSAPP_LINK ?? "",
             WHATSAPP_VISIBLE: d.config.WHATSAPP_VISIBLE === true ? "true" : "false",
           });
@@ -231,16 +230,16 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: regUsername.trim(), password: regPassword, referralCode: regReferral || undefined, fingerprint: generateFingerprint(), turnstileToken: window.cfToken }),
+        body: JSON.stringify({ username: regUsername.trim(), password: regPassword, fingerprint: generateFingerprint(), turnstileToken: window.cfToken }),
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error || "Error al registrarse"); return; }
       toast.success("Cuenta creada, ahora inicia sesion");
-      setTab("login"); setRegUsername(""); setRegPassword(""); setRegReferral("");
+      setTab("login"); setRegUsername(""); setRegPassword("");
       if (regWidgetId && window.turnstile) { window.turnstile.reset(regWidgetId); window.cfToken = ""; }
     } catch { toast.error("Error de conexion"); }
     finally { setRegLoading(false); }
-  }, [regUsername, regPassword, regReferral]);
+  }, [regUsername, regPassword]);
 
   return (
     <>
@@ -315,7 +314,6 @@ export default function LoginPage() {
           >
             <FeaturePill icon={Zap} text="Checker Gratis" />
             <FeaturePill icon={Gift} text={`+${siteConfig.REGISTER_BONUS} Creditos`} />
-            <FeaturePill icon={Users} text="Referidos" />
           </motion.div>
 
           {/* Card */}
@@ -405,8 +403,6 @@ export default function LoginPage() {
                         showPassword={showRegPassword}
                         onTogglePassword={() => setShowRegPassword(!showRegPassword)}
                       />
-                      <PremiumInput icon={Gift} value={regReferral} onChange={(e) => setRegReferral(e.target.value)} placeholder="Codigo referido (opcional)" />
-
                       {/* Turnstile for Register */}
                       <div id="cf-turnstile-register" className="flex justify-center" />
 
@@ -419,7 +415,6 @@ export default function LoginPage() {
                         <Gift className="h-4 w-4 text-yellow-500/70 shrink-0" />
                         <p className="text-[11px] text-yellow-500/60 leading-relaxed">
                           Obten <span className="text-yellow-400 font-semibold">+{siteConfig.REGISTER_BONUS} creditos gratis</span> al registrarte.
-                          Usa un codigo de referido para ganar <span className="text-yellow-400 font-semibold">+{siteConfig.REFERRAL_BONUS} creditos extra</span> a tu amigo.
                         </p>
                       </motion.div>
 

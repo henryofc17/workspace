@@ -24,26 +24,11 @@ export async function GET(
         username: true,
         role: true,
         credits: true,
-        referralCode: true,
-        referredBy: true,
         ipAddress: true,
+        fingerprint: true,
         region: true,
         createdAt: true,
         updatedAt: true,
-        referrer: {
-          select: { id: true, username: true },
-        },
-        referrals: {
-          select: {
-            id: true,
-            username: true,
-            credits: true,
-            role: true,
-            createdAt: true,
-            _count: { select: { referrals: true, transactions: true } },
-          },
-          orderBy: { createdAt: "desc" },
-        },
         transactions: {
           select: {
             id: true,
@@ -58,7 +43,6 @@ export async function GET(
         _count: {
           select: {
             transactions: true,
-            referrals: true,
           },
         },
       },

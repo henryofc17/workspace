@@ -3,15 +3,6 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-function generateReferralCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "NF-";
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}
-
 async function main() {
   // Case-insensitive lookup for existing admin
   const existingAdmin = await prisma.user.findFirst({
@@ -26,7 +17,6 @@ async function main() {
         password: hashedPassword,
         role: "ADMIN",
         credits: 9999,
-        referralCode: generateReferralCode(),
       },
     });
     console.log("Admin HacheJota created");

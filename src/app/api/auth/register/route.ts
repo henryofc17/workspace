@@ -29,15 +29,6 @@ async function verifyTurnstile(token: string): Promise<boolean> {
   }
 }
 
-function generateReferralCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "NF-";
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}
-
 export async function POST(request: Request) {
   try {
     const clientIP = getClientIP(request as any);
@@ -87,10 +78,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const { username, password, referralCode, fingerprint, turnstileToken } = validation.data;
+    const { username, password, fingerprint, turnstileToken } = validation.data;
 
     const REGISTER_BONUS = await getConfig("REGISTER_BONUS", 3);
-    const REFERRAL_BONUS = await getConfig("REFERRAL_BONUS", 5);
 
     // ── Verify Turnstile ──
     const turnstileValid = await verifyTurnstile(turnstileToken);
@@ -139,70 +129,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // ── Validate referral code ──
-    let referrer: { id: string; createdAt: Date; ipAddress: string | null; fingerprint: string | null; username: string } | null = null;
-    let referralCodeUsed: string | null = null;
-
-    if (referralCode) {
-      const foundReferrer = await prisma.user.findUnique({
-        where: { referralCode },
-      });
-
-      if (!foundReferrer) {
-        return NextResponse.json(
-          { success: false, error: "Código de referido inválido" },
-          { status: 400 }
-        );
-      }
-
-      // Referrer must be at least 10 minutes old
-      const referrerAge = Date.now() - foundReferrer.createdAt.getTime();
-      if (referrerAge < 10 * 60 * 1000) {
-        return NextResponse.json(
-          { success: false, error: "El código de referido es muy reciente." },
-          { status: 400 }
-        );
-      }
-
-      // Cannot be referred by same IP
-      if (foundReferrer.ipAddress === clientIP) {
-        return NextResponse.json(
-          { success: false, error: "No puedes usar tu propio código de referido." },
-          { status: 400 }
-        );
-      }
-
-      // Same fingerprint check
-      if (fingerprint && foundReferrer.fingerprint === fingerprint) {
-        return NextResponse.json(
-          { success: false, error: "No puedes usar tu propio código de referido." },
-          { status: 400 }
-        );
-      }
-
-      // One referral per referrer per IP
-      const sameRefSameIP = await prisma.user.count({
-        where: { referredBy: referralCode, ipAddress: clientIP },
-      });
-      if (sameRefSameIP > 0) {
-        return NextResponse.json(
-          { success: false, error: "Ya existe una cuenta referida por este código en tu red." },
-          { status: 400 }
-        );
-      }
-
-      referrer = foundReferrer;
-      referralCodeUsed = referralCode;
-    }
-
     // ── Create user ──
     const hashedPassword = await bcrypt.hash(password, 10);
-    let finalCode = generateReferralCode();
-    let codeExists = await prisma.user.findUnique({ where: { referralCode: finalCode } });
-    while (codeExists) {
-      finalCode = generateReferralCode();
-      codeExists = await prisma.user.findUnique({ where: { referralCode: finalCode } });
-    }
 
     const user = await prisma.user.create({
       data: {
@@ -210,8 +138,6 @@ export async function POST(request: Request) {
         password: hashedPassword,
         role: "USER",
         credits: REGISTER_BONUS,
-        referralCode: finalCode,
-        referredBy: referralCodeUsed,
         ipAddress: clientIP,
         fingerprint: fingerprint || null,
       },
@@ -225,23 +151,6 @@ export async function POST(request: Request) {
         description: "Créditos de bienvenida",
       },
     });
-
-    if (referrer) {
-      await prisma.$transaction([
-        prisma.user.update({
-          where: { id: referrer.id },
-          data: { credits: { increment: REFERRAL_BONUS } },
-        }),
-        prisma.transaction.create({
-          data: {
-            userId: referrer.id,
-            type: "REFERRAL_BONUS",
-            credits: REFERRAL_BONUS,
-            description: `Bonus por referido: ${user.username}`,
-          },
-        }),
-      ]);
-    }
 
     // ── Generate tokens & respond ──
     const tokens = await createTokenPair({
@@ -257,11 +166,8 @@ export async function POST(request: Request) {
         username: user.username,
         role: user.role,
         credits: user.credits,
-        referralCode: user.referralCode,
       },
-      message: referrer
-        ? `¡Cuenta creada! +${REGISTER_BONUS} créditos de bienvenida. Tu referido ganó +${REFERRAL_BONUS} créditos.`
-        : `¡Cuenta creada! Tienes ${REGISTER_BONUS} créditos de bienvenida.`,
+      message: `¡Cuenta creada! Tienes ${REGISTER_BONUS} créditos de bienvenida.`,
     });
 
     setAuthCookies(response, tokens);
@@ -272,7 +178,6 @@ export async function POST(request: Request) {
       ip: clientIP,
       userId: user.id,
       username: user.username,
-      details: { referredBy: referralCodeUsed || null },
     });
 
     return response;

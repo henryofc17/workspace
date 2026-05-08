@@ -13,8 +13,6 @@ model User {
   password     String
   role         String   @default("USER") // ADMIN or USER
   credits      Int      @default(0)
-  referralCode String   @unique // e.g. NF-XXXXXX
-  referredBy   String?  // referral code of who invited them
   checkerUsesToday Int      @default(0)
   checkerResetDate DateTime @default(now())
   ipAddress    String?  // IP at registration
@@ -24,8 +22,6 @@ model User {
   updatedAt    DateTime @updatedAt
 
   transactions  Transaction[]
-  referrals     User[]      @relation("Referrals")
-  referrer      User?       @relation("Referrals", fields: [referredBy], references: [referralCode])
   createdKeys   GiftKey[]   @relation("CreatedKeys")
   redeemedKeys  GiftKey[]   @relation("RedeemedKeys")
 }
@@ -46,7 +42,7 @@ model Cookie {
 model Transaction {
   id          String   @id @default(cuid())
   userId      String
-  type        String   // GENERATE_TOKEN, COPY_COOKIE, ADMIN_GRANT, ADMIN_DEDUCT, REFERRAL_BONUS, REGISTER_BONUS
+  type        String // GENERATE_TOKEN, COPY_COOKIE, ADMIN_GRANT, ADMIN_DEDUCT, REGISTER_BONUS
   credits     Int      // positive for grants, negative for usage
   description String?
   createdAt   DateTime @default(now())

@@ -22,11 +22,6 @@ export const registerSchema = z.object({
     .string()
     .min(4, "Contraseña debe tener al menos 4 caracteres")
     .max(64, "Contraseña muy larga"),
-  referralCode: z
-    .string()
-    .max(20, "Código muy largo")
-    .optional()
-    .transform((v) => (v ? v.trim().toUpperCase() : undefined)),
   fingerprint: z.string().min(1, "Fingerprint requerido").max(200),
   turnstileToken: z.string().min(1, "Verificación requerida").max(5000),
 });

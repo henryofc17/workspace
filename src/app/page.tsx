@@ -27,7 +27,6 @@ import {
   X,
   Calendar,
   Gift,
-  Share2,
   RefreshCw,
   RotateCcw,
   Trash2,
@@ -164,14 +163,6 @@ export default function Home() {
   const [savingRegion, setSavingRegion] = useState(false);
   const [regionDropdownOpen, setRegionDropdownOpen] = useState(false);
 
-  // Referral state
-  const [referralCode, setReferralCode] = useState("");
-  const [totalReferrals, setTotalReferrals] = useState(0);
-  const [canShareCode, setCanShareCode] = useState(false);
-  const [redeemCode, setRedeemCode] = useState("");
-  const [redeeming, setRedeeming] = useState(false);
-  const [codeCopied, setCodeCopied] = useState(false);
-
   // Site config (dynamic pricing)
   const [siteConfig, setSiteConfig] = useState({
     GENERATE_COST: 1,
@@ -180,7 +171,6 @@ export default function Home() {
     REGION_COST: 3,
     CHECKER_DAILY_LIMIT: 10,
     CHECKER_RESET_COST: 2,
-    REFERRAL_BONUS: 5,
   });
 
   // Gift key state
@@ -292,20 +282,6 @@ export default function Home() {
     }
   }, [refreshCredits, loadBalance]);
 
-  const loadReferral = useCallback(async () => {
-    try {
-      const res = await fetch("/api/user/referral");
-      const data = await res.json();
-      if (data.success) {
-        setReferralCode(data.referralCode || "");
-        setTotalReferrals(data.totalReferrals || 0);
-        setCanShareCode(!!data.canShare);
-      }
-    } catch {
-      // silent fail — referral already initialized to defaults
-    }
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
     fetch("/api/auth/me")
@@ -320,7 +296,6 @@ export default function Home() {
           setUsername(data.user.username || "");
           setCredits(data.user.credits ?? 0);
           loadBalance();
-          loadReferral();
           loadCheckerUsage();
           loadSiteConfig();
           loadRegion();
@@ -331,7 +306,7 @@ export default function Home() {
         if (!cancelled) router.push("/login");
       });
     return () => { cancelled = true; };
-  }, [router, loadBalance, loadReferral, loadCheckerUsage, loadSiteConfig, loadRegion]);
+  }, [router, loadBalance, loadCheckerUsage, loadSiteConfig, loadRegion]);
 
 
   // ── TV Activate (5 credits) ──
@@ -530,35 +505,6 @@ export default function Home() {
       toast.error("No se pudo copiar");
     }
   }, []);
-
-  // ── Referral ──
-  const handleRedeem = useCallback(async () => {
-    if (!redeemCode.trim()) {
-      toast.error("Ingresa un código de referido");
-      return;
-    }
-    setRedeeming(true);
-    try {
-      const res = await fetch("/api/user/redeem", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: redeemCode.trim() }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(data.message);
-        setRedeemCode("");
-        refreshCredits();
-        loadBalance();
-      } else {
-        toast.error(data.error);
-      }
-    } catch {
-      toast.error("Error de conexión");
-    } finally {
-      setRedeeming(false);
-    }
-  }, [redeemCode, refreshCredits, loadBalance]);
 
   // ── Redeem Gift Key ──
   const handleRedeemGiftKey = useCallback(async () => {
@@ -794,7 +740,7 @@ export default function Home() {
       <main className="flex-1 max-w-3xl mx-auto w-full px-4 sm:px-6 py-6 space-y-5">
 
         {/* ═══════════════════════════════════════════════════════════════════
-            DASHBOARD VIEW — Credits + Referral + Buy + Transactions
+            DASHBOARD VIEW — Credits + Buy + Transactions
             ═══════════════════════════════════════════════════════════════════ */}
         {activeView === "dashboard" && (
           <>
@@ -864,88 +810,6 @@ export default function Home() {
             {/* ═══ Gradient Section Divider ═══ */}
             <div className="relative h-px w-full">
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#E50914]/30 to-transparent" />
-            </div>
-
-            {/* ═══ Referral Section — Premium Card ═══ */}
-            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
-              <div className="absolute inset-0 bg-gradient-to-br from-orange-950/10 via-transparent to-amber-950/5" />
-              <div className="absolute -top-20 -right-20 w-40 h-40 bg-orange-500/5 rounded-full blur-3xl" />
-              <CardHeader className="pb-3 px-5 pt-5 relative">
-                <CardTitle className="text-orange-300 text-sm flex items-center gap-2.5">
-                  <div className="h-7 w-7 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center">
-                    <Gift className="h-3.5 w-3.5 text-orange-400" />
-                  </div>
-                  Sistema de Referidos
-                </CardTitle>
-                <CardDescription className="text-white/25 text-xs ml-[38px]">
-                  Comparte tu código y gana <span className="text-white/60 font-semibold">+{siteConfig.REFERRAL_BONUS} créditos</span> por cada persona que se registre.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 px-5 pb-5 relative">
-                {/* Referral Code Display */}
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 bg-[#050508]/80 border border-white/[0.06] rounded-xl px-4 py-3.5 flex items-center justify-between">
-                    <div>
-                      <p className="text-white/20 text-[10px] uppercase tracking-widest">Tu código</p>
-                      <p className="text-white/90 font-mono font-bold text-lg tracking-wider">{referralCode || "..."}</p>
-                    </div>
-                    <button
-                      onClick={() => copyToClip(referralCode, setCodeCopied)}
-                      disabled={!referralCode}
-                      className="h-9 px-3.5 rounded-xl bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white text-xs font-medium flex items-center gap-1.5 transition-all duration-300 disabled:opacity-30 shadow-[0_0_15px_rgba(234,88,12,0.15)]"
-                    >
-                      {codeCopied ? <><Check className="h-3.5 w-3.5" /> Copiado</> : <><Share2 className="h-3.5 w-3.5" /> Copiar</>}
-                    </button>
-                  </div>
-                </div>
-
-                {canShareCode ? (
-                  <p className="text-emerald-400/50 text-[10px] text-center flex items-center justify-center gap-1.5">
-                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
-                    Tu código está activo y listo para compartir
-                  </p>
-                ) : (
-                  <p className="text-amber-400/50 text-[10px] text-center flex items-center justify-center gap-1.5">
-                    <Clock className="h-3 w-3" />
-                    Tu código se activa en 10 minutos después del registro
-                  </p>
-                )}
-
-                {/* Stats Row */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl bg-[#050508]/60 border border-white/[0.04] p-3 text-center">
-                    <p className="text-orange-300 font-bold text-xl tabular-nums">{totalReferrals}</p>
-                    <p className="text-white/20 text-[10px] uppercase tracking-widest mt-0.5">Referidos</p>
-                  </div>
-                  <div className="rounded-xl bg-[#050508]/60 border border-white/[0.04] p-3 text-center">
-                    <p className="text-amber-300 font-bold text-xl tabular-nums">{totalReferrals * siteConfig.REFERRAL_BONUS}</p>
-                    <p className="text-white/20 text-[10px] uppercase tracking-widest mt-0.5">Créditos ganados</p>
-                  </div>
-                </div>
-
-                {/* Redeem Section */}
-                <div className="relative pt-4">
-                  <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
-                  <p className="text-white/40 text-xs font-medium mb-2.5 flex items-center gap-1.5">
-                    <Gift className="h-3 w-3 text-orange-400/60" /> ¿Tienes un código de referido?
-                  </p>
-                  <div className="flex gap-2">
-                    <Input
-                      value={redeemCode}
-                      onChange={(e) => setRedeemCode(e.target.value.toUpperCase())}
-                      placeholder="NF-XXXXXX"
-                      className="flex-1 bg-[#050508]/80 border-white/[0.06] text-white/80 placeholder:text-white/15 uppercase font-mono rounded-xl focus:border-orange-500/30 focus:ring-1 focus:ring-orange-500/10 transition-all duration-300 text-sm"
-                    />
-                    <Button
-                      onClick={handleRedeem}
-                      disabled={redeeming || !redeemCode.trim()}
-                      className="bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white font-medium h-10 px-5 disabled:opacity-40 shrink-0 rounded-xl shadow-[0_0_15px_rgba(234,88,12,0.15)] transition-all duration-300"
-                    >
-                      {redeeming ? <Loader2 className="h-4 w-4 animate-spin" /> : "Canjear"}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
             </div>
 
             {/* ═══ Gradient Section Divider ═══ */}
