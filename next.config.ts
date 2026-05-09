@@ -64,7 +64,7 @@ const nextConfig: NextConfig = {
         source: "/(.*)",
         headers: securityHeaders,
       },
-      // API routes: stricter CORS
+      // API routes: stricter CORS + rate limit headers
       {
         source: "/api/:path*",
         headers: [
@@ -88,6 +88,30 @@ const nextConfig: NextConfig = {
           {
             key: "Access-Control-Max-Age",
             value: "86400",
+          },
+          // Cache control for API responses
+          {
+            key: "Cache-Control",
+            value: "no-store, no-cache, must-revalidate, proxy-revalidate",
+          },
+        ],
+      },
+      // Auth routes: extra strict
+      {
+        source: "/api/auth/:path*",
+        headers: [
+          ...securityHeaders,
+          {
+            key: "Cache-Control",
+            value: "no-store, no-cache, must-revalidate",
+          },
+          {
+            key: "Pragma",
+            value: "no-cache",
+          },
+          {
+            key: "X-RateLimit-Policy",
+            value: "5;w=600", // 5 requests per 600 seconds
           },
         ],
       },

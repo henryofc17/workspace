@@ -12,16 +12,23 @@ import {
 import { validateBody, registerSchema } from "@/lib/validators";
 import { getConfig } from "@/lib/config";
 import { checkIPRisk } from "@/lib/ip-guard";
+import { isIPBlockedServer, registerRatelimit, checkRateLimitRedis } from "@/lib/ratelimit";
 
-async function verifyTurnstile(token: string): Promise<boolean> {
+async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
   const secret = process.env.TURNSTILE_SECRET_KEY;
   if (!secret) return true;
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
     const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ secret, response: token }),
+      body: JSON.stringify({ secret, response: token, remoteip: ip }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
     const data = await res.json();
     return data.success === true;
   } catch {
@@ -33,6 +40,15 @@ export async function POST(request: Request) {
   try {
     const clientIP = getClientIP(request as any);
 
+    // ── Redis IP Blocklist check (defense-in-depth) ──
+    const blockCheck = await isIPBlockedServer(clientIP);
+    if (blockCheck.blocked) {
+      return NextResponse.json(
+        { success: false, error: "Acceso bloqueado temporalmente." },
+        { status: 429 }
+      );
+    }
+
     // ── IP Fraud Check (fail-open — never blocks on API error) ──
     const ipRisk = await checkIPRisk(clientIP);
     if (ipRisk.blocked) {
@@ -42,22 +58,37 @@ export async function POST(request: Request) {
       );
     }
 
-    // ── Rate limit: max 3 registrations per IP per 15 min ──
-    const rateCheck = checkRateLimit(`register:${clientIP}`, {
-      maxRequests: 3,
-      windowMs: 15 * 60 * 1000,
-      blockDurationMs: 30 * 60 * 1000, // 30 min block
-    });
-
-    if (!rateCheck.allowed) {
+    // ── Redis-based rate limit: max 3 registrations per IP per 15 min ──
+    const redisRateCheck = await checkRateLimitRedis(registerRatelimit, clientIP);
+    if (!redisRateCheck.allowed) {
       logSecurityEvent({
         level: "error",
         event: SecurityEvents.REGISTER_BLOCKED,
         ip: clientIP,
-        details: { retryAfter: rateCheck.retryAfter },
+        details: { reason: "redis_rate_limit", retryAfter: redisRateCheck.retryAfter },
       });
       return NextResponse.json(
-        { success: false, error: `Demasiados registros. Espera ${rateCheck.retryAfter || 60} segundos.` },
+        { success: false, error: `Demasiados registros. Espera ${redisRateCheck.retryAfter || 60} segundos.` },
+        { status: 429, headers: { "Retry-After": String(redisRateCheck.retryAfter || 900) } }
+      );
+    }
+
+    // ── In-memory rate limit as additional defense ──
+    const memRateCheck = checkRateLimit(`register:${clientIP}`, {
+      maxRequests: 3,
+      windowMs: 15 * 60 * 1000,
+      blockDurationMs: 30 * 60 * 1000,
+    });
+
+    if (!memRateCheck.allowed) {
+      logSecurityEvent({
+        level: "error",
+        event: SecurityEvents.REGISTER_BLOCKED,
+        ip: clientIP,
+        details: { reason: "memory_rate_limit", retryAfter: memRateCheck.retryAfter },
+      });
+      return NextResponse.json(
+        { success: false, error: `Demasiados registros. Espera ${memRateCheck.retryAfter || 60} segundos.` },
         { status: 429 }
       );
     }
@@ -83,7 +114,7 @@ export async function POST(request: Request) {
     const REGISTER_BONUS = await getConfig("REGISTER_BONUS", 3);
 
     // ── Verify Turnstile ──
-    const turnstileValid = await verifyTurnstile(turnstileToken);
+    const turnstileValid = await verifyTurnstile(turnstileToken, clientIP);
     if (!turnstileValid) {
       return NextResponse.json(
         { success: false, error: "Verificación fallida. Intenta de nuevo." },
@@ -109,7 +140,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // ── ANTI-ABUSE: Fingerprint check (now required) ──
+    // ── ANTI-ABUSE: Fingerprint check ──
     const fpCount = await prisma.user.count({ where: { fingerprint } });
     if (fpCount >= 1) {
       return NextResponse.json(
@@ -182,7 +213,7 @@ export async function POST(request: Request) {
 
     return response;
   } catch (err: any) {
-    console.error("Register error:", err);
+    console.error("[REGISTER_ERROR]", err instanceof Error ? err.message : "Unknown error");
     return NextResponse.json(
       { success: false, error: "Error del servidor. Intenta de nuevo." },
       { status: 500 }

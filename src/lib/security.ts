@@ -8,10 +8,10 @@ import { NextRequest, NextResponse } from "next/server";
 export function sanitizeString(input: unknown): string {
   if (typeof input !== "string") return "";
   return input
-    .replace(/[<>]/g, "")            // Remove angle brackets
-    .replace(/&/g, "&amp;")         // Escape ampersands
-    .replace(/"/g, "&quot;")        // Escape quotes
-    .replace(/'/g, "&#x27;")        // Escape single quotes
+    .replace(/[<>]/g, "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;")
     .trim();
 }
 
@@ -60,13 +60,13 @@ setInterval(() => {
 export interface RateLimitConfig {
   maxRequests: number;
   windowMs: number;
-  blockDurationMs?: number;  // If exceeded, block for this long
+  blockDurationMs?: number;
 }
 
 const DEFAULT_CONFIG: RateLimitConfig = {
   maxRequests: 10,
-  windowMs: 60 * 1000, // 1 minute
-  blockDurationMs: 5 * 60 * 1000, // 5 min block
+  windowMs: 60 * 1000,
+  blockDurationMs: 5 * 60 * 1000,
 };
 
 /**
@@ -81,7 +81,6 @@ export function checkRateLimit(
   const now = Date.now();
   const entry = rateLimitStore.get(identifier);
 
-  // No entry = fresh start
   if (!entry) {
     rateLimitStore.set(identifier, {
       count: 1,
@@ -92,7 +91,6 @@ export function checkRateLimit(
     return { allowed: true };
   }
 
-  // Currently blocked
   if (entry.blocked && now < entry.blockedUntil) {
     return {
       allowed: false,
@@ -100,7 +98,6 @@ export function checkRateLimit(
     };
   }
 
-  // Window expired, reset
   if (now > entry.resetAt) {
     entry.count = 1;
     entry.resetAt = now + cfg.windowMs;
@@ -109,7 +106,6 @@ export function checkRateLimit(
     return { allowed: true };
   }
 
-  // Within window, increment
   entry.count++;
 
   if (entry.count > cfg.maxRequests) {
@@ -131,15 +127,16 @@ export function getClientIP(request: NextRequest): string {
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) {
     const ips = forwarded.split(",").map((ip) => ip.trim());
-    // Trust the first IP from the proxy (Vercel/CF)
     return ips[0] || "unknown";
   }
   const realIP = request.headers.get("x-real-ip");
   if (realIP) return realIP;
+  const cfIP = request.headers.get("cf-connecting-ip");
+  if (cfIP) return cfIP;
   return "unknown";
 }
 
-// ─── Security Logging ────────────────────────────────────────────────────────
+// ─── Optimized Security Logging ──────────────────────────────────────────────
 
 type LogLevel = "info" | "warn" | "error" | "security";
 
@@ -153,14 +150,57 @@ interface SecurityLogEntry {
   details?: Record<string, unknown>;
 }
 
+/**
+ * Log level priority for filtering
+ */
+const LOG_LEVELS: Record<LogLevel, number> = {
+  info: 0,
+  warn: 1,
+  error: 2,
+  security: 3,
+};
+
+/**
+ * Minimum log level to output.
+ * In production: only warn and above to reduce Vercel function log noise.
+ * In development: all levels.
+ */
+const MIN_LOG_LEVEL = process.env.NODE_ENV === "production" ? 1 : 0;
+
+/**
+ * Sensitive fields to redact from logs
+ */
+const SENSITIVE_FIELDS = new Set(["password", "token", "secret", "cookie", "authorization"]);
+
+function redactDetails(details: Record<string, unknown>): Record<string, unknown> {
+  const redacted: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(details)) {
+    if (SENSITIVE_FIELDS.has(key.toLowerCase())) {
+      redacted[key] = "[REDACTED]";
+    } else {
+      redacted[key] = value;
+    }
+  }
+  return redacted;
+}
+
 export function logSecurityEvent(entry: Omit<SecurityLogEntry, "timestamp">): void {
+  // Filter by minimum level
+  if (LOG_LEVELS[entry.level] < MIN_LOG_LEVEL) return;
+
   const log: SecurityLogEntry = {
     ...entry,
     timestamp: new Date().toISOString(),
+    details: entry.details ? redactDetails(entry.details) : undefined,
   };
 
-  // In production, this would go to a logging service
-  // For now, structured console output
+  // Structured JSON output for production (parseable by log aggregators)
+  if (process.env.NODE_ENV === "production") {
+    console.log(JSON.stringify(log));
+    return;
+  }
+
+  // Colored output for development
   const prefix = {
     info: "\x1b[36m[SECURITY-INFO]\x1b[0m",
     warn: "\x1b[33m[SECURITY-WARN]\x1b[0m",
@@ -209,7 +249,6 @@ export async function guardBodySize(request: NextRequest): Promise<{ ok: boolean
   }
 
   try {
-    // Clone and attempt to read to verify
     const cloned = request.clone();
     const body = await cloned.json();
     const bodyStr = JSON.stringify(body);

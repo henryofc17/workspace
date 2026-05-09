@@ -9,6 +9,7 @@ export const loginSchema = z.object({
     .max(50, "Usuario muy largo")
     .transform((v) => v.trim()),
   password: z.string().min(1, "Contraseña requerida").max(100, "Contraseña muy larga"),
+  turnstileToken: z.string().min(1, "Verificación requerida").max(5000).optional(),
 });
 
 export const registerSchema = z.object({
