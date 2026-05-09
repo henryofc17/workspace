@@ -109,10 +109,6 @@ const nextConfig: NextConfig = {
             key: "Pragma",
             value: "no-cache",
           },
-          {
-            key: "X-RateLimit-Policy",
-            value: "5;w=600", // 5 requests per 600 seconds
-          },
         ],
       },
     ];

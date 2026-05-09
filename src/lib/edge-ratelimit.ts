@@ -3,6 +3,16 @@
  *
  * Uses Upstash Redis for distributed state across serverless functions.
  * This module is fully Edge-compatible (no Node.js APIs).
+ *
+ * Rate Limit Tiers (adjusted for production — avoids false positives):
+ *   - Login:    5 attempts / 5 minutes per IP
+ *   - Register: 3 registrations / 15 minutes per IP
+ *   - Light (logout/me): 60 requests / 1 minute per IP
+ *
+ * IP Blocking:
+ *   - Progressive escalation: 5min → 15min → 30min → 60min
+ *   - Only triggered after 5+ violations (not 3)
+ *   - Violations reset after 1 hour of good behavior
  */
 
 import { Redis } from "@upstash/redis";
@@ -17,18 +27,10 @@ const redis = new Redis({
 
 // ─── Rate Limiters ────────────────────────────────────────────────────────────
 
-/** Global rate limit for ALL /api/auth/* endpoints: 20 req/min per IP */
-export const authGlobalLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(20, "1 m"),
-  prefix: "ratelimit:auth:global",
-  analytics: true,
-});
-
-/** Login-specific: 5 attempts per 10 minutes, then block 15 min */
+/** Login-specific: 5 attempts per 5 minutes */
 export const loginLimiter = new Ratelimit({
   redis,
-  limiter: Ratelimit.slidingWindow(5, "10 m"),
+  limiter: Ratelimit.slidingWindow(5, "5 m"),
   prefix: "ratelimit:auth:login",
   analytics: true,
 });
@@ -41,10 +43,10 @@ export const registerLimiter = new Ratelimit({
   analytics: true,
 });
 
-/** Logout/me: 30 req/min per IP (lighter endpoints) */
+/** Logout/me: 60 req/min per IP (lightweight endpoints — generous limit) */
 export const authLightLimiter = new Ratelimit({
   redis,
-  limiter: Ratelimit.slidingWindow(30, "1 m"),
+  limiter: Ratelimit.slidingWindow(60, "1 m"),
   prefix: "ratelimit:auth:light",
   analytics: true,
 });
@@ -52,7 +54,7 @@ export const authLightLimiter = new Ratelimit({
 // ─── IP Blocklist ─────────────────────────────────────────────────────────────
 
 const BLOCKLIST_PREFIX = "blocklist:ip:";
-const DEFAULT_BLOCK_DURATION = 30 * 60; // 30 minutes in seconds
+const DEFAULT_BLOCK_DURATION = 5 * 60; // 5 minutes (first offense)
 
 /**
  * Check if an IP is currently blocked.
@@ -81,7 +83,7 @@ export async function isIPBlocked(ip: string): Promise<{
       expiresAt: data.expiresAt,
     };
   } catch {
-    // Fail-open: if Redis is down, don't block
+    // Fail-open: if Redis is down, don't block legitimate users
     return { blocked: false };
   }
 }
@@ -107,11 +109,13 @@ export async function blockIP(
 }
 
 /**
- * Unblock an IP manually.
+ * Unblock an IP manually (for admin use).
  */
 export async function unblockIP(ip: string): Promise<void> {
   try {
     await redis.del(`${BLOCKLIST_PREFIX}${ip}`);
+    // Also clear violations
+    await redis.del(`violations:${ip}`);
   } catch {
     // Silently fail
   }
@@ -122,6 +126,10 @@ export async function unblockIP(ip: string): Promise<void> {
 /**
  * Verify Cloudflare Turnstile token server-side.
  * Edge-compatible: uses standard fetch API only.
+ *
+ * IMPORTANT: This should ONLY be called from route handlers, NOT from middleware.
+ * Turnstile tokens are single-use — verifying in both middleware and route handler
+ * causes the second verification to always fail with "timeout-or-duplicate".
  */
 export async function verifyTurnstileEdge(
   token: string,
@@ -167,17 +175,17 @@ export async function verifyTurnstileEdge(
       return { success: true };
     }
 
-    // Map error codes
+    // Map error codes to user-friendly messages
     const errorCodes: string[] = data["error-codes"] || [];
-    const reason =
-      errorCodes.includes("timeout-or-duplicate")
-        ? "Verificación expirada, intenta de nuevo"
-        : errorCodes.includes("invalid-input-response")
-          ? "Token de verificación inválido"
-          : "Verificación fallida";
+    const reason = errorCodes.includes("timeout-or-duplicate")
+      ? "Verificación expirada, intenta de nuevo"
+      : errorCodes.includes("invalid-input-response")
+        ? "Token de verificación inválido"
+        : "Verificación fallida";
 
     return { success: false, error: reason };
   } catch {
+    // Network error — don't block the user, let them retry
     return { success: false, error: "Error de conexión con verificación" };
   }
 }
@@ -192,7 +200,6 @@ export function getClientIPEdge(request: Request): string {
   }
   const realIP = request.headers.get("x-real-ip");
   if (realIP) return realIP;
-  // Vercel-specific: cf-connecting-ip from Cloudflare
   const cfIP = request.headers.get("cf-connecting-ip");
   if (cfIP) return cfIP;
   return "unknown";
@@ -212,7 +219,7 @@ export function getAuthRouteLimiter(routeType: AuthRouteType) {
     case "me":
       return authLightLimiter;
     default:
-      return authGlobalLimiter;
+      return authLightLimiter;
   }
 }
 

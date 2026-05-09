@@ -20,10 +20,10 @@ const redis = new Redis({
 
 // ─── Pre-configured Rate Limiters ─────────────────────────────────────────────
 
-/** Login rate limit: 5 attempts per 10 minutes */
+/** Login rate limit: 5 attempts per 5 minutes (matches edge-ratelimit.ts) */
 export const loginRatelimit = new Ratelimit({
   redis,
-  limiter: Ratelimit.slidingWindow(5, "10 m"),
+  limiter: Ratelimit.slidingWindow(5, "5 m"),
   prefix: "ratelimit:auth:login",
   analytics: true,
 });

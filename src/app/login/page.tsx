@@ -10,8 +10,14 @@ import { Loader2, User, Lock, Gift, ArrowRight, Eye, EyeOff, Zap, ChevronRight, 
 
 declare global {
   interface Window {
-    turnstile: any;
+    turnstile: {
+      render: (container: string | HTMLElement, options: any) => string;
+      reset: (widgetId: string) => void;
+      remove: (widgetId: string) => void;
+      getResponse: (widgetId: string) => string | undefined;
+    };
     cfToken: string;
+    onTurnstileLoad?: () => void;
   }
 }
 
@@ -141,7 +147,81 @@ export default function LoginPage() {
   const [showRegPassword, setShowRegPassword] = useState(false);
 
   const [widgetReady, setWidgetReady] = useState(false);
-  const [regWidgetId, setRegWidgetId] = useState<any>(null);
+  const [regWidgetId, setRegWidgetId] = useState<string | null>(null);
+
+  // ── Turnstile render options (shared between login & register) ──
+  const turnstileOptions = {
+    sitekey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+    theme: "dark" as const,
+    size: "normal" as const,
+    // Auto-refresh expired tokens (tokens expire after ~5 min)
+    "refresh-expired": "auto" as const,
+    // Callback when token is successfully generated
+    callback: (token: string) => {
+      window.cfToken = token;
+    },
+    // Callback when token expires — auto-refresh handles this,
+    // but we also clear the stored token as a safety net
+    "expired-callback": () => {
+      window.cfToken = "";
+    },
+    // Callback on error — show user-friendly message
+    "error-callback": () => {
+      window.cfToken = "";
+      // Don't show toast here — the user will see it when they try to submit
+    },
+  };
+
+  // ── Render login Turnstile widget ──
+  const renderLoginWidget = useCallback(() => {
+    if (!window.turnstile) return;
+    const container = document.getElementById("cf-turnstile");
+    if (!container) return;
+    // Remove existing widget if any
+    if (widgetId.current) {
+      try { window.turnstile.remove(widgetId.current); } catch {}
+    }
+    // Clear container children
+    container.innerHTML = "";
+    window.cfToken = "";
+    const id = window.turnstile.render("#cf-turnstile", turnstileOptions);
+    widgetId.current = id;
+    setWidgetReady(true);
+  }, [turnstileOptions]);
+
+  // ── Render register Turnstile widget ──
+  const renderRegisterWidget = useCallback(() => {
+    if (!window.turnstile) return;
+    const container = document.getElementById("cf-turnstile-register");
+    if (!container) return;
+    if (container.children.length > 0) return; // Already rendered
+    window.cfToken = "";
+    const id = window.turnstile.render("#cf-turnstile-register", turnstileOptions);
+    setRegWidgetId(id);
+  }, [turnstileOptions]);
+
+  // ── Reset login Turnstile widget (after failed login) ──
+  const resetLoginWidget = useCallback(() => {
+    if (widgetId.current && window.turnstile) {
+      try {
+        window.turnstile.reset(widgetId.current);
+      } catch {
+        // If reset fails, re-render
+        renderLoginWidget();
+      }
+      window.cfToken = "";
+    }
+  }, [renderLoginWidget]);
+
+  // ── Reset register Turnstile widget ──
+  const resetRegisterWidget = useCallback(() => {
+    if (regWidgetId && window.turnstile) {
+      try {
+        window.turnstile.reset(regWidgetId);
+      } catch {}
+      window.cfToken = "";
+    }
+  }, [regWidgetId]);
 
   useEffect(() => {
     fetch("/api/config")
@@ -159,50 +239,43 @@ export default function LoginPage() {
       .catch(() => { setConfigLoaded(true); });
   }, []);
 
+  // ── Initialize login Turnstile when script loads ──
   useEffect(() => {
+    // If Turnstile script already loaded
+    if (window.turnstile) {
+      renderLoginWidget();
+      return;
+    }
+    // Wait for Turnstile script to load via the onTurnstileLoad callback
+    window.onTurnstileLoad = () => {
+      renderLoginWidget();
+    };
+    // Fallback: poll for script load
     let tries = 0;
     const t = setInterval(() => {
       tries++;
-      if (window.turnstile && document.getElementById("cf-turnstile") && !widgetReady) {
+      if (window.turnstile) {
         clearInterval(t);
-        widgetId.current = window.turnstile.render("#cf-turnstile", {
-          sitekey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
-          theme: "dark",
-          callback: (token: string) => { window.cfToken = token; },
-        });
-        setWidgetReady(true);
+        renderLoginWidget();
       }
       if (tries >= 30) clearInterval(t);
     }, 500);
     return () => clearInterval(t);
-  }, [widgetReady]);
+  }, [renderLoginWidget]);
 
-  // Render register turnstile when switching to register tab
+  // ── Render register Turnstile when switching to register tab ──
   useEffect(() => {
     if (tab !== "register") return;
-    let tries = 0;
-    const t = setInterval(() => {
-      tries++;
-      if (window.turnstile && document.getElementById("cf-turnstile-register")) {
-        clearInterval(t);
-        const el = document.getElementById("cf-turnstile-register");
-        if (el && el.children.length === 0) {
-          const id = window.turnstile.render("#cf-turnstile-register", {
-            sitekey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
-            theme: "dark",
-            callback: (token: string) => { window.cfToken = token; },
-          });
-          setRegWidgetId(id);
-        }
-      }
-      if (tries >= 30) clearInterval(t);
+    // Small delay to ensure DOM is ready after animation
+    const timer = setTimeout(() => {
+      renderRegisterWidget();
     }, 300);
-    return () => clearInterval(t);
-  }, [tab]);
+    return () => clearTimeout(timer);
+  }, [tab, renderRegisterWidget]);
 
   const handleLogin = useCallback(async () => {
     if (!username.trim() || !password.trim()) { toast.error("Completa todos los campos"); return; }
-    if (!window.cfToken) { toast.error("Completa el captcha"); return; }
+    if (!window.cfToken) { toast.error("Espera a que cargue la verificación de seguridad"); return; }
     setLoginLoading(true);
     try {
       const res = await fetch("/api/auth/login", {
@@ -213,18 +286,19 @@ export default function LoginPage() {
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error || "Credenciales incorrectas");
-        if (widgetId.current && window.turnstile) { window.turnstile.reset(widgetId.current); window.cfToken = ""; }
+        // Reset Turnstile widget after failure so a fresh token is generated
+        resetLoginWidget();
         return;
       }
       toast.success(`Bienvenido, ${data.user.username}`);
       router.replace(data.user.role === "ADMIN" ? "/admin" : "/");
     } catch { toast.error("Error de conexion"); }
     finally { setLoginLoading(false); }
-  }, [username, password, router]);
+  }, [username, password, router, resetLoginWidget]);
 
   const handleRegister = useCallback(async () => {
     if (!regUsername.trim() || !regPassword.trim()) { toast.error("Completa usuario y contrasena"); return; }
-    if (!window.cfToken) { toast.error("Completa la verificacion"); return; }
+    if (!window.cfToken) { toast.error("Espera a que cargue la verificación de seguridad"); return; }
     setRegLoading(true);
     try {
       const res = await fetch("/api/auth/register", {
@@ -233,17 +307,32 @@ export default function LoginPage() {
         body: JSON.stringify({ username: regUsername.trim(), password: regPassword, fingerprint: generateFingerprint(), turnstileToken: window.cfToken }),
       });
       const data = await res.json();
-      if (!res.ok) { toast.error(data.error || "Error al registrarse"); return; }
+      if (!res.ok) {
+        toast.error(data.error || "Error al registrarse");
+        // Reset Turnstile widget after failure
+        resetRegisterWidget();
+        return;
+      }
       toast.success("Cuenta creada, ahora inicia sesion");
       setTab("login"); setRegUsername(""); setRegPassword("");
-      if (regWidgetId && window.turnstile) { window.turnstile.reset(regWidgetId); window.cfToken = ""; }
+      // Reset register widget for next use
+      resetRegisterWidget();
     } catch { toast.error("Error de conexion"); }
     finally { setRegLoading(false); }
-  }, [regUsername, regPassword]);
+  }, [regUsername, regPassword, resetRegisterWidget]);
 
   return (
     <>
-      <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" strategy="afterInteractive" />
+      <Script
+        src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+        strategy="afterInteractive"
+        onLoad={() => {
+          // Trigger initial widget render when script loads
+          if (window.onTurnstileLoad) {
+            window.onTurnstileLoad();
+          }
+        }}
+      />
 
       <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-[#050505]">
         {/* Animated Background */}

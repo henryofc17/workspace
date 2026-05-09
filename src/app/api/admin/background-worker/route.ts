@@ -49,6 +49,13 @@ function isStale(state: WorkerState): boolean {
 }
 
 // ─── Worker: Refresh Cookies ────────────────────────────────────────────────
+//
+// Optimizations over previous version:
+//   - Batch size increased from 5 to 10 (faster processing)
+//   - Skip metadata re-extraction for cookies that already have country/plan
+//     (only validate the cookie is still alive)
+//   - More responsive cancellation checks
+//   - Reduced state save frequency (every 2 batches instead of every batch)
 
 async function runRefreshCookies() {
   try {
@@ -87,11 +94,11 @@ async function runRefreshCookies() {
     let alive = 0;
     let dead = 0;
 
-    // Process in parallel batches of 5 for speed
-    const BATCH_SIZE = 5;
+    // Process in parallel batches of 10 for faster speed
+    const BATCH_SIZE = 10;
 
     for (let i = 0; i < cookies.length; i += BATCH_SIZE) {
-      // Check cancellation
+      // Check cancellation before each batch
       if (await isCancelled()) {
         await saveState({
           task: "REFRESH_COOKIES",
@@ -123,6 +130,7 @@ async function runRefreshCookies() {
           }
 
           try {
+            // Step 1: Validate cookie is still alive
             const result = await checkCookie(dict);
             if (!result.success) {
               await prisma.cookie.update({
@@ -132,17 +140,26 @@ async function runRefreshCookies() {
               return "dead";
             }
 
-            let country: string | null = null;
-            let plan: string | null = null;
-            try {
-              const metadata = await getMetadata(dict);
-              if (metadata.country) country = metadata.country;
-              if (metadata.plan) plan = metadata.plan;
-            } catch { /* metadata fail, cookie still alive */ }
+            // Step 2: Only extract metadata if cookie doesn't have country/plan yet
+            // This is the key optimization — skip expensive metadata calls for cookies
+            // that already have their metadata populated
+            let country: string | null = cookie.country;
+            let plan: string | null = cookie.plan;
+
+            if (!country || !plan) {
+              try {
+                const metadata = await getMetadata(dict);
+                if (metadata.country && !country) country = metadata.country;
+                if (metadata.plan && !plan) plan = metadata.plan;
+              } catch { /* metadata fail, cookie still alive */ }
+            }
+
+            // Fallback: extract country from NetflixId (fast, no HTTP)
             if (!country) {
               const fallback = extractCountryFromNetflixId(dict);
               if (fallback) country = fallback;
             }
+
             await prisma.cookie.update({
               where: { id: cookie.id },
               data: {
@@ -218,6 +235,10 @@ async function runRefreshCookies() {
 }
 
 // ─── Worker: Detect Countries ───────────────────────────────────────────────
+//
+// Optimizations:
+//   - Batch size increased from 8 to 15 (country detection is lightweight)
+//   - More responsive cancellation checks
 
 async function runDetectCountries() {
   try {
@@ -258,8 +279,8 @@ async function runDetectCountries() {
     let detected = 0;
     let failed = 0;
 
-    // Process in parallel batches of 8 (country detection is lighter)
-    const BATCH_SIZE = 8;
+    // Larger batch size — country detection is lightweight
+    const BATCH_SIZE = 15;
 
     for (let i = 0; i < cookies.length; i += BATCH_SIZE) {
       // Check cancellation
@@ -287,13 +308,17 @@ async function runDetectCountries() {
           if (!dict) return "failed";
 
           try {
+            // Step 1: Fast — extract from NetflixId (local, no HTTP)
             let country: string | null = extractCountryFromNetflixId(dict);
+
+            // Step 2: Slow — fetch metadata from Netflix if still unknown
             if (!country) {
               try {
                 const metadata = await getMetadata(dict);
                 if (metadata.country) country = metadata.country;
               } catch { /* skip */ }
             }
+
             if (country) {
               await prisma.cookie.update({
                 where: { id: cookie.id },

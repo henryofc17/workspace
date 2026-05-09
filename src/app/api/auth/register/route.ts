@@ -6,35 +6,22 @@ import {
   getClientIP,
   logSecurityEvent,
   SecurityEvents,
-  checkRateLimit,
   sanitizeString,
 } from "@/lib/security";
 import { validateBody, registerSchema } from "@/lib/validators";
 import { getConfig } from "@/lib/config";
 import { checkIPRisk } from "@/lib/ip-guard";
-import { isIPBlockedServer, registerRatelimit, checkRateLimitRedis } from "@/lib/ratelimit";
+import {
+  isIPBlockedServer,
+  registerRatelimit,
+  checkRateLimitRedis,
+} from "@/lib/ratelimit";
+import { verifyTurnstileEdge } from "@/lib/edge-ratelimit";
 
-async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
-  const secret = process.env.TURNSTILE_SECRET_KEY;
-  if (!secret) return true;
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-
-    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ secret, response: token, remoteip: ip }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeout);
-    const data = await res.json();
-    return data.success === true;
-  } catch {
-    return false;
-  }
-}
+// ─── Register Handler ─────────────────────────────────────────────────────────
+//
+// Turnstile verification is ONLY done here (not in middleware).
+// Tokens are single-use — verifying in both places causes failures.
 
 export async function POST(request: Request) {
   try {
@@ -59,37 +46,31 @@ export async function POST(request: Request) {
     }
 
     // ── Redis-based rate limit: max 3 registrations per IP per 15 min ──
-    const redisRateCheck = await checkRateLimitRedis(registerRatelimit, clientIP);
+    const redisRateCheck = await checkRateLimitRedis(
+      registerRatelimit,
+      clientIP
+    );
     if (!redisRateCheck.allowed) {
       logSecurityEvent({
-        level: "error",
+        level: "warn",
         event: SecurityEvents.REGISTER_BLOCKED,
         ip: clientIP,
-        details: { reason: "redis_rate_limit", retryAfter: redisRateCheck.retryAfter },
+        details: {
+          reason: "redis_rate_limit",
+          retryAfter: redisRateCheck.retryAfter,
+        },
       });
       return NextResponse.json(
-        { success: false, error: `Demasiados registros. Espera ${redisRateCheck.retryAfter || 60} segundos.` },
-        { status: 429, headers: { "Retry-After": String(redisRateCheck.retryAfter || 900) } }
-      );
-    }
-
-    // ── In-memory rate limit as additional defense ──
-    const memRateCheck = checkRateLimit(`register:${clientIP}`, {
-      maxRequests: 3,
-      windowMs: 15 * 60 * 1000,
-      blockDurationMs: 30 * 60 * 1000,
-    });
-
-    if (!memRateCheck.allowed) {
-      logSecurityEvent({
-        level: "error",
-        event: SecurityEvents.REGISTER_BLOCKED,
-        ip: clientIP,
-        details: { reason: "memory_rate_limit", retryAfter: memRateCheck.retryAfter },
-      });
-      return NextResponse.json(
-        { success: false, error: `Demasiados registros. Espera ${memRateCheck.retryAfter || 60} segundos.` },
-        { status: 429 }
+        {
+          success: false,
+          error: `Demasiados registros. Espera ${redisRateCheck.retryAfter || 60} segundos.`,
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(redisRateCheck.retryAfter || 900),
+          },
+        }
       );
     }
 
@@ -109,21 +90,30 @@ export async function POST(request: Request) {
       );
     }
 
-    const { username, password, fingerprint, turnstileToken } = validation.data;
+    const { username, password, fingerprint, turnstileToken } =
+      validation.data;
 
     const REGISTER_BONUS = await getConfig("REGISTER_BONUS", 3);
 
-    // ── Verify Turnstile ──
-    const turnstileValid = await verifyTurnstile(turnstileToken, clientIP);
-    if (!turnstileValid) {
+    // ── Verify Turnstile (ONLY here, not in middleware) ──
+    const turnstileResult = await verifyTurnstileEdge(
+      turnstileToken,
+      clientIP
+    );
+    if (!turnstileResult.success) {
       return NextResponse.json(
-        { success: false, error: "Verificación fallida. Intenta de nuevo." },
+        {
+          success: false,
+          error: turnstileResult.error || "Verificación fallida. Intenta de nuevo.",
+          turnstileFailed: true,
+        },
         { status: 400 }
       );
     }
 
     // ── Block reserved usernames ──
-    const reserved = /^(admin|moderator|root|support|help|netflix|nfchecker|hachejota|staff|system)/i;
+    const reserved =
+      /^(admin|moderator|root|support|help|netflix|nfchecker|hachejota|staff|system)/i;
     if (reserved.test(username)) {
       return NextResponse.json(
         { success: false, error: "Nombre de usuario no disponible." },
@@ -132,19 +122,30 @@ export async function POST(request: Request) {
     }
 
     // ── ANTI-ABUSE: Max 1 account per IP ──
-    const ipCount = await prisma.user.count({ where: { ipAddress: clientIP } });
+    const ipCount = await prisma.user.count({
+      where: { ipAddress: clientIP },
+    });
     if (ipCount >= 1) {
       return NextResponse.json(
-        { success: false, error: "Solo se permite una cuenta por dispositivo." },
+        {
+          success: false,
+          error: "Solo se permite una cuenta por dispositivo.",
+        },
         { status: 429 }
       );
     }
 
     // ── ANTI-ABUSE: Fingerprint check ──
-    const fpCount = await prisma.user.count({ where: { fingerprint } });
+    const fpCount = await prisma.user.count({
+      where: { fingerprint },
+    });
     if (fpCount >= 1) {
       return NextResponse.json(
-        { success: false, error: "Ya tienes una cuenta registrada en este navegador." },
+        {
+          success: false,
+          error:
+            "Ya tienes una cuenta registrada en este navegador.",
+        },
         { status: 429 }
       );
     }
@@ -213,7 +214,10 @@ export async function POST(request: Request) {
 
     return response;
   } catch (err: any) {
-    console.error("[REGISTER_ERROR]", err instanceof Error ? err.message : "Unknown error");
+    console.error(
+      "[REGISTER_ERROR]",
+      err instanceof Error ? err.message : "Unknown error"
+    );
     return NextResponse.json(
       { success: false, error: "Error del servidor. Intenta de nuevo." },
       { status: 500 }
