@@ -10,7 +10,7 @@ type WorkerTask = "REFRESH_COOKIES" | "DETECT_COUNTRIES";
 
 interface WorkerState {
   task: WorkerTask;
-  status: "RUNNING" | "COMPLETED" | "FAILED";
+  status: "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
   startedAt: number;
   finishedAt: number | null;
   total: number;
@@ -18,6 +18,7 @@ interface WorkerState {
   results: Record<string, number>;
   message: string;
   error: string | null;
+  cancelled: boolean;
 }
 
 const STALE_MS = 30 * 60 * 1000; // 30 min — stale task timeout
@@ -36,6 +37,11 @@ async function saveState(state: WorkerState): Promise<void> {
 
 async function clearState(): Promise<void> {
   await setConfig("BG_WORKER_STATE", "");
+}
+
+async function isCancelled(): Promise<boolean> {
+  const state = await getState();
+  return state?.cancelled === true;
 }
 
 function isStale(state: WorkerState): boolean {
@@ -58,6 +64,7 @@ async function runRefreshCookies() {
       results: { alive: 0, dead: 0 },
       message: `Procesando ${cookies.length} cookies...`,
       error: null,
+      cancelled: false,
     });
 
     if (cookies.length === 0) {
@@ -71,6 +78,7 @@ async function runRefreshCookies() {
         results: { alive: 0, dead: 0 },
         message: "No hay cookies activas para refrescar",
         error: null,
+        cancelled: false,
       });
       return;
     }
@@ -79,26 +87,51 @@ async function runRefreshCookies() {
     let alive = 0;
     let dead = 0;
 
-    for (let i = 0; i < cookies.length; i++) {
-      const cookie = cookies[i];
-      const dict = extractCookiesFromText(cookie.rawCookie);
+    // Process in parallel batches of 5 for speed
+    const BATCH_SIZE = 5;
 
-      if (!dict) {
-        await prisma.cookie.update({
-          where: { id: cookie.id },
-          data: { status: "DEAD", lastError: "No se pudo parsear" },
+    for (let i = 0; i < cookies.length; i += BATCH_SIZE) {
+      // Check cancellation
+      if (await isCancelled()) {
+        await saveState({
+          task: "REFRESH_COOKIES",
+          status: "CANCELLED",
+          startedAt: (await getState())?.startedAt || Date.now(),
+          finishedAt: Date.now(),
+          total: cookies.length,
+          processed: alive + dead,
+          results: { alive, dead },
+          message: `Cancelado: ${alive} vivas, ${dead} muertas (de ${alive + dead} procesadas)`,
+          error: null,
+          cancelled: true,
         });
-        dead++;
-      } else {
-        try {
-          const result = await checkCookie(dict);
-          if (!result.success) {
+        return;
+      }
+
+      const batch = cookies.slice(i, i + BATCH_SIZE);
+
+      const batchResults = await Promise.allSettled(
+        batch.map(async (cookie) => {
+          const dict = extractCookiesFromText(cookie.rawCookie);
+
+          if (!dict) {
             await prisma.cookie.update({
               where: { id: cookie.id },
-              data: { status: "DEAD", lastError: result.error || "Cookie inválida", lastUsed: new Date() },
+              data: { status: "DEAD", lastError: "No se pudo parsear" },
             });
-            dead++;
-          } else {
+            return "dead";
+          }
+
+          try {
+            const result = await checkCookie(dict);
+            if (!result.success) {
+              await prisma.cookie.update({
+                where: { id: cookie.id },
+                data: { status: "DEAD", lastError: result.error || "Cookie inválida", lastUsed: new Date() },
+              });
+              return "dead";
+            }
+
             let country: string | null = null;
             let plan: string | null = null;
             try {
@@ -119,43 +152,53 @@ async function runRefreshCookies() {
                 ...(plan && { plan }),
               },
             });
-            alive++;
+            return "alive";
+          } catch (err: any) {
+            await prisma.cookie.update({
+              where: { id: cookie.id },
+              data: { status: "DEAD", lastError: err.message || "Error de conexión" },
+            });
+            return "dead";
           }
-        } catch (err: any) {
-          await prisma.cookie.update({
-            where: { id: cookie.id },
-            data: { status: "DEAD", lastError: err.message || "Error de conexión" },
-          });
+        })
+      );
+
+      for (const r of batchResults) {
+        if (r.status === "fulfilled") {
+          if (r.value === "alive") alive++;
+          else dead++;
+        } else {
           dead++;
         }
       }
 
-      // Update progress every 5 cookies
-      if ((i + 1) % 5 === 0 || i === cookies.length - 1) {
-        await saveState({
-          task: "REFRESH_COOKIES",
-          status: "RUNNING",
-          startedAt: Date.now(),
-          finishedAt: null,
-          total: cookies.length,
-          processed: i + 1,
-          results: { alive, dead },
-          message: `Procesando ${i + 1}/${cookies.length}...`,
-          error: null,
-        });
-      }
+      // Update progress after every batch
+      const processed = Math.min(i + BATCH_SIZE, cookies.length);
+      await saveState({
+        task: "REFRESH_COOKIES",
+        status: "RUNNING",
+        startedAt: (await getState())?.startedAt || Date.now(),
+        finishedAt: null,
+        total: cookies.length,
+        processed,
+        results: { alive, dead },
+        message: `Procesando ${processed}/${cookies.length}...`,
+        error: null,
+        cancelled: false,
+      });
     }
 
     await saveState({
       task: "REFRESH_COOKIES",
       status: "COMPLETED",
-      startedAt: Date.now(),
+      startedAt: (await getState())?.startedAt || Date.now(),
       finishedAt: Date.now(),
       total: cookies.length,
       processed: cookies.length,
       results: { alive, dead },
       message: `Completado: ${alive} vivas, ${dead} muertas`,
       error: null,
+      cancelled: false,
     });
   } catch (err: any) {
     const prev = await getState();
@@ -169,6 +212,7 @@ async function runRefreshCookies() {
       results: prev?.results || {},
       message: "Error en refresco",
       error: err.message,
+      cancelled: false,
     });
   }
 }
@@ -191,6 +235,7 @@ async function runDetectCountries() {
       results: { detected: 0, failed: 0 },
       message: `Detectando país en ${cookies.length} cookies...`,
       error: null,
+      cancelled: false,
     });
 
     if (cookies.length === 0) {
@@ -204,6 +249,7 @@ async function runDetectCountries() {
         results: { detected: 0, failed: 0 },
         message: "Todas las cookies activas ya tienen país",
         error: null,
+        cancelled: false,
       });
       return;
     }
@@ -212,58 +258,91 @@ async function runDetectCountries() {
     let detected = 0;
     let failed = 0;
 
-    for (let i = 0; i < cookies.length; i++) {
-      const cookie = cookies[i];
-      const dict = extractCookiesFromText(cookie.rawCookie);
+    // Process in parallel batches of 8 (country detection is lighter)
+    const BATCH_SIZE = 8;
 
-      if (!dict) {
-        failed++;
-      } else {
-        try {
-          let country: string | null = extractCountryFromNetflixId(dict);
-          if (!country) {
-            try {
-              const metadata = await getMetadata(dict);
-              if (metadata.country) country = metadata.country;
-            } catch { /* skip */ }
+    for (let i = 0; i < cookies.length; i += BATCH_SIZE) {
+      // Check cancellation
+      if (await isCancelled()) {
+        await saveState({
+          task: "DETECT_COUNTRIES",
+          status: "CANCELLED",
+          startedAt: (await getState())?.startedAt || Date.now(),
+          finishedAt: Date.now(),
+          total: cookies.length,
+          processed: detected + failed,
+          results: { detected, failed },
+          message: `Cancelado: ${detected} países detectados de ${detected + failed} procesadas`,
+          error: null,
+          cancelled: true,
+        });
+        return;
+      }
+
+      const batch = cookies.slice(i, i + BATCH_SIZE);
+
+      const batchResults = await Promise.allSettled(
+        batch.map(async (cookie) => {
+          const dict = extractCookiesFromText(cookie.rawCookie);
+          if (!dict) return "failed";
+
+          try {
+            let country: string | null = extractCountryFromNetflixId(dict);
+            if (!country) {
+              try {
+                const metadata = await getMetadata(dict);
+                if (metadata.country) country = metadata.country;
+              } catch { /* skip */ }
+            }
+            if (country) {
+              await prisma.cookie.update({
+                where: { id: cookie.id },
+                data: { country },
+              });
+              return "detected";
+            }
+            return "failed";
+          } catch {
+            return "failed";
           }
-          if (country) {
-            await prisma.cookie.update({
-              where: { id: cookie.id },
-              data: { country },
-            });
-            detected++;
-          }
-        } catch {
+        })
+      );
+
+      for (const r of batchResults) {
+        if (r.status === "fulfilled") {
+          if (r.value === "detected") detected++;
+          else failed++;
+        } else {
           failed++;
         }
       }
 
-      if ((i + 1) % 5 === 0 || i === cookies.length - 1) {
-        await saveState({
-          task: "DETECT_COUNTRIES",
-          status: "RUNNING",
-          startedAt: Date.now(),
-          finishedAt: null,
-          total: cookies.length,
-          processed: i + 1,
-          results: { detected, failed },
-          message: `Procesando ${i + 1}/${cookies.length}...`,
-          error: null,
-        });
-      }
+      const processed = Math.min(i + BATCH_SIZE, cookies.length);
+      await saveState({
+        task: "DETECT_COUNTRIES",
+        status: "RUNNING",
+        startedAt: (await getState())?.startedAt || Date.now(),
+        finishedAt: null,
+        total: cookies.length,
+        processed,
+        results: { detected, failed },
+        message: `Procesando ${processed}/${cookies.length}...`,
+        error: null,
+        cancelled: false,
+      });
     }
 
     await saveState({
       task: "DETECT_COUNTRIES",
       status: "COMPLETED",
-      startedAt: Date.now(),
+      startedAt: (await getState())?.startedAt || Date.now(),
       finishedAt: Date.now(),
       total: cookies.length,
       processed: cookies.length,
       results: { detected, failed },
       message: `Completado: ${detected} países detectados de ${cookies.length}`,
       error: null,
+      cancelled: false,
     });
   } catch (err: any) {
     const prev = await getState();
@@ -277,6 +356,7 @@ async function runDetectCountries() {
       results: prev?.results || {},
       message: "Error al detectar países",
       error: err.message,
+      cancelled: false,
     });
   }
 }
@@ -298,13 +378,13 @@ export async function POST(request: NextRequest) {
     const current = await getState();
     if (current && current.status === "RUNNING") {
       if (isStale(current)) {
-        // Mark stale task as failed
         await saveState({
           ...current,
           status: "FAILED",
           finishedAt: Date.now(),
           message: "Tarea anterior expirada",
           error: "Task exceeded 30 min timeout",
+          cancelled: false,
         });
       } else {
         return NextResponse.json({
@@ -340,6 +420,42 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// ─── DELETE — cancel a running background task ──────────────────────────────
+
+export async function DELETE() {
+  try {
+    await requireAdmin();
+
+    const current = await getState();
+    if (!current || current.status !== "RUNNING") {
+      return NextResponse.json({
+        success: false,
+        error: "No hay tarea ejecutándose",
+      });
+    }
+
+    // Mark as cancelled — the worker loop will pick this up
+    await saveState({
+      ...current,
+      cancelled: true,
+      message: "Cancelando...",
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Señal de cancelación enviada",
+    });
+  } catch (err: any) {
+    if (err.message === "UNAUTHORIZED") {
+      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 });
+    }
+    if (err.message === "FORBIDDEN") {
+      return NextResponse.json({ success: false, error: "Acceso denegado" }, { status: 403 });
+    }
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
 // ─── GET — poll current task status ────────────────────────────────────────
 
 export async function GET() {
@@ -355,6 +471,7 @@ export async function GET() {
         status: "FAILED",
         finishedAt: Date.now(),
         error: "Task exceeded 30 min timeout",
+        cancelled: false,
       };
       await saveState(fixed);
       return NextResponse.json({ success: true, state: fixed });

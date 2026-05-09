@@ -559,7 +559,7 @@ export default function AdminPage() {
   // ── Background Worker State ──
   interface BgWorkerState {
     task: string;
-    status: "RUNNING" | "COMPLETED" | "FAILED";
+    status: "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
     startedAt: number;
     finishedAt: number | null;
     total: number;
@@ -567,8 +567,10 @@ export default function AdminPage() {
     results: Record<string, number>;
     message: string;
     error: string | null;
+    cancelled?: boolean;
   }
   const [workerState, setWorkerState] = useState<BgWorkerState | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const workerPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Start Background Worker ──
@@ -593,7 +595,7 @@ export default function AdminPage() {
     }
   }, []);
 
-  // ── Poll Worker Status ──
+  // ── Poll Worker Status (faster: 2s interval) ──
   const pollWorker = useCallback(() => {
     if (workerPollRef.current) clearInterval(workerPollRef.current);
     const fetchState = async () => {
@@ -605,23 +607,46 @@ export default function AdminPage() {
           if (data.state.status !== "RUNNING") {
             if (workerPollRef.current) clearInterval(workerPollRef.current);
             workerPollRef.current = null;
+            setCancelling(false);
             loadData();
             if (data.state.status === "COMPLETED") {
               toast.success(data.state.message);
+            } else if (data.state.status === "CANCELLED") {
+              toast.info(data.state.message);
             } else if (data.state.status === "FAILED") {
               toast.error(data.state.error || data.state.message);
             }
           }
         } else if (data.success && !data.state) {
           setWorkerState(null);
+          setCancelling(false);
           if (workerPollRef.current) clearInterval(workerPollRef.current);
           workerPollRef.current = null;
         }
       } catch {}
     };
     fetchState();
-    workerPollRef.current = setInterval(fetchState, 5000);
+    workerPollRef.current = setInterval(fetchState, 2000);
   }, [loadData]);
+
+  // ── Cancel Background Worker ──
+  const cancelWorker = useCallback(async () => {
+    if (!confirm("¿Cancelar la tarea en ejecución? Se detendrá después del lote actual.")) return;
+    setCancelling(true);
+    try {
+      const res = await fetch("/api/admin/background-worker", { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        toast.info("Cancelando tarea...");
+      } else {
+        toast.error(data.error || "No se pudo cancelar");
+        setCancelling(false);
+      }
+    } catch {
+      toast.error("Error al cancelar");
+      setCancelling(false);
+    }
+  }, []);
 
   // ── Clean up polling on unmount ──
   useEffect(() => {
@@ -1461,6 +1486,8 @@ export default function AdminPage() {
                         ? "border-emerald-500/20 bg-emerald-500/[0.04]"
                         : workerState.status === "COMPLETED"
                         ? "border-blue-500/20 bg-blue-500/[0.04]"
+                        : workerState.status === "CANCELLED"
+                        ? "border-amber-500/20 bg-amber-500/[0.04]"
                         : "border-red-500/20 bg-red-500/[0.04]"
                     }`}
                   >
@@ -1471,12 +1498,16 @@ export default function AdminPage() {
                             ? "bg-emerald-500/15"
                             : workerState.status === "COMPLETED"
                             ? "bg-blue-500/15"
+                            : workerState.status === "CANCELLED"
+                            ? "bg-amber-500/15"
                             : "bg-red-500/15"
                         }`}>
                           {workerState.status === "RUNNING" ? (
                             <Loader2 className="h-4 w-4 text-emerald-400 animate-spin" />
                           ) : workerState.status === "COMPLETED" ? (
                             <RefreshCw className="h-4 w-4 text-blue-400" />
+                          ) : workerState.status === "CANCELLED" ? (
+                            <X className="h-4 w-4 text-amber-400" />
                           ) : (
                             <AlertTriangle className="h-4 w-4 text-red-400" />
                           )}
@@ -1487,27 +1518,43 @@ export default function AdminPage() {
                               ? "text-emerald-400"
                               : workerState.status === "COMPLETED"
                               ? "text-blue-400"
+                              : workerState.status === "CANCELLED"
+                              ? "text-amber-400"
                               : "text-red-400"
                           }`}>
                             {workerState.task === "REFRESH_COOKIES" ? "Refrescar Cookies" : "Sacar País"}
                           </p>
                           <p className="text-[11px] text-white/30">
                             {workerState.status === "RUNNING"
-                              ? "Ejecutando en segundo plano..."
+                              ? cancelling ? "Cancelando..." : "Ejecutando en segundo plano..."
                               : workerState.status === "COMPLETED"
                               ? "Completado"
+                              : workerState.status === "CANCELLED"
+                              ? "Cancelado"
                               : "Error"}
                           </p>
                         </div>
                       </div>
-                      {workerState.status !== "RUNNING" && (
-                        <button
-                          onClick={() => setWorkerState(null)}
-                          className="h-7 w-7 rounded-lg border border-white/[0.06] bg-white/[0.03] flex items-center justify-center text-white/30 hover:text-white/60 transition-colors"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {workerState.status === "RUNNING" && (
+                          <button
+                            onClick={cancelWorker}
+                            disabled={cancelling}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] text-amber-400 text-[11px] font-semibold transition-all hover:bg-amber-500/10 disabled:opacity-40"
+                          >
+                            {cancelling ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                            {cancelling ? "Cancelando..." : "Cancelar"}
+                          </button>
+                        )}
+                        {workerState.status !== "RUNNING" && (
+                          <button
+                            onClick={() => { setWorkerState(null); setCancelling(false); }}
+                            className="h-7 w-7 rounded-lg border border-white/[0.06] bg-white/[0.03] flex items-center justify-center text-white/30 hover:text-white/60 transition-colors"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     {workerState.total > 0 && (
                       <div className="mb-3">
@@ -1526,6 +1573,8 @@ export default function AdminPage() {
                                 ? "bg-gradient-to-r from-emerald-500 to-cyan-400"
                                 : workerState.status === "COMPLETED"
                                 ? "bg-gradient-to-r from-blue-500 to-cyan-400"
+                                : workerState.status === "CANCELLED"
+                                ? "bg-gradient-to-r from-amber-500 to-yellow-400"
                                 : "bg-gradient-to-r from-red-500 to-orange-400"
                             }`}
                             initial={{ width: 0 }}
