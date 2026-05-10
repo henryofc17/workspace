@@ -366,7 +366,7 @@ export default function LoginPage() {
               <div className="relative rounded-2xl overflow-hidden shadow-2xl shadow-[#E50914]/20">
                 <Image
                   src="https://i.ibb.co/BKy3LKzL/AISelect-20260430-120048-Google.jpg"
-                  alt="Netflix Checker Pro"
+                  alt="Netflix Cookies Vip"
                   width={200}
                   height={64}
                   className="h-16 w-auto object-contain"
