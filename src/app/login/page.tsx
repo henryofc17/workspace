@@ -381,8 +381,8 @@ export default function LoginPage() {
               transition={{ delay: 0.2 }}
               className="text-3xl font-extrabold text-white tracking-tight"
             >
-              Netflix Checker
-              <span className="bg-gradient-to-r from-[#E50914] to-[#FF6B6B] bg-clip-text text-transparent"> Pro</span>
+              Netflix Cookies
+              <span className="bg-gradient-to-r from-[#E50914] to-[#FF6B6B] bg-clip-text text-transparent"> Vip</span>
             </motion.h1>
             <motion.p
               initial={{ opacity: 0 }}
