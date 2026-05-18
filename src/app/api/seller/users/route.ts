@@ -61,27 +61,77 @@ export async function POST(request: NextRequest) {
     const hashedPassword = await bcrypt.hash(password, 10);
     const creditAmount = Number(credits) || 0;
 
+    // If assigning initial credits, deduct from seller's own balance
+    if (creditAmount > 0) {
+      const seller = await prisma.user.findUnique({
+        where: { id: session.userId },
+        select: { credits: true },
+      });
+
+      if (!seller || seller.credits < creditAmount) {
+        return NextResponse.json(
+          { success: false, error: `Créditos insuficientes. Tienes ${seller?.credits || 0} créditos.` },
+          { status: 400 }
+        );
+      }
+
+      // Atomic transaction: deduct from seller, create user with credits, record transactions
+      const user = await prisma.$transaction(async (tx) => {
+        // Deduct from seller
+        await tx.user.update({
+          where: { id: session.userId },
+          data: { credits: { decrement: creditAmount } },
+        });
+
+        // Create user with credits
+        const newUser = await tx.user.create({
+          data: {
+            username: username.trim(),
+            password: hashedPassword,
+            role: "USER",
+            credits: creditAmount,
+            sellerId: session.userId,
+          },
+          select: { id: true, username: true, role: true, credits: true, createdAt: true },
+        });
+
+        // Record grant transaction for user
+        await tx.transaction.create({
+          data: {
+            userId: newUser.id,
+            type: "SELLER_GRANT",
+            credits: creditAmount,
+            description: "Créditos iniciales otorgados por seller",
+          },
+        });
+
+        // Record deduction transaction for seller
+        await tx.transaction.create({
+          data: {
+            userId: session.userId,
+            type: "SELLER_DEDUCT",
+            credits: -creditAmount,
+            description: `Créditos transferidos a usuario ${newUser.username}`,
+          },
+        });
+
+        return newUser;
+      });
+
+      return NextResponse.json({ success: true, user });
+    }
+
+    // No initial credits - just create user normally
     const user = await prisma.user.create({
       data: {
         username: username.trim(),
         password: hashedPassword,
         role: "USER",
-        credits: creditAmount,
+        credits: 0,
         sellerId: session.userId,
       },
       select: { id: true, username: true, role: true, credits: true, createdAt: true },
     });
-
-    if (creditAmount > 0) {
-      await prisma.transaction.create({
-        data: {
-          userId: user.id,
-          type: "SELLER_GRANT",
-          credits: creditAmount,
-          description: "Créditos iniciales otorgados por seller",
-        },
-      });
-    }
 
     return NextResponse.json({ success: true, user });
   } catch (err: any) {

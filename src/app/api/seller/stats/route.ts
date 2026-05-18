@@ -7,11 +7,17 @@ export async function GET() {
   try {
     const session = await requireSeller();
 
+    // Get seller's own credits
+    const seller = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { credits: true },
+    });
+
     const totalUsers = await prisma.user.count({
       where: { sellerId: session.userId },
     });
 
-    const totalCreditsResult = await prisma.user.aggregate({
+    const totalUsersCreditsResult = await prisma.user.aggregate({
       where: { sellerId: session.userId },
       _sum: { credits: true },
     });
@@ -52,7 +58,8 @@ export async function GET() {
       success: true,
       stats: {
         totalUsers,
-        totalCredits: totalCreditsResult._sum.credits || 0,
+        myCredits: seller?.credits || 0,
+        totalUsersCredits: totalUsersCreditsResult._sum.credits || 0,
         activeUsersToday,
       },
       recentTransactions,

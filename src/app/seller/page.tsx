@@ -29,7 +29,8 @@ import {
 
 interface SellerStats {
   totalUsers: number;
-  totalCredits: number;
+  myCredits: number;
+  totalUsersCredits: number;
   activeUsersToday: number;
 }
 
@@ -469,10 +470,11 @@ export default function SellerPage() {
           {tab === "dashboard" && (
             <motion.div key="dashboard" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.3 }} className="space-y-6">
               {/* Stats Grid */}
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                <StatCard icon={Users} label="Mis Usuarios" value={stats?.totalUsers || 0} color="violet" delay={0} />
-                <StatCard icon={Coins} label="Créditos Totales" value={stats?.totalCredits || 0} color="yellow" delay={0.05} />
-                <StatCard icon={Zap} label="Activos Hoy" value={stats?.activeUsersToday || 0} color="green" delay={0.1} />
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <StatCard icon={Coins} label="Mis Créditos" value={stats?.myCredits || 0} color="yellow" delay={0} />
+                <StatCard icon={Users} label="Mis Usuarios" value={stats?.totalUsers || 0} color="violet" delay={0.05} />
+                <StatCard icon={CreditCard} label="Créditos Usuarios" value={stats?.totalUsersCredits || 0} color="blue" delay={0.1} />
+                <StatCard icon={Zap} label="Activos Hoy" value={stats?.activeUsersToday || 0} color="green" delay={0.15} />
               </div>
 
               {/* Recent Transactions */}

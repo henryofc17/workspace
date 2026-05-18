@@ -101,6 +101,62 @@ export async function PUT(
         return NextResponse.json({ success: false, error: "Cantidad inválida" }, { status: 400 });
       }
 
+      // If granting credits (positive amount), deduct from seller's own balance
+      if (amount > 0) {
+        const seller = await prisma.user.findUnique({
+          where: { id: session.userId },
+          select: { credits: true },
+        });
+
+        if (!seller || seller.credits < amount) {
+          return NextResponse.json(
+            { success: false, error: `Créditos insuficientes. Tienes ${seller?.credits || 0} créditos.` },
+            { status: 400 }
+          );
+        }
+
+        // Atomic transaction: deduct from seller, add to user, record transactions
+        const updatedUser = await prisma.$transaction(async (tx) => {
+          // Deduct from seller
+          await tx.user.update({
+            where: { id: session.userId },
+            data: { credits: { decrement: amount } },
+          });
+
+          // Add credits to user
+          const target = await tx.user.update({
+            where: { id },
+            data: { credits: { increment: amount } },
+            select: { id: true, username: true, credits: true },
+          });
+
+          // Record grant transaction for user
+          await tx.transaction.create({
+            data: {
+              userId: id,
+              type: "SELLER_GRANT",
+              credits: amount,
+              description: creditDescription || "Créditos otorgados por seller",
+            },
+          });
+
+          // Record deduction transaction for seller
+          await tx.transaction.create({
+            data: {
+              userId: session.userId,
+              type: "SELLER_DEDUCT",
+              credits: -amount,
+              description: `Créditos transferidos a usuario ${target.username}`,
+            },
+          });
+
+          return target;
+        });
+
+        return NextResponse.json({ success: true, user: updatedUser });
+      }
+
+      // Negative amount (deduct from user) — no need to deduct from seller
       const newCredits = user.credits + amount;
       if (newCredits < 0) {
         return NextResponse.json({ success: false, error: "Créditos insuficientes" }, { status: 400 });
@@ -115,9 +171,9 @@ export async function PUT(
       await prisma.transaction.create({
         data: {
           userId: id,
-          type: amount >= 0 ? "SELLER_GRANT" : "SELLER_DEDUCT",
+          type: "SELLER_DEDUCT",
           credits: amount,
-          description: creditDescription || (amount >= 0 ? "Créditos otorgados por seller" : "Créditos deducidos por seller"),
+          description: creditDescription || "Créditos deducidos por seller",
         },
       });
 

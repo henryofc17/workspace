@@ -26,7 +26,66 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Usuario no encontrado" }, { status: 404 });
     }
 
-    const newCredits = user.credits + Number(amount);
+    const numericAmount = Number(amount);
+
+    // If granting credits (positive amount) to a SELLER, deduct from admin's own credits
+    if (numericAmount > 0 && user.role === "SELLER") {
+      const adminUser = await prisma.user.findUnique({
+        where: { id: session.userId },
+        select: { credits: true },
+      });
+
+      if (!adminUser || adminUser.credits < numericAmount) {
+        return NextResponse.json(
+          { success: false, error: `Créditos insuficientes. Tienes ${adminUser?.credits || 0} créditos.` },
+          { status: 400 }
+        );
+      }
+
+      // Use a transaction to ensure atomicity: deduct from admin, add to seller
+      const [updatedTarget, ,] = await prisma.$transaction([
+        prisma.user.update({
+          where: { id: userId },
+          data: { credits: { increment: numericAmount } },
+          select: { id: true, username: true, credits: true },
+        }),
+        prisma.user.update({
+          where: { id: session.userId },
+          data: { credits: { decrement: numericAmount } },
+        }),
+        prisma.transaction.create({
+          data: {
+            userId,
+            type: "ADMIN_GRANT",
+            credits: numericAmount,
+            description: description || "Créditos otorgados por admin",
+          },
+        }),
+      ]);
+
+      // Also record deduction transaction for admin
+      await prisma.transaction.create({
+        data: {
+          userId: session.userId,
+          type: "ADMIN_DEDUCT",
+          credits: -numericAmount,
+          description: `Transferencia a seller ${updatedTarget.username}`,
+        },
+      });
+
+      logSecurityEvent({
+        level: "info",
+        event: "ADMIN_UPDATE_CREDITS",
+        userId: session.userId,
+        username: session.username,
+        details: { targetUser: updatedTarget.username, amount, newCredits: updatedTarget.credits, deductedFromAdmin: numericAmount },
+      });
+
+      return NextResponse.json({ success: true, user: updatedTarget });
+    }
+
+    // For non-seller users or negative amounts (deductions), use original logic
+    const newCredits = user.credits + numericAmount;
     if (newCredits < 0) {
       return NextResponse.json({ success: false, error: "Créditos insuficientes" }, { status: 400 });
     }
@@ -40,9 +99,9 @@ export async function PUT(request: NextRequest) {
     await prisma.transaction.create({
       data: {
         userId,
-        type: Number(amount) >= 0 ? "ADMIN_GRANT" : "ADMIN_DEDUCT",
-        credits: Number(amount),
-        description: description || (Number(amount) >= 0 ? "Créditos otorgados por admin" : "Créditos deducidos por admin"),
+        type: numericAmount >= 0 ? "ADMIN_GRANT" : "ADMIN_DEDUCT",
+        credits: numericAmount,
+        description: description || (numericAmount >= 0 ? "Créditos otorgados por admin" : "Créditos deducidos por admin"),
       },
     });
 

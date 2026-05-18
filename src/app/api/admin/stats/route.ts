@@ -4,7 +4,13 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    await requireAdmin();
+    const session = await requireAdmin();
+
+    // Get admin's own credits
+    const adminUser = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { credits: true },
+    });
 
     const [totalUsers, totalCookies, activeCookies, deadCookies, totalTransactions] = await Promise.all([
       prisma.user.count({ where: { role: "USER" } }),
@@ -30,6 +36,7 @@ export async function GET() {
         activeCookies,
         deadCookies,
         totalTransactions,
+        adminCredits: adminUser?.credits || 0,
         allCookiesDead: totalCookies > 0 && activeCookies === 0,
       },
       recentTransactions,

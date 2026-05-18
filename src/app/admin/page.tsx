@@ -57,6 +57,7 @@ interface AdminStats {
   activeCookies: number;
   deadCookies: number;
   totalTransactions: number;
+  adminCredits: number;
   allCookiesDead: boolean;
 }
 
@@ -1124,11 +1125,12 @@ export default function AdminPage() {
       setSellerCreditDesc("");
       handleOpenSellerDetail(selectedSeller.id);
       loadSellers();
+      loadData(); // Refresh admin stats (including admin's own credits)
     } catch {
       toast.error("Error al actualizar créditos");
     }
     setUpdatingSellerCredits(false);
-  }, [selectedSeller, sellerCreditAmount, sellerCreditDesc, handleOpenSellerDetail, loadSellers]);
+  }, [selectedSeller, sellerCreditAmount, sellerCreditDesc, handleOpenSellerDetail, loadSellers, loadData]);
 
   // ── Change Seller Password ──
   const handleChangeSellerPwd = useCallback(async () => {
@@ -1318,11 +1320,12 @@ export default function AdminPage() {
               className="space-y-6"
             >
               {/* Stats Grid */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                <StatCard icon={Users} label="Usuarios" value={stats?.totalUsers || 0} color="blue" delay={0} />
-                <StatCard icon={Cookie} label="Cookies Activas" value={stats?.activeCookies || 0} color="green" delay={0.05} />
-                <StatCard icon={X} label="Cookies Muertas" value={stats?.deadCookies || 0} color="red" delay={0.1} />
-                <StatCard icon={Coins} label="Transacciones" value={stats?.totalTransactions || 0} color="yellow" delay={0.15} />
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+                <StatCard icon={Coins} label="Mis Créditos" value={stats?.adminCredits || 0} color="purple" delay={0} />
+                <StatCard icon={Users} label="Usuarios" value={stats?.totalUsers || 0} color="blue" delay={0.05} />
+                <StatCard icon={Cookie} label="Cookies Activas" value={stats?.activeCookies || 0} color="green" delay={0.1} />
+                <StatCard icon={X} label="Cookies Muertas" value={stats?.deadCookies || 0} color="red" delay={0.15} />
+                <StatCard icon={TrendingUp} label="Transacciones" value={stats?.totalTransactions || 0} color="yellow" delay={0.2} />
               </div>
 
               {/* Dead Cookies Alert */}
