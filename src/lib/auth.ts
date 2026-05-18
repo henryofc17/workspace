@@ -208,3 +208,19 @@ export async function requireAdmin(): Promise<JWTPayload> {
   }
   return session;
 }
+
+export async function requireSeller(): Promise<JWTPayload> {
+  const session = await requireAuth();
+  if (session.role !== "SELLER") {
+    throw new Error("FORBIDDEN");
+  }
+  return session;
+}
+
+export async function requireSellerOrAdmin(): Promise<JWTPayload> {
+  const session = await requireAuth();
+  if (session.role !== "SELLER" && session.role !== "ADMIN") {
+    throw new Error("FORBIDDEN");
+  }
+  return session;
+}

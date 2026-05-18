@@ -11,19 +11,22 @@ model User {
   id           String   @id @default(cuid())
   username     String   @unique
   password     String
-  role         String   @default("USER") // ADMIN or USER
+  role         String   @default("USER") // ADMIN, SELLER, or USER
   credits      Int      @default(0)
   checkerUsesToday Int      @default(0)
   checkerResetDate DateTime @default(now())
   ipAddress    String?  // IP at registration
   fingerprint  String?  // browser fingerprint
   region       String?  // ISO country code (e.g., PE, MX)
+  sellerId     String?  // ID of the seller who created this user
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   transactions  Transaction[]
   createdKeys   GiftKey[]   @relation("CreatedKeys")
   redeemedKeys  GiftKey[]   @relation("RedeemedKeys")
+  seller        User?       @relation("SellerUsers", fields: [sellerId], references: [id])
+  managedUsers  User[]      @relation("SellerUsers")
 }
 
 model Cookie {
@@ -42,7 +45,7 @@ model Cookie {
 model Transaction {
   id          String   @id @default(cuid())
   userId      String
-  type        String // GENERATE_TOKEN, COPY_COOKIE, ADMIN_GRANT, ADMIN_DEDUCT, REGISTER_BONUS
+  type        String // GENERATE_TOKEN, COPY_COOKIE, ADMIN_GRANT, ADMIN_DEDUCT, SELLER_GRANT, SELLER_DEDUCT, REGISTER_BONUS
   credits     Int      // positive for grants, negative for usage
   description String?
   createdAt   DateTime @default(now())

@@ -45,6 +45,7 @@ import {
   MonitorPlay,
   MessageCircle,
   Globe,
+  Store,
 } from "lucide-react";
 import { getCountryName } from "@/lib/countries";
 
@@ -302,11 +303,11 @@ export default function AdminPage() {
   const [loadingKeys, setLoadingKeys] = useState(false);
 
   // Active tab
-  const [tab, setTab] = useState<"dashboard" | "users" | "cookies" | "config">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "users" | "cookies" | "config" | "sellers">("dashboard");
 
   // User search
   const [userSearch, setUserSearch] = useState("");
-  const [userFilter, setUserFilter] = useState<"all" | "admin" | "user">("all");
+  const [userFilter, setUserFilter] = useState<"all" | "admin" | "user" | "seller">("all");
 
   // User detail modal
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
@@ -324,6 +325,27 @@ export default function AdminPage() {
 
   // User sort
   const [userSort, setUserSort] = useState<"newest" | "oldest" | "credits">("newest");
+
+  // ── Sellers State ──
+  const [sellers, setSellers] = useState<any[]>([]);
+  const [newSellerUsername, setNewSellerUsername] = useState("");
+  const [newSellerPassword, setNewSellerPassword] = useState("");
+  const [newSellerCredits, setNewSellerCredits] = useState("0");
+  const [creatingSeller, setCreatingSeller] = useState(false);
+  const [loadingSellers, setLoadingSellers] = useState(false);
+  const [sellerSearch, setSellerSearch] = useState("");
+  // Seller detail modal
+  const [selectedSeller, setSelectedSeller] = useState<any | null>(null);
+  const [sellerUsers, setSellerUsers] = useState<any[]>([]);
+  const [loadingSellerDetail, setLoadingSellerDetail] = useState(false);
+  // Seller credit update
+  const [sellerCreditAmount, setSellerCreditAmount] = useState("");
+  const [sellerCreditDesc, setSellerCreditDesc] = useState("");
+  const [updatingSellerCredits, setUpdatingSellerCredits] = useState(false);
+  // Seller change password
+  const [sellerNewPwd, setSellerNewPwd] = useState("");
+  const [changingSellerPwd, setChangingSellerPwd] = useState(false);
+  const [showSellerPwd, setShowSellerPwd] = useState(false);
 
   // ── Auth Check ──
   useEffect(() => {
@@ -791,7 +813,8 @@ export default function AdminPage() {
       const matchSearch = u.username.toLowerCase().includes(userSearch.toLowerCase());
       const matchFilter = userFilter === "all" ||
         (userFilter === "admin" && u.role === "ADMIN") ||
-        (userFilter === "user" && u.role === "USER");
+        (userFilter === "user" && u.role === "USER") ||
+        (userFilter === "seller" && u.role === "SELLER");
       return matchSearch && matchFilter;
     })
     .sort((a, b) => {
@@ -878,18 +901,159 @@ export default function AdminPage() {
     setGeneratingKeys(false);
   }, [keyCount, keyCredits, loadKeys]);
 
+  // ── Load Sellers ──
+  const loadSellers = useCallback(async () => {
+    setLoadingSellers(true);
+    try {
+      const res = await fetch("/api/admin/sellers");
+      const data = await res.json();
+      if (data.success) setSellers(data.sellers);
+    } catch {}
+    setLoadingSellers(false);
+  }, []);
+
+  // ── Create Seller ──
+  const handleCreateSeller = useCallback(async () => {
+    if (!newSellerUsername.trim() || !newSellerPassword.trim()) {
+      toast.error("Usuario y contraseña requeridos");
+      return;
+    }
+    setCreatingSeller(true);
+    try {
+      const res = await fetch("/api/admin/sellers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: newSellerUsername.trim(), password: newSellerPassword, credits: Number(newSellerCredits) || 0 }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error);
+        return;
+      }
+      toast.success(`Seller "${data.seller.username}" creado`);
+      setNewSellerUsername("");
+      setNewSellerPassword("");
+      setNewSellerCredits("0");
+      loadSellers();
+    } catch {
+      toast.error("Error al crear seller");
+    } finally {
+      setCreatingSeller(false);
+    }
+  }, [newSellerUsername, newSellerPassword, newSellerCredits, loadSellers]);
+
+  // ── Delete Seller ──
+  const handleDeleteSeller = useCallback(async (sellerId: string, sellerName: string) => {
+    if (!confirm(`¿Eliminar seller "${sellerName}"? Sus usuarios serán desvinculados.`)) return;
+    try {
+      const res = await fetch(`/api/admin/sellers?id=${sellerId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`Seller "${sellerName}" eliminado`);
+        if (selectedSeller?.id === sellerId) setSelectedSeller(null);
+        loadSellers();
+      } else {
+        toast.error(data.error);
+      }
+    } catch {
+      toast.error("Error al eliminar seller");
+    }
+  }, [loadSellers, selectedSeller]);
+
+  // ── Open Seller Detail ──
+  const handleOpenSellerDetail = useCallback(async (sellerId: string) => {
+    setLoadingSellerDetail(true);
+    try {
+      const [sellerRes, usersRes] = await Promise.all([
+        fetch(`/api/admin/users/${sellerId}`).then((r) => r.json()),
+        fetch(`/api/admin/users`).then((r) => r.json()),
+      ]);
+      if (sellerRes.success) {
+        setSelectedSeller(sellerRes.user);
+      }
+      if (usersRes.success) {
+        setSellerUsers(usersRes.users.filter((u: any) => u.role !== "SELLER" && u.role !== "ADMIN"));
+      }
+    } catch {
+      toast.error("Error al cargar detalle del seller");
+    }
+    setLoadingSellerDetail(false);
+  }, []);
+
+  // ── Update Seller Credits ──
+  const handleSellerCreditUpdate = useCallback(async () => {
+    if (!selectedSeller || !sellerCreditAmount) return;
+    setUpdatingSellerCredits(true);
+    try {
+      const res = await fetch("/api/admin/credits", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selectedSeller.id,
+          amount: Number(sellerCreditAmount),
+          description: sellerCreditDesc || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error);
+        return;
+      }
+      toast.success(`Créditos: ${selectedSeller.username} → ${data.user.credits}`);
+      setSellerCreditAmount("");
+      setSellerCreditDesc("");
+      handleOpenSellerDetail(selectedSeller.id);
+      loadSellers();
+    } catch {
+      toast.error("Error al actualizar créditos");
+    }
+    setUpdatingSellerCredits(false);
+  }, [selectedSeller, sellerCreditAmount, sellerCreditDesc, handleOpenSellerDetail, loadSellers]);
+
+  // ── Change Seller Password ──
+  const handleChangeSellerPwd = useCallback(async () => {
+    if (!selectedSeller || !sellerNewPwd.trim()) return;
+    if (sellerNewPwd.length < 4 || sellerNewPwd.length > 64) {
+      toast.error("La contraseña debe tener entre 4 y 64 caracteres");
+      return;
+    }
+    setChangingSellerPwd(true);
+    try {
+      const res = await fetch(`/api/admin/users/${selectedSeller.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPassword: sellerNewPwd.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error);
+        return;
+      }
+      toast.success(data.message);
+      setSellerNewPwd("");
+      setShowSellerPwd(false);
+    } catch {
+      toast.error("Error al cambiar contraseña");
+    }
+    setChangingSellerPwd(false);
+  }, [selectedSeller, sellerNewPwd]);
+
   // ── Load Config + Keys when switching to config tab ──
   useEffect(() => {
     if (tab === "config") {
       loadConfig();
       loadKeys();
     }
-  }, [tab, loadConfig, loadKeys]);
+    if (tab === "sellers") {
+      loadSellers();
+    }
+  }, [tab, loadConfig, loadKeys, loadSellers]);
 
   // Tab config
   const tabs = [
     { key: "dashboard" as const, label: "Dashboard", icon: Activity },
     { key: "users" as const, label: "Usuarios", icon: Users },
+    { key: "sellers" as const, label: "Sellers", icon: Store },
     { key: "cookies" as const, label: "Cookies", icon: Cookie },
     { key: "config" as const, label: "Configuración", icon: Settings },
   ];
@@ -1255,7 +1419,7 @@ export default function AdminPage() {
                   {/* Filters + Sort row */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <div className="flex items-center gap-1 bg-white/[0.03] rounded-lg border border-white/[0.06] p-0.5">
-                      {([["all", "Todos"], ["admin", "Admin"], ["user", "User"]] as const).map(([key, label]) => (
+                      {([["all", "Todos"], ["admin", "Admin"], ["seller", "Seller"], ["user", "User"]] as const).map(([key, label]) => (
                         <button
                           key={key}
                           onClick={() => setUserFilter(key)}
@@ -1817,6 +1981,203 @@ export default function AdminPage() {
                   </div>
                 </PanelCard>
               )}
+            </motion.div>
+          )}
+
+          {/* ═══ SELLERS ═══ */}
+          {tab === "sellers" && (
+            <motion.div
+              key="sellers"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-6"
+            >
+              {/* Create Seller */}
+              <PanelCard icon={Store} iconColor="from-violet-500/20 to-purple-500/10" title="Crear Seller" subtitle="Nuevo vendedor">
+                <div className="p-4 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <input
+                      type="text"
+                      placeholder="Usuario"
+                      value={newSellerUsername}
+                      onChange={(e) => setNewSellerUsername(e.target.value)}
+                      className="premium-input h-10 px-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white text-sm outline-none focus:border-violet-500/40 transition-all"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Contraseña"
+                      value={newSellerPassword}
+                      onChange={(e) => setNewSellerPassword(e.target.value)}
+                      className="premium-input h-10 px-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white text-sm outline-none focus:border-violet-500/40 transition-all"
+                    />
+                    <input
+                      type="number"
+                      placeholder="Créditos"
+                      value={newSellerCredits}
+                      onChange={(e) => setNewSellerCredits(e.target.value)}
+                      className="premium-input h-10 px-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white text-sm outline-none focus:border-violet-500/40 transition-all"
+                    />
+                  </div>
+                  <button
+                    onClick={handleCreateSeller}
+                    disabled={creatingSeller}
+                    className="h-10 px-5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white text-sm font-medium disabled:opacity-40 transition-all flex items-center gap-2"
+                  >
+                    {creatingSeller ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    Crear Seller
+                  </button>
+                </div>
+              </PanelCard>
+
+              {/* Sellers List */}
+              <PanelCard icon={Users} iconColor="from-violet-500/20 to-purple-500/10" title="Sellers" subtitle={`${sellers.length} registrados`}>
+                <div className="p-2 premium-scroll max-h-[600px] overflow-y-auto">
+                  {/* Search */}
+                  <div className="px-2 py-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/20" />
+                      <input
+                        type="text"
+                        placeholder="Buscar seller..."
+                        value={sellerSearch}
+                        onChange={(e) => setSellerSearch(e.target.value)}
+                        className="w-full h-9 pl-9 pr-3 bg-white/[0.03] border border-white/[0.06] rounded-lg text-white text-xs outline-none focus:border-white/[0.15] transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {loadingSellers ? (
+                    <div className="flex items-center justify-center py-16">
+                      <Loader2 className="h-6 w-6 text-white/20 animate-spin" />
+                    </div>
+                  ) : sellers.length === 0 ? (
+                    <EmptyState icon={Store} text="Sin sellers" subtext="Crea un seller para comenzar" />
+                  ) : (
+                    <div className="space-y-1.5">
+                      {sellers
+                        .filter((s) => s.username.toLowerCase().includes(sellerSearch.toLowerCase()))
+                        .map((seller) => (
+                          <motion.div
+                            key={seller.id}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="group flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/[0.04] transition-all duration-200 cursor-pointer"
+                            onClick={() => handleOpenSellerDetail(seller.id)}
+                          >
+                            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-violet-500/20 to-purple-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
+                              <Store className="h-4 w-4 text-violet-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="text-white/80 text-sm font-medium truncate">{seller.username}</p>
+                                <Badge className="bg-violet-500/10 text-violet-400 border border-violet-500/20 text-[9px] font-semibold px-1.5 py-0 h-4">
+                                  SELLER
+                                </Badge>
+                              </div>
+                              <p className="text-white/20 text-[11px]">
+                                {seller._count?.managedUsers || 0} usuarios · {seller.credits} créditos
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteSeller(seller.id, seller.username); }}
+                                className="h-7 w-7 rounded-lg bg-white/[0.03] border border-white/[0.06] flex items-center justify-center text-white/30 hover:text-red-400 hover:border-red-500/20 hover:bg-red-500/5 transition-all"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </motion.div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              </PanelCard>
+
+              {/* Seller Detail Modal */}
+              <AnimatePresence>
+                {selectedSeller && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[80] flex items-center justify-center p-4"
+                    onClick={() => { setSelectedSeller(null); setSellerCreditAmount(""); setSellerCreditDesc(""); setSellerNewPwd(""); }}
+                  >
+                    <motion.div
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.9, opacity: 0 }}
+                      className="bg-[#0a0a12] border border-white/[0.08] rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto premium-scroll"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="p-5 border-b border-white/[0.06] flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-purple-500/10 border border-violet-500/20 flex items-center justify-center">
+                            <Store className="h-5 w-5 text-violet-400" />
+                          </div>
+                          <div>
+                            <h3 className="text-white font-semibold">{selectedSeller.username}</h3>
+                            <p className="text-white/25 text-xs">Seller · {selectedSeller.credits} créditos</p>
+                          </div>
+                        </div>
+                        <button onClick={() => { setSelectedSeller(null); setSellerCreditAmount(""); setSellerCreditDesc(""); setSellerNewPwd(""); }} className="h-8 w-8 rounded-lg bg-white/[0.04] flex items-center justify-center text-white/40 hover:text-white/70 transition-colors">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="p-5 space-y-5">
+                        {/* Quick Credit Update */}
+                        <div className="space-y-2">
+                          <h4 className="text-white/50 text-xs font-medium uppercase tracking-wider">Actualizar Créditos</h4>
+                          <div className="grid grid-cols-2 gap-2">
+                            <input type="number" placeholder="Cantidad (+/-)" value={sellerCreditAmount} onChange={(e) => setSellerCreditAmount(e.target.value)} className="premium-input h-9 px-3 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none focus:border-violet-500/40 transition-all" />
+                            <input type="text" placeholder="Descripción" value={sellerCreditDesc} onChange={(e) => setSellerCreditDesc(e.target.value)} className="premium-input h-9 px-3 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none focus:border-violet-500/40 transition-all" />
+                          </div>
+                          <button onClick={handleSellerCreditUpdate} disabled={updatingSellerCredits} className="h-9 px-4 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white text-xs font-medium disabled:opacity-40 transition-all flex items-center gap-1.5">
+                            {updatingSellerCredits ? <Loader2 className="h-3 w-3 animate-spin" /> : <Coins className="h-3 w-3" />}
+                            Actualizar
+                          </button>
+                        </div>
+                        {/* Change Password */}
+                        <div className="space-y-2">
+                          <h4 className="text-white/50 text-xs font-medium uppercase tracking-wider">Cambiar Contraseña</h4>
+                          <div className="relative">
+                            <input
+                              type={showSellerPwd ? "text" : "password"}
+                              placeholder="Nueva contraseña"
+                              value={sellerNewPwd}
+                              onChange={(e) => setSellerNewPwd(e.target.value)}
+                              className="premium-input w-full h-9 px-3 pr-9 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none focus:border-violet-500/40 transition-all"
+                            />
+                            <button onClick={() => setShowSellerPwd(!showSellerPwd)} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors">
+                              {showSellerPwd ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                          <button onClick={handleChangeSellerPwd} disabled={changingSellerPwd} className="h-9 px-4 rounded-lg bg-white/[0.06] border border-white/[0.08] text-white/70 text-xs font-medium hover:bg-white/[0.1] hover:border-white/[0.15] disabled:opacity-40 transition-all flex items-center gap-1.5">
+                            {changingSellerPwd ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserCog className="h-3 w-3" />}
+                            Cambiar Contraseña
+                          </button>
+                        </div>
+                        {/* Seller Transactions */}
+                        {selectedSeller.transactions && selectedSeller.transactions.length > 0 && (
+                          <div className="space-y-2">
+                            <h4 className="text-white/50 text-xs font-medium uppercase tracking-wider">Transacciones Recientes</h4>
+                            <div className="space-y-1 max-h-40 overflow-y-auto premium-scroll">
+                              {selectedSeller.transactions.slice(0, 20).map((t: any) => (
+                                <div key={t.id} className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.03] text-xs">
+                                  <span className="text-white/40">{t.type}</span>
+                                  <span className={t.credits >= 0 ? "text-emerald-400" : "text-red-400"}>{t.credits >= 0 ? "+" : ""}{t.credits}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           )}
 

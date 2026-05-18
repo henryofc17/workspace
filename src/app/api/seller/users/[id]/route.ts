@@ -1,0 +1,143 @@
+import { NextRequest, NextResponse } from "next/server";
+import { requireSeller } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import bcrypt from "bcryptjs";
+
+// GET /api/seller/users/[id] — get user detail
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await requireSeller();
+    const { id } = await params;
+
+    if (!/^[\w-]+$/.test(id)) {
+      return NextResponse.json({ success: false, error: "ID inválido" }, { status: 400 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        username: true,
+        role: true,
+        credits: true,
+        sellerId: true,
+        ipAddress: true,
+        region: true,
+        createdAt: true,
+        updatedAt: true,
+        transactions: {
+          select: {
+            id: true,
+            type: true,
+            credits: true,
+            description: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+        },
+        _count: {
+          select: { transactions: true },
+        },
+      },
+    });
+
+    if (!user || user.sellerId !== session.userId) {
+      return NextResponse.json({ success: false, error: "Usuario no encontrado" }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, user });
+  } catch (err: any) {
+    if (err.message === "UNAUTHORIZED") {
+      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 });
+    }
+    if (err.message === "FORBIDDEN") {
+      return NextResponse.json({ success: false, error: "Acceso denegado" }, { status: 403 });
+    }
+    return NextResponse.json({ success: false, error: "Error del servidor" }, { status: 500 });
+  }
+}
+
+// PUT /api/seller/users/[id] — update managed user (password or credits)
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await requireSeller();
+    const { id } = await params;
+
+    if (!/^[\w-]+$/.test(id)) {
+      return NextResponse.json({ success: false, error: "ID inválido" }, { status: 400 });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user || user.sellerId !== session.userId) {
+      return NextResponse.json({ success: false, error: "Usuario no encontrado o no te pertenece" }, { status: 404 });
+    }
+
+    const body = await request.json();
+    const { newPassword, creditAmount, creditDescription } = body;
+
+    // Change password
+    if (newPassword && typeof newPassword === "string") {
+      if (newPassword.length < 4 || newPassword.length > 64) {
+        return NextResponse.json({ success: false, error: "Contraseña debe tener entre 4 y 64 caracteres" }, { status: 400 });
+      }
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await prisma.user.update({
+        where: { id },
+        data: { password: hashedPassword },
+      });
+    }
+
+    // Update credits
+    if (creditAmount !== undefined && creditAmount !== null) {
+      const amount = Number(creditAmount);
+      if (isNaN(amount)) {
+        return NextResponse.json({ success: false, error: "Cantidad inválida" }, { status: 400 });
+      }
+
+      const newCredits = user.credits + amount;
+      if (newCredits < 0) {
+        return NextResponse.json({ success: false, error: "Créditos insuficientes" }, { status: 400 });
+      }
+
+      const updatedUser = await prisma.user.update({
+        where: { id },
+        data: { credits: newCredits },
+        select: { id: true, username: true, credits: true },
+      });
+
+      await prisma.transaction.create({
+        data: {
+          userId: id,
+          type: amount >= 0 ? "SELLER_GRANT" : "SELLER_DEDUCT",
+          credits: amount,
+          description: creditDescription || (amount >= 0 ? "Créditos otorgados por seller" : "Créditos deducidos por seller"),
+        },
+      });
+
+      return NextResponse.json({ success: true, user: updatedUser });
+    }
+
+    // If only password was changed
+    const updatedUser = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, username: true, credits: true },
+    });
+
+    return NextResponse.json({ success: true, user: updatedUser, message: "Contraseña actualizada" });
+  } catch (err: any) {
+    if (err.message === "UNAUTHORIZED") {
+      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 });
+    }
+    if (err.message === "FORBIDDEN") {
+      return NextResponse.json({ success: false, error: "Acceso denegado" }, { status: 403 });
+    }
+    return NextResponse.json({ success: false, error: "Error del servidor" }, { status: 500 });
+  }
+}

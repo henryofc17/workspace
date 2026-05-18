@@ -292,6 +292,8 @@ export default function Home() {
           router.push("/login");
         } else if (data.user.role === "ADMIN") {
           router.push("/admin");
+        } else if (data.user.role === "SELLER") {
+          router.push("/seller");
         } else {
           setUsername(data.user.username || "");
           setCredits(data.user.credits ?? 0);

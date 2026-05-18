@@ -291,7 +291,7 @@ export default function LoginPage() {
         return;
       }
       toast.success(`Bienvenido, ${data.user.username}`);
-      router.replace(data.user.role === "ADMIN" ? "/admin" : "/");
+      router.replace(data.user.role === "ADMIN" ? "/admin" : data.user.role === "SELLER" ? "/seller" : "/");
     } catch { toast.error("Error de conexion"); }
     finally { setLoginLoading(false); }
   }, [username, password, router, resetLoginWidget]);
