@@ -20,7 +20,7 @@ export async function ensureMigrations(): Promise<void> {
           "id" TEXT NOT NULL PRIMARY KEY,
           "key" TEXT NOT NULL,
           "value" TEXT NOT NULL,
-          "updatedAt" DATETIME NOT NULL
+          "updatedAt" TIMESTAMP NOT NULL
         );
       `);
       await prisma.$executeRawUnsafe(
@@ -44,8 +44,8 @@ export async function ensureMigrations(): Promise<void> {
           "credits" INTEGER NOT NULL DEFAULT 0,
           "createdBy" TEXT NOT NULL,
           "redeemedBy" TEXT,
-          "redeemedAt" DATETIME,
-          "createdAt" DATETIME NOT NULL,
+          "redeemedAt" TIMESTAMP,
+          "createdAt" TIMESTAMP NOT NULL,
           CONSTRAINT "GiftKey_code_key" UNIQUE ("code"),
           CONSTRAINT "GiftKey_createdBy_fkey" FOREIGN KEY ("createdBy") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
           CONSTRAINT "GiftKey_redeemedBy_fkey" FOREIGN KEY ("redeemedBy") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE

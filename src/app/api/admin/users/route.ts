@@ -17,6 +17,7 @@ export async function GET() {
         credits: true,
         ipAddress: true,
         region: true,
+        sellerId: true,
         createdAt: true,
         _count: {
           select: { transactions: true },

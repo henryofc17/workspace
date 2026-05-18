@@ -250,6 +250,127 @@ function UserPlusIcon({ className }: { className?: string }) {
   );
 }
 
+// ─── Assign User To Seller Component ──────────────────────────────────────────
+
+function AssignUserToSeller({ sellerId, onAssigned }: { sellerId: string; onAssigned: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [availableUsers, setAvailableUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const loadAvailable = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/users").then((r) => r.json());
+      if (res.success) {
+        // Only show USER role users who are NOT already assigned to this seller
+        setAvailableUsers(
+          res.users.filter((u: any) => u.role === "USER" && u.sellerId !== sellerId)
+        );
+      }
+    } catch {}
+    setLoading(false);
+  }, [sellerId]);
+
+  useEffect(() => {
+    if (open) loadAvailable();
+  }, [open, loadAvailable]);
+
+  const handleAssign = useCallback(async (userId: string, username: string) => {
+    setAssigning(true);
+    try {
+      const res = await fetch(`/api/admin/sellers/${sellerId}/users`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, action: "assign" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`"${username}" asignado al seller`);
+        onAssigned();
+        setOpen(false);
+      } else {
+        toast.error(data.error);
+      }
+    } catch {
+      toast.error("Error al asignar usuario");
+    }
+    setAssigning(false);
+  }, [sellerId, onAssigned]);
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="h-7 px-2.5 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-400 text-[10px] font-semibold hover:bg-violet-500/20 transition-all flex items-center gap-1"
+      >
+        <UserPlus className="h-3 w-3" />
+        Asignar
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[90] flex items-center justify-center p-4"
+            onClick={() => setOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#0a0a12] border border-white/[0.08] rounded-2xl max-w-sm w-full max-h-[60vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-4 border-b border-white/[0.06] flex items-center justify-between">
+                <h3 className="text-white text-sm font-semibold">Asignar Usuario al Seller</h3>
+                <button onClick={() => setOpen(false)} className="h-7 w-7 rounded-lg bg-white/[0.04] flex items-center justify-center text-white/40 hover:text-white/70 transition-colors">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="p-2 max-h-[calc(60vh-56px)] overflow-y-auto premium-scroll">
+                {loading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-5 w-5 text-white/20 animate-spin" />
+                  </div>
+                ) : availableUsers.length === 0 ? (
+                  <div className="flex flex-col items-center py-8 gap-2">
+                    <Users className="h-6 w-6 text-white/10" />
+                    <p className="text-white/20 text-xs">No hay usuarios disponibles para asignar</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {availableUsers.map((u: any) => (
+                      <button
+                        key={u.id}
+                        disabled={assigning}
+                        onClick={() => handleAssign(u.id, u.username)}
+                        className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-white/[0.04] transition-all text-left disabled:opacity-50"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="h-7 w-7 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-white/50 text-[10px] font-bold">
+                            {u.username[0].toUpperCase()}
+                          </div>
+                          <div>
+                            <span className="text-white/70 text-xs font-medium">{u.username}</span>
+                            <span className="text-amber-400/60 text-[10px] ml-2">{u.credits} créditos</span>
+                          </div>
+                        </div>
+                        <span className="text-violet-400 text-[10px] font-semibold">+ Asignar</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
 // ─── Admin Page ──────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
@@ -964,15 +1085,14 @@ export default function AdminPage() {
   const handleOpenSellerDetail = useCallback(async (sellerId: string) => {
     setLoadingSellerDetail(true);
     try {
-      const [sellerRes, usersRes] = await Promise.all([
-        fetch(`/api/admin/users/${sellerId}`).then((r) => r.json()),
-        fetch(`/api/admin/users`).then((r) => r.json()),
-      ]);
+      const sellerRes = await fetch(`/api/admin/users/${sellerId}`).then((r) => r.json());
       if (sellerRes.success) {
         setSelectedSeller(sellerRes.user);
       }
+      // Fetch only users managed by this seller
+      const usersRes = await fetch(`/api/admin/sellers/${sellerId}/users`).then((r) => r.json());
       if (usersRes.success) {
-        setSellerUsers(usersRes.users.filter((u: any) => u.role !== "SELLER" && u.role !== "ADMIN"));
+        setSellerUsers(usersRes.users);
       }
     } catch {
       toast.error("Error al cargar detalle del seller");
@@ -1469,6 +1589,8 @@ export default function AdminPage() {
                             <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 font-bold text-sm ${
                               u.role === "ADMIN"
                                 ? "bg-gradient-to-br from-red-500/20 to-orange-500/10 text-red-400 border border-red-500/20"
+                                : u.role === "SELLER"
+                                ? "bg-gradient-to-br from-violet-500/20 to-purple-500/10 text-violet-400 border border-violet-500/20"
                                 : "bg-gradient-to-br from-blue-500/15 to-cyan-500/10 text-blue-400 border border-blue-500/10"
                             }`}>
                               {u.username[0].toUpperCase()}
@@ -1480,6 +1602,11 @@ export default function AdminPage() {
                                   <Badge className="bg-gradient-to-r from-red-500/15 to-orange-500/10 text-red-400 border border-red-500/15 text-[9px] font-bold px-1.5 py-0 h-4 flex items-center gap-0.5">
                                     <Crown className="h-2.5 w-2.5" />
                                     ADMIN
+                                  </Badge>
+                                ) : u.role === "SELLER" ? (
+                                  <Badge className="bg-gradient-to-r from-violet-500/15 to-purple-500/10 text-violet-400 border border-violet-500/15 text-[9px] font-bold px-1.5 py-0 h-4 flex items-center gap-0.5">
+                                    <Store className="h-2.5 w-2.5" />
+                                    SELLER
                                   </Badge>
                                 ) : (
                                   <Badge className="bg-white/[0.04] text-white/30 border border-white/[0.06] text-[9px] font-bold px-1.5 py-0 h-4">
@@ -2109,7 +2236,7 @@ export default function AdminPage() {
                       initial={{ scale: 0.9, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
                       exit={{ scale: 0.9, opacity: 0 }}
-                      className="bg-[#0a0a12] border border-white/[0.08] rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto premium-scroll"
+                      className="bg-[#0a0a12] border border-white/[0.08] rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto premium-scroll"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="p-5 border-b border-white/[0.06] flex items-center justify-between">
@@ -2119,7 +2246,7 @@ export default function AdminPage() {
                           </div>
                           <div>
                             <h3 className="text-white font-semibold">{selectedSeller.username}</h3>
-                            <p className="text-white/25 text-xs">Seller · {selectedSeller.credits} créditos</p>
+                            <p className="text-white/25 text-xs">Seller · {selectedSeller.credits} créditos · {sellerUsers.length} usuarios</p>
                           </div>
                         </div>
                         <button onClick={() => { setSelectedSeller(null); setSellerCreditAmount(""); setSellerCreditDesc(""); setSellerNewPwd(""); }} className="h-8 w-8 rounded-lg bg-white/[0.04] flex items-center justify-center text-white/40 hover:text-white/70 transition-colors">
@@ -2159,6 +2286,65 @@ export default function AdminPage() {
                             Cambiar Contraseña
                           </button>
                         </div>
+
+                        {/* Managed Users Section */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-white/50 text-xs font-medium uppercase tracking-wider">Usuarios Gestionados ({sellerUsers.length})</h4>
+                            <AssignUserToSeller sellerId={selectedSeller.id} onAssigned={() => handleOpenSellerDetail(selectedSeller.id)} />
+                          </div>
+                          {sellerUsers.length === 0 ? (
+                            <div className="flex flex-col items-center py-6 gap-2">
+                              <Users className="h-6 w-6 text-white/10" />
+                              <p className="text-white/20 text-xs">Este seller no tiene usuarios asignados</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-1 max-h-60 overflow-y-auto premium-scroll">
+                              {sellerUsers.map((su: any) => (
+                                <div key={su.id} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/[0.03] transition-colors">
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-7 w-7 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-white/50 text-[10px] font-bold">
+                                      {su.username[0].toUpperCase()}
+                                    </div>
+                                    <div>
+                                      <span className="text-white/70 text-xs font-medium">{su.username}</span>
+                                      <div className="flex items-center gap-2 mt-0.5">
+                                        <span className="text-amber-400/60 text-[10px] flex items-center gap-0.5"><Coins className="h-2.5 w-2.5" />{su.credits}</span>
+                                        <span className="text-white/15 text-[10px]">{su._count?.transactions || 0} txns</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={async () => {
+                                      if (!confirm(`¿Desvincular a "${su.username}" de este seller?`)) return;
+                                      try {
+                                        const res = await fetch(`/api/admin/sellers/${selectedSeller.id}/users`, {
+                                          method: "PUT",
+                                          headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({ userId: su.id, action: "unassign" }),
+                                        });
+                                        const data = await res.json();
+                                        if (data.success) {
+                                          toast.success(data.message);
+                                          handleOpenSellerDetail(selectedSeller.id);
+                                          loadSellers();
+                                        } else {
+                                          toast.error(data.error);
+                                        }
+                                      } catch {
+                                        toast.error("Error al desvincular usuario");
+                                      }
+                                    }}
+                                    className="h-6 w-6 rounded-md bg-white/[0.03] border border-white/[0.06] flex items-center justify-center text-white/25 hover:text-red-400 hover:border-red-500/20 hover:bg-red-500/5 transition-all"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
                         {/* Seller Transactions */}
                         {selectedSeller.transactions && selectedSeller.transactions.length > 0 && (
                           <div className="space-y-2">
@@ -2471,6 +2657,8 @@ export default function AdminPage() {
                     <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold text-sm ${
                       selectedUser.role === "ADMIN"
                         ? "bg-gradient-to-br from-red-500/20 to-orange-500/10 text-red-400 border border-red-500/20"
+                        : selectedUser.role === "SELLER"
+                        ? "bg-gradient-to-br from-violet-500/20 to-purple-500/10 text-violet-400 border border-violet-500/20"
                         : "bg-gradient-to-br from-blue-500/15 to-cyan-500/10 text-blue-400 border border-blue-500/10"
                     }`}>
                       {selectedUser.username[0].toUpperCase()}
@@ -2482,6 +2670,11 @@ export default function AdminPage() {
                           <Badge className="bg-gradient-to-r from-red-500/15 to-orange-500/10 text-red-400 border border-red-500/15 text-[9px] font-bold px-1.5 py-0 h-4 flex items-center gap-0.5">
                             <Crown className="h-2.5 w-2.5" />
                             ADMIN
+                          </Badge>
+                        ) : selectedUser.role === "SELLER" ? (
+                          <Badge className="bg-gradient-to-r from-violet-500/15 to-purple-500/10 text-violet-400 border border-violet-500/15 text-[9px] font-bold px-1.5 py-0 h-4 flex items-center gap-0.5">
+                            <Store className="h-2.5 w-2.5" />
+                            SELLER
                           </Badge>
                         ) : (
                           <Badge className="bg-white/[0.04] text-white/30 border border-white/[0.06] text-[9px] font-bold px-1.5 py-0 h-4">
