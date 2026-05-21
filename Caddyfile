@@ -1,4 +1,10 @@
-:81 {
+# ─── HTTP → HTTPS Redirect ────────────────────────────────────────────────────
+http://hachejota.com, http://www.hachejota.com {
+	redir https://{host}{uri} permanent
+}
+
+# ─── HTTPS — Main Site ───────────────────────────────────────────────────────
+hachejota.com, www.hachejota.com {
 	@transform_port_query {
 		query XTransformPort=*
 	}
