@@ -6,7 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { Loader2, User, Lock, Gift, ArrowRight, Eye, EyeOff, Zap, ChevronRight, ShieldCheck } from "lucide-react";
+import { Loader2, User, Lock, Gift, ArrowRight, Eye, EyeOff, Zap, ChevronRight, ShieldCheck, Check } from "lucide-react";
 
 declare global {
   interface Window {
@@ -145,6 +145,7 @@ export default function LoginPage() {
 
   const [regLoading, setRegLoading] = useState(false);
   const [showRegPassword, setShowRegPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   const [widgetReady, setWidgetReady] = useState(false);
   const [regWidgetId, setRegWidgetId] = useState<string | null>(null);
@@ -313,13 +314,15 @@ export default function LoginPage() {
         resetRegisterWidget();
         return;
       }
-      toast.success("Cuenta creada, ahora inicia sesion");
-      setTab("login"); setRegUsername(""); setRegPassword("");
+      toast.success(`¡Bienvenido, ${data.user.username}! Cuenta creada exitosamente`);
+      setRegUsername(""); setRegPassword("");
+      // Auto-login: redirect to the appropriate dashboard
+      router.replace(data.user.role === "ADMIN" ? "/admin" : data.user.role === "SELLER" ? "/seller" : "/");
       // Reset register widget for next use
       resetRegisterWidget();
     } catch { toast.error("Error de conexion"); }
     finally { setRegLoading(false); }
-  }, [regUsername, regPassword, resetRegisterWidget]);
+  }, [regUsername, regPassword, resetRegisterWidget, router]);
 
   return (
     <>
@@ -340,7 +343,8 @@ export default function LoginPage() {
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(229,9,20,0.15),transparent_60%)]" />
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_80%_80%,rgba(229,9,20,0.08),transparent_50%)]" />
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_40%_40%_at_10%_90%,rgba(139,92,246,0.06),transparent_50%)]" />
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_50%,black_30%,transparent_80%)]" />
+          {/* Dot grid pattern */}
+          <div className="absolute inset-0 bg-[radial-gradient(circle_1px,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_70%_70%_at_50%_50%,black_20%,transparent_80%)]" />
           <FloatingOrb className="w-96 h-96 bg-[#E50914]/20 -top-48 -left-48" delay={0} />
           <FloatingOrb className="w-72 h-72 bg-[#E50914]/10 bottom-0 right-0" delay={5} />
           <FloatingOrb className="w-56 h-56 bg-purple-500/10 top-1/3 right-1/4" delay={10} />
@@ -412,10 +416,10 @@ export default function LoginPage() {
             transition={{ delay: 0.4, duration: 0.5 }}
             className="relative"
           >
-            <div className="absolute -inset-px rounded-3xl bg-gradient-to-b from-white/[0.08] to-white/[0.02]" />
-            <div className="absolute -inset-px rounded-3xl bg-gradient-to-t from-[#E50914]/5 to-transparent" />
-            <div className="relative rounded-3xl bg-[#0D0D0D]/90 backdrop-blur-2xl border border-white/[0.06] overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent pointer-events-none" />
+            <div className="absolute -inset-px rounded-3xl bg-gradient-to-b from-white/[0.1] to-white/[0.03]" />
+            <div className="absolute -inset-px rounded-3xl bg-gradient-to-t from-[#E50914]/8 to-transparent" />
+            <div className="relative rounded-3xl bg-[#0D0D0D]/90 backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.5),0_0_80px_rgba(229,9,20,0.05)] overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent pointer-events-none" />
               <div className="relative p-6 sm:p-8 space-y-6">
                 <SlideTabs tab={tab} setTab={setTab} />
 
@@ -441,7 +445,16 @@ export default function LoginPage() {
                       />
 
                       {/* Turnstile */}
-                      <div id="cf-turnstile" className="flex justify-center" />
+                      <div id="cf-turnstile" className="flex justify-center [&>div]:rounded-lg" />
+
+                      {/* Remember Me */}
+                      <label className="flex items-center gap-2.5 cursor-pointer group/select">
+                        <div className={`h-4 w-4 rounded border transition-all duration-200 flex items-center justify-center ${rememberMe ? "bg-[#E50914] border-[#E50914]" : "bg-white/[0.04] border-white/[0.1] group-hover/select:border-white/[0.2]"}`}>
+                          {rememberMe && <Check className="h-2.5 w-2.5 text-white" />}
+                        </div>
+                        <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="sr-only" />
+                        <span className="text-gray-500 text-xs group-hover/select:text-gray-400 transition-colors">Recordarme</span>
+                      </label>
 
                       {/* Login Button */}
                       <motion.button
@@ -493,7 +506,7 @@ export default function LoginPage() {
                         onTogglePassword={() => setShowRegPassword(!showRegPassword)}
                       />
                       {/* Turnstile for Register */}
-                      <div id="cf-turnstile-register" className="flex justify-center" />
+                      <div id="cf-turnstile-register" className="flex justify-center [&>div]:rounded-lg" />
 
                       <motion.div
                         initial={{ opacity: 0 }}

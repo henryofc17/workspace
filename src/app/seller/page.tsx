@@ -195,6 +195,7 @@ export default function SellerPage() {
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
+  const [sellerName, setSellerName] = useState("");
   const [stats, setStats] = useState<SellerStats | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<SellerTransaction[]>([]);
   const [users, setUsers] = useState<SellerUser[]>([]);
@@ -229,6 +230,7 @@ export default function SellerPage() {
         if (!data.success || data.user.role !== "SELLER") {
           router.push("/login");
         } else {
+          setSellerName(data.user.username || "");
           loadData();
         }
       })
@@ -432,7 +434,7 @@ export default function SellerPage() {
                       SELLER
                     </Badge>
                   </div>
-                  <p className="text-[10px] text-white/25 font-medium tracking-wider uppercase">Netflix Cookie Checker Pro</p>
+                  {sellerName && <p className="text-[10px] text-white/25 font-medium tracking-wider">{sellerName}</p>}
                 </div>
               </div>
               <button onClick={handleLogout} className="h-9 w-9 rounded-xl border border-white/[0.06] bg-white/[0.03] flex items-center justify-center text-white/40 hover:text-red-400 hover:border-red-500/20 hover:bg-red-500/5 transition-all duration-200">

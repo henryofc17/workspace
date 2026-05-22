@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,6 +41,9 @@ import {
   Globe2,
 } from "lucide-react";
 import { COUNTRIES, getCountryName } from "@/lib/countries";
+import dynamic from "next/dynamic";
+
+const OnboardingGuide = dynamic(() => import("@/components/OnboardingGuide"), { ssr: false });
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -103,7 +107,7 @@ function MetaRow({ icon: Icon, label, value }: { icon: React.ElementType; label:
   );
 }
 
-// ─── Gradient Divider ────────────────────────────────────────────────────────
+const MemoizedMetaRow = React.memo(MetaRow);
 
 function GradientDivider() {
   return (
@@ -126,7 +130,7 @@ export default function Home() {
 
   // Navigation state
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [activeView, setActiveView] = useState<"dashboard" | "checker" | "generate" | "copy" | "tv" | "region">("dashboard");
+  const [activeView, setActiveView] = useState<"dashboard" | "checker" | "generate" | "copy" | "tv" | "region" | "password">("dashboard");
 
   // Checker state
   const [cookieText, setCookieText] = useState("");
@@ -185,6 +189,9 @@ export default function Home() {
   const [showPwdCurrent, setShowPwdCurrent] = useState(false);
   const [showPwdNew, setShowPwdNew] = useState(false);
 
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
   // ── Load Checker Usage ──
   const loadCheckerUsage = useCallback(async () => {
     try {
@@ -200,20 +207,20 @@ export default function Home() {
   }, []);
 
   // ── Load Balance ──
-  const loadBalance = useCallback(async () => {
+  const loadBalance = useCallback(async (skipTransactions = false) => {
     try {
       const res = await fetch("/api/user/balance");
       const data = await res.json();
       if (data.success) {
         setCredits(data.credits ?? 0);
-        if (!historyCleared) {
+        if (!skipTransactions && !historyCleared) {
           setTransactions(Array.isArray(data.transactions) ? data.transactions : []);
         }
       }
     } catch {
       // silent fail — credits already initialized to 0
     }
-  }, []);
+  }, [historyCleared]);
 
   // ── Load Site Config ──
   const loadSiteConfig = useCallback(async () => {
@@ -242,7 +249,7 @@ export default function Home() {
     }
   }, []);
 
-  // ── Refresh Credits (must be defined before callbacks that reference it) ──
+  // ── Refresh Credits (lightweight - just credit update) ──
   const refreshCredits = useCallback(() => {
     fetch("/api/auth/me")
       .then((r) => r.json())
@@ -302,6 +309,10 @@ export default function Home() {
           loadSiteConfig();
           loadRegion();
           setLoading(false);
+          // Show onboarding for new users
+          if (typeof window !== "undefined" && !localStorage.getItem("hjflix_onboarding_done")) {
+            setShowOnboarding(true);
+          }
         }
       })
       .catch(() => {
@@ -596,6 +607,11 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#050508]">
+      {/* Onboarding Guide */}
+      {showOnboarding && (
+        <OnboardingGuide onComplete={() => setShowOnboarding(false)} />
+      )}
+
       {/* ─── Animated Gradient Header Bar ─── */}
       <div className="h-[2px] w-full bg-gradient-to-r from-[#E50914] via-[#8B5CF6] via-[#3B82F6] to-[#E50914] bg-[length:200%_100%] animate-gradient-shift" />
 
@@ -644,14 +660,22 @@ export default function Home() {
 
       {/* ─── Drawer Overlay ─── */}
       {drawerOpen && (
-        <div
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]"
           onClick={() => setDrawerOpen(false)}
         />
       )}
 
       {/* ─── Drawer Panel ─── */}
-      <div className={`fixed top-0 left-0 h-full w-72 bg-[#0a0a10]/95 backdrop-blur-xl border-r border-white/[0.06] z-[70] transform transition-transform duration-300 ease-in-out ${drawerOpen ? "translate-x-0" : "-translate-x-full"}`}>
+      <motion.div
+        initial={false}
+        animate={{ x: drawerOpen ? 0 : -288 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        className="fixed top-0 left-0 h-full w-72 bg-[#0a0a10]/95 backdrop-blur-xl border-r border-white/[0.06] z-[70]"
+      >
         <div className="flex items-center justify-between p-4 border-b border-white/[0.06]">
           <span className="text-white/50 text-xs font-medium">Herramientas</span>
           <button
@@ -736,7 +760,7 @@ export default function Home() {
             Cambiar Región
           </button>
         </div>
-      </div>
+      </motion.div>
 
       {/* ─── Main Content ─── */}
       <main className="flex-1 max-w-3xl mx-auto w-full px-4 sm:px-6 py-6 space-y-5">
@@ -746,6 +770,37 @@ export default function Home() {
             ═══════════════════════════════════════════════════════════════════ */}
         {activeView === "dashboard" && (
           <>
+            {/* ═══ Quick Actions ═══ */}
+            <div className="grid grid-cols-3 gap-2.5">
+              <button
+                onClick={() => setActiveView("checker")}
+                className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-[#0a0a10]/60 border border-white/[0.06] hover:bg-sky-500/5 hover:border-sky-500/15 transition-all duration-300 group"
+              >
+                <div className="h-9 w-9 rounded-xl bg-sky-500/10 border border-sky-500/15 flex items-center justify-center group-hover:bg-sky-500/15 transition-colors">
+                  <Search className="h-4 w-4 text-sky-400" />
+                </div>
+                <span className="text-white/50 text-[11px] font-medium group-hover:text-sky-400 transition-colors">Checker</span>
+              </button>
+              <button
+                onClick={() => setActiveView("generate")}
+                className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-[#0a0a10]/60 border border-white/[0.06] hover:bg-emerald-500/5 hover:border-emerald-500/15 transition-all duration-300 group"
+              >
+                <div className="h-9 w-9 rounded-xl bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center group-hover:bg-emerald-500/15 transition-colors">
+                  <Zap className="h-4 w-4 text-emerald-400" />
+                </div>
+                <span className="text-white/50 text-[11px] font-medium group-hover:text-emerald-400 transition-colors">Token</span>
+              </button>
+              <button
+                onClick={() => setActiveView("copy")}
+                className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-[#0a0a10]/60 border border-white/[0.06] hover:bg-violet-500/5 hover:border-violet-500/15 transition-all duration-300 group"
+              >
+                <div className="h-9 w-9 rounded-xl bg-violet-500/10 border border-violet-500/15 flex items-center justify-center group-hover:bg-violet-500/15 transition-colors">
+                  <RefreshCw className="h-4 w-4 text-violet-400" />
+                </div>
+                <span className="text-white/50 text-[11px] font-medium group-hover:text-violet-400 transition-colors">Cookie</span>
+              </button>
+            </div>
+
             {/* ═══ Welcome Greeting ═══ */}
             <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
               <div className="absolute inset-0 bg-gradient-to-br from-[#E50914]/5 via-transparent to-purple-950/5" />
@@ -812,16 +867,6 @@ export default function Home() {
             {/* ═══ Gradient Section Divider ═══ */}
             <div className="relative h-px w-full">
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#E50914]/30 to-transparent" />
-            </div>
-
-            {/* ═══ Gradient Section Divider ═══ */}
-            <div className="relative h-px w-full">
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
-            </div>
-
-            {/* ═══ Gradient Section Divider ═══ */}
-            <div className="relative h-px w-full">
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
             </div>
 
             {/* ═══ Gift Key Redemption Card ═══ */}
@@ -909,6 +954,7 @@ export default function Home() {
                     <div className="h-7 w-7 rounded-lg bg-[#E50914]/10 border border-[#E50914]/20 flex items-center justify-center">
                       <CreditCard className="h-3.5 w-3.5 text-[#E50914]" />
                     </div>
+                    <Clock className="h-3.5 w-3.5 text-white/30 mr-1" />
                     Historial de Transacciones
                   </CardTitle>
                   {transactions.length > 0 && (
@@ -971,23 +1017,56 @@ export default function Home() {
               </CardContent>
             </div>
 
-            {/* ═══ Change Password ═══ */}
+            {/* ═══ Change Password (Button to open modal) ═══ */}
             <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
               <div className="absolute inset-0 bg-gradient-to-br from-sky-950/10 via-transparent to-indigo-950/5" />
-              <div className="absolute -bottom-16 -right-16 w-32 h-32 bg-sky-500/5 rounded-full blur-3xl" />
-              <CardHeader className="pb-3 px-5 pt-5 relative">
-                <CardTitle className="text-sky-300 text-sm flex items-center gap-2.5">
-                  <div className="h-7 w-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center">
-                    <KeyRound className="h-3.5 w-3.5 text-sky-400" />
+              <CardContent className="relative p-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-sky-500/10 border border-sky-500/15 flex items-center justify-center">
+                      <KeyRound className="h-4.5 w-4.5 text-sky-400" />
+                    </div>
+                    <div>
+                      <p className="text-white/70 text-sm font-medium">Cambiar Contraseña</p>
+                      <p className="text-white/20 text-[11px]">Actualiza tu contraseña para mantener tu cuenta segura</p>
+                    </div>
                   </div>
+                  <Button
+                    onClick={() => setActiveView("password")}
+                    variant="ghost"
+                    className="h-9 px-4 rounded-xl text-sky-400/70 hover:text-sky-400 hover:bg-sky-500/5 border border-sky-500/10 text-xs font-medium transition-all"
+                  >
+                    Cambiar
+                  </Button>
+                </div>
+              </CardContent>
+            </div>
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            CHANGE PASSWORD VIEW
+            ═══════════════════════════════════════════════════════════════════ */}
+        {activeView === "password" && (
+          <>
+            <div className="flex items-center gap-3 mb-2">
+              <button
+                onClick={() => setActiveView("dashboard")}
+                className="h-8 w-8 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-gray-500 hover:text-white/70 hover:bg-white/[0.06] transition-all"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <div>
+                <h2 className="text-white/80 text-lg font-bold flex items-center gap-2">
+                  <KeyRound className="h-4 w-4 text-sky-400" />
                   Cambiar Contraseña
-                </CardTitle>
-                <CardDescription className="text-white/25 text-xs ml-[38px]">
-                  Actualiza tu contraseña para mantener tu cuenta segura
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 px-5 pb-5 relative">
-                {/* Current Password */}
+                </h2>
+                <p className="text-white/25 text-xs">Actualiza tu contraseña para mantener tu cuenta segura</p>
+              </div>
+            </div>
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
+              <div className="absolute inset-0 bg-gradient-to-br from-sky-950/10 via-transparent to-indigo-950/5" />
+              <CardContent className="space-y-3 p-5 relative">
                 <div className="relative">
                   <Input
                     type={showPwdCurrent ? "text" : "password"}
@@ -1004,7 +1083,6 @@ export default function Home() {
                     {showPwdCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                {/* New Password */}
                 <div className="relative">
                   <Input
                     type={showPwdNew ? "text" : "password"}
@@ -1021,7 +1099,6 @@ export default function Home() {
                     {showPwdNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                {/* Confirm New Password */}
                 <Input
                   type="password"
                   value={confirmPwd}
@@ -1233,12 +1310,12 @@ export default function Home() {
                     )}
                     <GradientDivider />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
-                      <MetaRow icon={Globe} label="País" value={checkerResult.metadata?.countryName || checkerResult.metadata?.country} />
-                      <MetaRow icon={Tv} label="Plan" value={checkerResult.metadata?.plan} />
-                      <MetaRow icon={Mail} label="Email" value={checkerResult.metadata?.email} />
-                      <MetaRow icon={Calendar} label="Desde" value={checkerResult.metadata?.memberSince} />
-                      <MetaRow icon={Calendar} label="Próx. Cobro" value={checkerResult.metadata?.nextBilling} />
-                      <MetaRow icon={CreditCard} label="Pago" value={checkerResult.metadata?.paymentMethod} />
+                      <MemoizedMetaRow icon={Globe} label="País" value={checkerResult.metadata?.countryName || checkerResult.metadata?.country} />
+                      <MemoizedMetaRow icon={Tv} label="Plan" value={checkerResult.metadata?.plan} />
+                      <MemoizedMetaRow icon={Mail} label="Email" value={checkerResult.metadata?.email} />
+                      <MemoizedMetaRow icon={Calendar} label="Desde" value={checkerResult.metadata?.memberSince} />
+                      <MemoizedMetaRow icon={Calendar} label="Próx. Cobro" value={checkerResult.metadata?.nextBilling} />
+                      <MemoizedMetaRow icon={CreditCard} label="Pago" value={checkerResult.metadata?.paymentMethod} />
                     </div>
                   </CardContent>
                 </div>

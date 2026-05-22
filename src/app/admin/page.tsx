@@ -57,7 +57,6 @@ interface AdminStats {
   activeCookies: number;
   deadCookies: number;
   totalTransactions: number;
-  adminCredits: number;
   allCookiesDead: boolean;
 }
 
@@ -1258,8 +1257,14 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Right: Alerts + Logout */}
+              {/* Right: Alerts + Username + Logout */}
               <div className="flex items-center gap-2">
+                <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                  <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-red-500/20 to-orange-500/10 flex items-center justify-center">
+                    <Crown className="h-3 w-3 text-red-400" />
+                  </div>
+                  <span className="text-white/40 text-xs font-medium">Admin</span>
+                </div>
                 {stats?.allCookiesDead && (
                   <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
                     <Badge className="bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-semibold px-2.5 py-0.5 h-6 cursor-default">
@@ -1320,12 +1325,11 @@ export default function AdminPage() {
               className="space-y-6"
             >
               {/* Stats Grid */}
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-                <StatCard icon={Coins} label="Mis Créditos" value={stats?.adminCredits || 0} color="purple" delay={0} />
-                <StatCard icon={Users} label="Usuarios" value={stats?.totalUsers || 0} color="blue" delay={0.05} />
-                <StatCard icon={Cookie} label="Cookies Activas" value={stats?.activeCookies || 0} color="green" delay={0.1} />
-                <StatCard icon={X} label="Cookies Muertas" value={stats?.deadCookies || 0} color="red" delay={0.15} />
-                <StatCard icon={TrendingUp} label="Transacciones" value={stats?.totalTransactions || 0} color="yellow" delay={0.2} />
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <StatCard icon={Users} label="Usuarios" value={stats?.totalUsers || 0} color="blue" delay={0} />
+                <StatCard icon={Cookie} label="Cookies Activas" value={stats?.activeCookies || 0} color="green" delay={0.05} />
+                <StatCard icon={X} label="Cookies Muertas" value={stats?.deadCookies || 0} color="red" delay={0.1} />
+                <StatCard icon={TrendingUp} label="Transacciones" value={stats?.totalTransactions || 0} color="yellow" delay={0.15} />
               </div>
 
               {/* Dead Cookies Alert */}
@@ -2210,10 +2214,11 @@ export default function AdminPage() {
                                 {seller._count?.managedUsers || 0} usuarios · {seller.credits} créditos
                               </p>
                             </div>
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex items-center gap-1">
+                              <AssignUserToSeller sellerId={seller.id} onAssigned={loadSellers} />
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleDeleteSeller(seller.id, seller.username); }}
-                                className="h-7 w-7 rounded-lg bg-white/[0.03] border border-white/[0.06] flex items-center justify-center text-white/30 hover:text-red-400 hover:border-red-500/20 hover:bg-red-500/5 transition-all"
+                                className="h-7 w-7 rounded-lg bg-red-500/5 border border-red-500/10 flex items-center justify-center text-red-400/60 hover:text-red-400 hover:border-red-500/20 hover:bg-red-500/10 transition-all"
                               >
                                 <Trash2 className="h-3 w-3" />
                               </button>
