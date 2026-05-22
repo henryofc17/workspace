@@ -19,7 +19,7 @@ model User {
   fingerprint  String?  // browser fingerprint
   region       String?  // ISO country code (e.g., PE, MX)
   sellerId     String?  // ID of the seller who created this user
-  referralCode String?  @unique // e.g. HFLIX-A3K9M
+  referralCode String?  @unique // e.g. HF-A3K9M
   referredBy   String?  // userId of the user who referred this user
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

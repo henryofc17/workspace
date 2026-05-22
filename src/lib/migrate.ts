@@ -7,7 +7,7 @@ let migrated = false;
 
 function generateReferralCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "HFLIX-";
+  let code = "HF-";
   for (let i = 0; i < 5; i++) {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
@@ -104,6 +104,47 @@ export async function ensureMigrations(): Promise<void> {
     }
   } catch (err) {
     console.error("[migrate] Referral migration error:", err);
+  }
+
+  // ── Migrate old HFLIX- codes to HF- format & generate codes for users without one ──
+  try {
+    const usersWithOldCodes = await prisma.user.findMany({
+      where: { referralCode: { startsWith: "HFLIX-" } },
+      select: { id: true },
+    });
+    if (usersWithOldCodes.length > 0) {
+      for (const user of usersWithOldCodes) {
+        let code = generateReferralCode();
+        let attempts = 0;
+        while (attempts < 10) {
+          const exists = await prisma.user.findUnique({ where: { referralCode: code } });
+          if (!exists) break;
+          code = generateReferralCode();
+          attempts++;
+        }
+        await prisma.user.update({ where: { id: user.id }, data: { referralCode: code } });
+      }
+      console.log(`[migrate] Migrated ${usersWithOldCodes.length} HFLIX- codes to HF- format`);
+    }
+
+    // Also generate codes for users without any referral code
+    const usersWithoutCodes = await prisma.user.findMany({ where: { referralCode: null } });
+    if (usersWithoutCodes.length > 0) {
+      for (const user of usersWithoutCodes) {
+        let code = generateReferralCode();
+        let attempts = 0;
+        while (attempts < 10) {
+          const exists = await prisma.user.findUnique({ where: { referralCode: code } });
+          if (!exists) break;
+          code = generateReferralCode();
+          attempts++;
+        }
+        await prisma.user.update({ where: { id: user.id }, data: { referralCode: code } });
+      }
+      console.log(`[migrate] Generated HF- referral codes for ${usersWithoutCodes.length} users without codes`);
+    }
+  } catch (err) {
+    console.error("[migrate] HF- code migration error:", err);
   }
 
   // ── Ensure Notification table exists ──

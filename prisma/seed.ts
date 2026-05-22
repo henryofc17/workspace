@@ -3,6 +3,15 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+function generateReferralCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "HF-";
+  for (let i = 0; i < 5; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
 async function main() {
   // Case-insensitive lookup for existing admin
   const existingAdmin = await prisma.user.findFirst({
@@ -11,17 +20,28 @@ async function main() {
 
   if (!existingAdmin) {
     const hashedPassword = await bcrypt.hash("HacheAdmin", 10);
+    const referralCode = generateReferralCode();
     await prisma.user.create({
       data: {
         username: "HacheJota",
         password: hashedPassword,
         role: "ADMIN",
         credits: 9999,
+        referralCode,
       },
     });
-    console.log("Admin HacheJota created");
+    console.log("Admin HacheJota created with referral code: " + referralCode);
   } else {
     console.log("Admin already exists");
+    // Ensure existing admin has a referral code
+    if (!existingAdmin.referralCode) {
+      const referralCode = generateReferralCode();
+      await prisma.user.update({
+        where: { id: existingAdmin.id },
+        data: { referralCode },
+      });
+      console.log("Admin referral code generated: " + referralCode);
+    }
   }
 }
 

@@ -25,7 +25,7 @@ async function generateUniqueReferralCode(): Promise<string> {
   let code = "";
   let attempts = 0;
   while (attempts < 20) {
-    code = "HFLIX-";
+    code = "HF-";
     for (let i = 0; i < 5; i++) {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
@@ -33,7 +33,7 @@ async function generateUniqueReferralCode(): Promise<string> {
     if (!exists) return code;
     attempts++;
   }
-  return "HFLIX-" + Date.now().toString(36).toUpperCase();
+  return "HF-" + Date.now().toString(36).toUpperCase();
 }
 
 // ─── Register Handler ─────────────────────────────────────────────────────────
@@ -171,51 +171,78 @@ export async function POST(request: Request) {
           ip: clientIP,
           details: { reason: "referral_same_ip", referrerId: referrer.id },
         });
-      } else {
-        // Valid referral
-        const REFERRER_CREDIT = await getConfig("REFERRER_CREDIT", 3);
-        const REFERRED_CREDIT = await getConfig("REFERRED_CREDIT", 2);
-
-        // Update referrer credits
-        await prisma.user.update({
-          where: { id: referrer.id },
-          data: { credits: { increment: REFERRER_CREDIT } },
-        });
-
-        await prisma.transaction.create({
-          data: {
-            userId: referrer.id,
-            type: "REFERRAL_BONUS",
-            credits: REFERRER_CREDIT,
-            description: `Referido: ${user.username} usó tu código`,
-          },
-        });
-
-        // Update referred user credits
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { credits: { increment: REFERRED_CREDIT }, referredBy: referrer.id },
-        });
-
-        await prisma.transaction.create({
-          data: {
-            userId: user.id,
-            type: "REFERRAL_BONUS",
-            credits: REFERRED_CREDIT,
-            description: `Bonificación por código de referido de ${referrer.username}`,
-          },
-        });
-
-        referralMessage = ` ¡Ganaste ${REFERRED_CREDIT} créditos extra por el código de referido!`;
-
+      } else if (fingerprint && referrer.fingerprint === fingerprint) {
+        // Anti-abuse: same browser fingerprint
+        referralMessage = " No puedes usar un código de referido desde el mismo dispositivo.";
         logSecurityEvent({
-          level: "info",
-          event: SecurityEvents.REGISTER_SUCCESS,
+          level: "warn",
+          event: SecurityEvents.REGISTER_BLOCKED,
           ip: clientIP,
-          userId: referrer.id,
-          username: referrer.username,
-          details: { referral: true, referredUser: user.username },
+          details: { reason: "referral_same_fingerprint", referrerId: referrer.id },
         });
+      } else {
+        // Anti-abuse: max 5 referrals per referrer per day
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const recentReferralsByThisReferrer = await prisma.user.count({
+          where: {
+            referredBy: referrer.id,
+            createdAt: { gte: oneDayAgo },
+          },
+        });
+        if (recentReferralsByThisReferrer >= 5) {
+          referralMessage = " El límite de referidos diarios ha sido alcanzado.";
+          logSecurityEvent({
+            level: "warn",
+            event: SecurityEvents.REGISTER_BLOCKED,
+            ip: clientIP,
+            details: { reason: "referral_daily_limit", referrerId: referrer.id, count: recentReferralsByThisReferrer },
+          });
+        } else {
+          // Valid referral
+          const REFERRER_CREDIT = await getConfig("REFERRER_CREDIT", 3);
+          const REFERRED_CREDIT = await getConfig("REFERRED_CREDIT", 2);
+
+          // Update referrer credits
+          await prisma.user.update({
+            where: { id: referrer.id },
+            data: { credits: { increment: REFERRER_CREDIT } },
+          });
+
+          await prisma.transaction.create({
+            data: {
+              userId: referrer.id,
+              type: "REFERRAL_BONUS",
+              credits: REFERRER_CREDIT,
+              description: `Referido: ${user.username} usó tu código`,
+            },
+          });
+
+          // Update referred user credits
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { credits: { increment: REFERRED_CREDIT }, referredBy: referrer.id },
+          });
+
+          await prisma.transaction.create({
+            data: {
+              userId: user.id,
+              type: "REFERRAL_BONUS",
+              credits: REFERRED_CREDIT,
+              description: `Bonificación por código de referido de ${referrer.username}`,
+            },
+          });
+
+          referralMessage = ` ¡Ganaste ${REFERRED_CREDIT} créditos extra por el código de referido!`;
+
+          logSecurityEvent({
+            level: "info",
+            event: SecurityEvents.REGISTER_SUCCESS,
+            ip: clientIP,
+            userId: referrer.id,
+            username: referrer.username,
+            details: { referral: true, referredUser: user.username },
+          });
+        }
       }
     }
 

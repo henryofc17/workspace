@@ -1144,8 +1144,35 @@ export default function Home() {
                 <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
                   <p className="text-white/30 text-[11px] mb-1">Texto para compartir:</p>
                   <p className="text-white/50 text-xs">
-                    ¡Únete a Netflix Cookies Vip! Usa mi código <span className="text-amber-400 font-bold">{referralCode}</span> al registrarte y gana créditos gratis 🎉
+                    ¡Únete a Netflix Cookies Vip! Usa mi código <span className="text-amber-400 font-bold">{referralCode}</span> al registrarte y gana créditos gratis
                   </p>
+                </div>
+
+                {/* Referral Link */}
+                <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-2">
+                  <p className="text-white/30 text-[11px]">Link de referido:</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-9 rounded-lg bg-white/[0.03] border border-white/[0.06] flex items-center px-3 overflow-hidden">
+                      <span className="text-white/40 text-[11px] font-mono truncate">
+                        {typeof window !== "undefined" ? `${window.location.origin}/login?ref=${referralCode}` : `/login?ref=${referralCode}`}
+                      </span>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const link = `${window.location.origin}/login?ref=${referralCode}`;
+                          await navigator.clipboard.writeText(link);
+                          toast.success("Link copiado");
+                        } catch {
+                          toast.error("No se pudo copiar");
+                        }
+                      }}
+                      className="h-9 px-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-semibold hover:bg-amber-500/20 transition-all shrink-0 flex items-center gap-1"
+                    >
+                      <CopyIcon className="h-3 w-3" />
+                      Copiar Link
+                    </button>
+                  </div>
                 </div>
 
                 {/* Stats */}
@@ -1166,7 +1193,7 @@ export default function Home() {
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2 text-[11px] text-white/40">
                       <span className="h-4 w-4 rounded-full bg-violet-500/10 flex items-center justify-center text-violet-400 text-[9px] font-bold shrink-0">1</span>
-                      Comparte tu código HFLIX-XXXXX con amigos
+                      Comparte tu código HF-XXXXX con amigos
                     </div>
                     <div className="flex items-center gap-2 text-[11px] text-white/40">
                       <span className="h-4 w-4 rounded-full bg-violet-500/10 flex items-center justify-center text-violet-400 text-[9px] font-bold shrink-0">2</span>

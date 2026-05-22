@@ -230,7 +230,7 @@ export default function LoginPage() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const ref = params.get("ref");
-      if (ref && ref.toUpperCase().startsWith("HFLIX-")) {
+      if (ref && (ref.toUpperCase().startsWith("HF-") || ref.toUpperCase().startsWith("HFLIX-"))) {
         setRegReferralCode(ref.toUpperCase());
         setTab("register");
       }
@@ -532,7 +532,7 @@ export default function LoginPage() {
                         >
                           <Gift className="h-4 w-4 text-violet-500/70 shrink-0" />
                           <p className="text-[11px] text-violet-500/60 leading-relaxed">
-                            Ingresa un código <span className="text-violet-400 font-semibold">HFLIX-XXXXX</span> y gana créditos extra al registrarte.
+                            Ingresa un código <span className="text-violet-400 font-semibold">HF-XXXXX</span> y gana créditos extra al registrarte.
                           </p>
                         </motion.div>
                       )}
