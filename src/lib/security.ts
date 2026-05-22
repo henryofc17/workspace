@@ -273,9 +273,9 @@ export function getSecurityHeaders(): Record<string, string> {
     "Strict-Transport-Security": process.env.NODE_ENV === "production" ? "max-age=31536000; includeSubDomains; preload" : "max-age=300",
     "Content-Security-Policy": [
       "default-src 'self'",
-      "script-src 'self' https://challenges.cloudflare.com",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://i.ibb.co https://assets.nflxext.com",
+      "img-src 'self' data: https://i.ibb.co https://assets.nflxext.com",
       "font-src 'self' https://fonts.gstatic.com",
       "connect-src 'self' https://challenges.cloudflare.com https://www.netflix.com",
       "frame-src https://challenges.cloudflare.com",

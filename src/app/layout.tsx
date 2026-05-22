@@ -54,11 +54,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" suppressHydrationWarning className="dark">
-      <head>
-        {/* CSP nonce is injected by middleware.ts — the x-nonce header is read
-            by Next.js Script components automatically. For any inline scripts
-            that need the nonce, use the nonce prop on <script> tags. */}
-      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#141414] text-white`}
       >
