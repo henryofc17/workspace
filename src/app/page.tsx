@@ -39,9 +39,11 @@ import {
   Eye,
   User,
   Globe2,
+  Users,
 } from "lucide-react";
 import { COUNTRIES, getCountryName } from "@/lib/countries";
 import dynamic from "next/dynamic";
+import NotificationBell from "@/components/NotificationBell";
 
 const OnboardingGuide = dynamic(() => import("@/components/OnboardingGuide"), { ssr: false });
 
@@ -130,7 +132,7 @@ export default function Home() {
 
   // Navigation state
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [activeView, setActiveView] = useState<"dashboard" | "checker" | "generate" | "copy" | "tv" | "region" | "password">("dashboard");
+  const [activeView, setActiveView] = useState<"dashboard" | "checker" | "generate" | "copy" | "tv" | "region" | "password" | "referral">("dashboard");
 
   // Checker state
   const [cookieText, setCookieText] = useState("");
@@ -181,6 +183,13 @@ export default function Home() {
   const [giftKeyCode, setGiftKeyCode] = useState("");
   const [redeemingKey, setRedeemingKey] = useState(false);
 
+  // Referral state
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [referredCount, setReferredCount] = useState(0);
+  const [referralEarnings, setReferralEarnings] = useState(0);
+  const [referredUsers, setReferredUsers] = useState<any[]>([]);
+  const [copiedReferral, setCopiedReferral] = useState(false);
+
   // Change password state
   const [currentPwd, setCurrentPwd] = useState("");
   const [newPwd, setNewPwd] = useState("");
@@ -191,6 +200,20 @@ export default function Home() {
 
   // Onboarding state
   const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // ── Load Referral ──
+  const loadReferral = useCallback(async () => {
+    try {
+      const res = await fetch("/api/user/referral");
+      const data = await res.json();
+      if (data.success) {
+        setReferralCode(data.referralCode);
+        setReferredCount(data.referredCount);
+        setReferralEarnings(data.totalEarnings);
+        setReferredUsers(data.referredUsers || []);
+      }
+    } catch {}
+  }, []);
 
   // ── Load Checker Usage ──
   const loadCheckerUsage = useCallback(async () => {
@@ -308,6 +331,7 @@ export default function Home() {
           loadCheckerUsage();
           loadSiteConfig();
           loadRegion();
+          loadReferral();
           setLoading(false);
           // Show onboarding for new users
           if (typeof window !== "undefined" && !localStorage.getItem("hjflix_onboarding_done")) {
@@ -319,7 +343,7 @@ export default function Home() {
         if (!cancelled) router.push("/login");
       });
     return () => { cancelled = true; };
-  }, [router, loadBalance, loadCheckerUsage, loadSiteConfig, loadRegion]);
+  }, [router, loadBalance, loadCheckerUsage, loadSiteConfig, loadRegion, loadReferral]);
 
 
   // ── TV Activate (5 credits) ──
@@ -648,6 +672,7 @@ export default function Home() {
             <div className="hidden md:flex flex-col items-end">
               <span className="text-white/50 text-xs font-medium">{username}</span>
             </div>
+            <NotificationBell />
             <button
               onClick={handleLogout}
               className="h-8 w-8 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-gray-500 hover:text-red-400 hover:border-red-500/20 hover:bg-red-500/5 transition-all duration-300"
@@ -758,6 +783,18 @@ export default function Home() {
           >
             <Globe2 className="h-3.5 w-3.5" />
             Cambiar Región
+          </button>
+          {/* Referidos */}
+          <button
+            onClick={() => { setActiveView("referral"); setDrawerOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-xs font-medium transition-all duration-300 rounded-lg border ${
+              activeView === "referral"
+                ? "bg-amber-500/15 text-amber-400 border-amber-500/20 shadow-[0_0_20px_rgba(251,191,36,0.08)]"
+                : "text-white/40 border-transparent hover:bg-white/[0.04] hover:text-white/60"
+            }`}
+          >
+            <Users className="h-3.5 w-3.5" />
+            Referidos
           </button>
         </div>
       </motion.div>
@@ -1039,6 +1076,123 @@ export default function Home() {
                     Cambiar
                   </Button>
                 </div>
+              </CardContent>
+            </div>
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            REFERRAL VIEW
+            ═══════════════════════════════════════════════════════════════════ */}
+        {activeView === "referral" && (
+          <>
+            <div className="flex items-center gap-3 mb-2">
+              <button
+                onClick={() => setActiveView("dashboard")}
+                className="h-8 w-8 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-gray-500 hover:text-white/70 hover:bg-white/[0.06] transition-all"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <div>
+                <h2 className="text-white/80 text-lg font-bold flex items-center gap-2">
+                  <Users className="h-4 w-4 text-amber-400" />
+                  Referidos
+                </h2>
+                <p className="text-white/25 text-xs">Comparte tu código y gana créditos</p>
+              </div>
+            </div>
+            {/* Referral Code Card */}
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
+              <div className="absolute inset-0 bg-gradient-to-br from-amber-950/10 via-transparent to-orange-950/5" />
+              <div className="absolute top-0 right-0 w-40 h-40 bg-amber-500/5 rounded-full blur-3xl" />
+              <CardHeader className="pb-3 px-5 pt-5 relative">
+                <CardTitle className="text-amber-300 text-sm flex items-center gap-2.5">
+                  <div className="h-7 w-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                    <Users className="h-3.5 w-3.5 text-amber-400" />
+                  </div>
+                  Tu Código de Referido
+                </CardTitle>
+                <CardDescription className="text-white/25 text-xs ml-[38px]">
+                  Comparte tu código y gana créditos por cada amigo que se registre
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="px-5 pb-5 relative space-y-4">
+                {/* Code display */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-12 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
+                    <span className="text-amber-300 text-lg font-bold tracking-widest font-mono">
+                      {referralCode || "Cargando..."}
+                    </span>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (referralCode) {
+                        await navigator.clipboard.writeText(referralCode);
+                        setCopiedReferral(true);
+                        toast.success("Código copiado");
+                        setTimeout(() => setCopiedReferral(false), 2000);
+                      }
+                    }}
+                    className="h-12 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-semibold shrink-0 flex items-center gap-1.5 shadow-[0_0_15px_rgba(251,191,36,0.15)] transition-all duration-300"
+                  >
+                    {copiedReferral ? <Check className="h-3.5 w-3.5" /> : <CopyIcon className="h-3.5 w-3.5" />}
+                    {copiedReferral ? "Copiado" : "Copiar"}
+                  </button>
+                </div>
+
+                {/* Share text */}
+                <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                  <p className="text-white/30 text-[11px] mb-1">Texto para compartir:</p>
+                  <p className="text-white/50 text-xs">
+                    ¡Únete a Netflix Cookies Vip! Usa mi código <span className="text-amber-400 font-bold">{referralCode}</span> al registrarte y gana créditos gratis 🎉
+                  </p>
+                </div>
+
+                {/* Stats */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] text-center">
+                    <p className="text-2xl font-bold text-white/90 tabular-nums">{referredCount}</p>
+                    <p className="text-[10px] text-white/25 uppercase tracking-wider">Referidos</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] text-center">
+                    <p className="text-2xl font-bold text-amber-400 tabular-nums">{referralEarnings}</p>
+                    <p className="text-[10px] text-white/25 uppercase tracking-wider">Créditos Ganados</p>
+                  </div>
+                </div>
+
+                {/* How it works */}
+                <div className="p-3 rounded-xl bg-violet-500/[0.04] border border-violet-500/10 space-y-2">
+                  <p className="text-violet-300 text-xs font-semibold">¿Cómo funciona?</p>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 text-[11px] text-white/40">
+                      <span className="h-4 w-4 rounded-full bg-violet-500/10 flex items-center justify-center text-violet-400 text-[9px] font-bold shrink-0">1</span>
+                      Comparte tu código HFLIX-XXXXX con amigos
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-white/40">
+                      <span className="h-4 w-4 rounded-full bg-violet-500/10 flex items-center justify-center text-violet-400 text-[9px] font-bold shrink-0">2</span>
+                      Ellos lo usan al registrarse
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-white/40">
+                      <span className="h-4 w-4 rounded-full bg-violet-500/10 flex items-center justify-center text-violet-400 text-[9px] font-bold shrink-0">3</span>
+                      Ambos ganan créditos automáticamente
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recent referred users */}
+                {referredUsers.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-white/30 text-xs font-medium">Referidos recientes</p>
+                    <div className="space-y-1">
+                      {referredUsers.slice(0, 10).map((u: any) => (
+                        <div key={u.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.02] border border-white/[0.04]">
+                          <span className="text-white/50 text-xs font-medium">{u.username}</span>
+                          <span className="text-white/15 text-[10px]">{new Date(u.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </div>
           </>

@@ -19,14 +19,32 @@ model User {
   fingerprint  String?  // browser fingerprint
   region       String?  // ISO country code (e.g., PE, MX)
   sellerId     String?  // ID of the seller who created this user
+  referralCode String?  @unique // e.g. HFLIX-A3K9M
+  referredBy   String?  // userId of the user who referred this user
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  transactions  Transaction[]
-  createdKeys   GiftKey[]   @relation("CreatedKeys")
-  redeemedKeys  GiftKey[]   @relation("RedeemedKeys")
-  seller        User?       @relation("SellerUsers", fields: [sellerId], references: [id])
-  managedUsers  User[]      @relation("SellerUsers")
+  transactions        Transaction[]
+  createdKeys         GiftKey[]   @relation("CreatedKeys")
+  redeemedKeys        GiftKey[]   @relation("RedeemedKeys")
+  seller              User?       @relation("SellerUsers", fields: [sellerId], references: [id])
+  managedUsers        User[]      @relation("SellerUsers")
+  referredByUser      User?       @relation("ReferralRelation", fields: [referredBy], references: [id])
+  referredUsers       User[]      @relation("ReferralRelation")
+  createdNotifications Notification[] @relation("CreatedNotifications")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  type      String   @default("info") // info, warning, success, welcome
+  active    Boolean  @default(true)
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  creator   User     @relation("CreatedNotifications", fields: [createdBy], references: [id])
 }
 
 model Cookie {

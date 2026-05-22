@@ -143,6 +143,7 @@ export default function LoginPage() {
   const [regUsername, setRegUsername] = useState("");
   const [regPassword, setRegPassword] = useState("");
 
+  const [regReferralCode, setRegReferralCode] = useState("");
   const [regLoading, setRegLoading] = useState(false);
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
@@ -223,6 +224,18 @@ export default function LoginPage() {
       window.cfToken = "";
     }
   }, [regWidgetId]);
+
+  // ── Check URL for referral code ──
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get("ref");
+      if (ref && ref.toUpperCase().startsWith("HFLIX-")) {
+        setRegReferralCode(ref.toUpperCase());
+        setTab("register");
+      }
+    }
+  }, []);
 
   useEffect(() => {
     fetch("/api/config")
@@ -305,7 +318,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: regUsername.trim(), password: regPassword, fingerprint: generateFingerprint(), turnstileToken: window.cfToken }),
+        body: JSON.stringify({ username: regUsername.trim(), password: regPassword, fingerprint: generateFingerprint(), turnstileToken: window.cfToken, referralCode: regReferralCode.trim() || undefined }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -322,7 +335,7 @@ export default function LoginPage() {
       resetRegisterWidget();
     } catch { toast.error("Error de conexion"); }
     finally { setRegLoading(false); }
-  }, [regUsername, regPassword, resetRegisterWidget, router]);
+  }, [regUsername, regPassword, regReferralCode, resetRegisterWidget, router]);
 
   return (
     <>
@@ -505,6 +518,24 @@ export default function LoginPage() {
                         showPassword={showRegPassword}
                         onTogglePassword={() => setShowRegPassword(!showRegPassword)}
                       />
+                      <PremiumInput
+                        icon={Gift}
+                        value={regReferralCode}
+                        onChange={(e) => setRegReferralCode(e.target.value.toUpperCase())}
+                        placeholder="Código de referido (opcional)"
+                      />
+                      {regReferralCode && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-violet-500/[0.05] border border-violet-500/10"
+                        >
+                          <Gift className="h-4 w-4 text-violet-500/70 shrink-0" />
+                          <p className="text-[11px] text-violet-500/60 leading-relaxed">
+                            Ingresa un código <span className="text-violet-400 font-semibold">HFLIX-XXXXX</span> y gana créditos extra al registrarte.
+                          </p>
+                        </motion.div>
+                      )}
                       {/* Turnstile for Register */}
                       <div id="cf-turnstile-register" className="flex justify-center [&>div]:rounded-lg" />
 

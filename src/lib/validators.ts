@@ -25,6 +25,7 @@ export const registerSchema = z.object({
     .max(64, "Contraseña muy larga"),
   fingerprint: z.string().min(1, "Fingerprint requerido").max(200),
   turnstileToken: z.string().min(1, "Verificación requerida").max(5000),
+  referralCode: z.string().max(15, "Código muy largo").optional(),
 });
 
 // ─── User API Schemas ───────────────────────────────────────────────────────

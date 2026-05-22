@@ -5,6 +5,15 @@ import { prisma } from "@/lib/prisma";
 
 let migrated = false;
 
+function generateReferralCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "HFLIX-";
+  for (let i = 0; i < 5; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
 export async function ensureMigrations(): Promise<void> {
   if (migrated) return;
   migrated = true;
@@ -13,7 +22,7 @@ export async function ensureMigrations(): Promise<void> {
     // Check if SiteConfig table exists by trying a query
     await prisma.siteConfig.count();
   } catch {
-    // Table doesn't exist — create it with raw SQL (works for both PostgreSQL and SQLite)
+    // Table doesn't exist — create it with raw SQL
     try {
       await prisma.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS "SiteConfig" (
@@ -57,9 +66,8 @@ export async function ensureMigrations(): Promise<void> {
     }
   }
 
-  // ── Drop referral columns (PostgreSQL only — graceful if already removed) ──
+  // ── Ensure referral columns exist on User table ──
   try {
-    // Check if referralCode column exists
     const colCheck = await prisma.$queryRawUnsafe<{ exists: boolean }[]>(
       `SELECT EXISTS (
         SELECT 1 FROM information_schema.columns
@@ -67,16 +75,73 @@ export async function ensureMigrations(): Promise<void> {
       ) as exists`
     );
 
-    if (colCheck?.[0]?.exists) {
+    if (!colCheck?.[0]?.exists) {
       await prisma.$executeRawUnsafe(`
-        ALTER TABLE "User" DROP CONSTRAINT IF EXISTS "User_referredBy_fkey";
-        ALTER TABLE "User" DROP CONSTRAINT IF EXISTS "User_referralCode_key";
-        ALTER TABLE "User" DROP COLUMN IF EXISTS "referralCode";
-        ALTER TABLE "User" DROP COLUMN IF EXISTS "referredBy";
+        ALTER TABLE "User" ADD COLUMN "referralCode" TEXT;
+        ALTER TABLE "User" ADD COLUMN "referredBy" TEXT;
       `);
-      console.log("[migrate] Referral columns dropped from User table");
+      console.log("[migrate] Referral columns added to User table");
+
+      // Generate referral codes for existing users who don't have one
+      const users = await prisma.user.findMany({ where: { referralCode: null } });
+      for (const user of users) {
+        let code = generateReferralCode();
+        let attempts = 0;
+        while (attempts < 10) {
+          const exists = await prisma.user.findUnique({ where: { referralCode: code } });
+          if (!exists) break;
+          code = generateReferralCode();
+          attempts++;
+        }
+        await prisma.user.update({ where: { id: user.id }, data: { referralCode: code } });
+      }
+      console.log(`[migrate] Generated referral codes for ${users.length} existing users`);
+
+      // Add unique constraint on referralCode
+      await prisma.$executeRawUnsafe(
+        `CREATE UNIQUE INDEX IF NOT EXISTS "User_referralCode_key" ON "User"("referralCode");`
+      );
     }
+  } catch (err) {
+    console.error("[migrate] Referral migration error:", err);
+  }
+
+  // ── Ensure Notification table exists ──
+  try {
+    await prisma.notification.count();
   } catch {
-    // Silently ignore — columns may not exist or DB may not support information_schema
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "Notification" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "title" TEXT NOT NULL,
+          "message" TEXT NOT NULL,
+          "type" TEXT NOT NULL DEFAULT 'info',
+          "active" BOOLEAN NOT NULL DEFAULT true,
+          "createdBy" TEXT NOT NULL,
+          "createdAt" TIMESTAMP NOT NULL,
+          "updatedAt" TIMESTAMP NOT NULL,
+          CONSTRAINT "Notification_createdBy_fkey" FOREIGN KEY ("createdBy") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE
+        );
+      `);
+      console.log("[migrate] Notification table created");
+
+      // Create default welcome notification
+      const admin = await prisma.user.findFirst({ where: { role: "ADMIN" } });
+      if (admin) {
+        await prisma.notification.create({
+          data: {
+            title: "¡Bienvenido a Netflix Cookies Vip!",
+            message: "Explora la plataforma, verifica cookies gratis y genera tokens. Usa códigos de referido para ganar créditos extra. ¡Disfruta!",
+            type: "welcome",
+            active: true,
+            createdBy: admin.id,
+          },
+        });
+        console.log("[migrate] Default welcome notification created");
+      }
+    } catch (err) {
+      console.error("[migrate] Failed to create Notification table:", err);
+    }
   }
 }

@@ -46,8 +46,10 @@ import {
   MessageCircle,
   Globe,
   Store,
+  Bell,
 } from "lucide-react";
 import { getCountryName } from "@/lib/countries";
+import NotificationBell from "@/components/NotificationBell";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -273,7 +275,10 @@ function AssignUserToSeller({ sellerId, onAssigned }: { sellerId: string; onAssi
   }, [sellerId]);
 
   useEffect(() => {
-    if (open) loadAvailable();
+    if (open) {
+      const t = setTimeout(loadAvailable, 0);
+      return () => clearTimeout(t);
+    }
   }, [open, loadAvailable]);
 
   const handleAssign = useCallback(async (userId: string, username: string) => {
@@ -424,7 +429,7 @@ export default function AdminPage() {
   const [loadingKeys, setLoadingKeys] = useState(false);
 
   // Active tab
-  const [tab, setTab] = useState<"dashboard" | "users" | "cookies" | "config" | "sellers">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "users" | "cookies" | "config" | "sellers" | "notifications">("dashboard");
 
   // User search
   const [userSearch, setUserSearch] = useState("");
@@ -443,6 +448,14 @@ export default function AdminPage() {
   const [adminNewPwd, setAdminNewPwd] = useState("");
   const [adminChangingPwd, setAdminChangingPwd] = useState(false);
   const [showAdminPwd, setShowAdminPwd] = useState(false);
+
+  // Notification state
+  const [adminNotifs, setAdminNotifs] = useState<any[]>([]);
+  const [loadingNotifs, setLoadingNotifs] = useState(false);
+  const [newNotifTitle, setNewNotifTitle] = useState("");
+  const [newNotifMessage, setNewNotifMessage] = useState("");
+  const [newNotifType, setNewNotifType] = useState("info");
+  const [creatingNotif, setCreatingNotif] = useState(false);
 
   // User sort
   const [userSort, setUserSort] = useState<"newest" | "oldest" | "credits">("newest");
@@ -1159,6 +1172,78 @@ export default function AdminPage() {
     setChangingSellerPwd(false);
   }, [selectedSeller, sellerNewPwd]);
 
+  // ── Load Notifications ──
+  const loadNotifications = useCallback(async () => {
+    setLoadingNotifs(true);
+    try {
+      const res = await fetch("/api/admin/notifications");
+      const data = await res.json();
+      if (data.success) setAdminNotifs(data.notifications);
+    } catch {}
+    setLoadingNotifs(false);
+  }, []);
+
+  // ── Create Notification ──
+  const handleCreateNotif = useCallback(async () => {
+    if (!newNotifTitle.trim() || !newNotifMessage.trim()) {
+      toast.error("Título y mensaje requeridos");
+      return;
+    }
+    setCreatingNotif(true);
+    try {
+      const res = await fetch("/api/admin/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newNotifTitle.trim(), message: newNotifMessage.trim(), type: newNotifType }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Notificación creada");
+        setNewNotifTitle("");
+        setNewNotifMessage("");
+        loadNotifications();
+      } else {
+        toast.error(data.error);
+      }
+    } catch {
+      toast.error("Error al crear notificación");
+    }
+    setCreatingNotif(false);
+  }, [newNotifTitle, newNotifMessage, newNotifType, loadNotifications]);
+
+  // ── Toggle Notification ──
+  const handleToggleNotif = useCallback(async (id: string, active: boolean) => {
+    try {
+      const res = await fetch("/api/admin/notifications", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, active: !active }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(active ? "Notificación desactivada" : "Notificación activada");
+        loadNotifications();
+      }
+    } catch {
+      toast.error("Error");
+    }
+  }, [loadNotifications]);
+
+  // ── Delete Notification ──
+  const handleDeleteNotif = useCallback(async (id: string) => {
+    if (!confirm("¿Eliminar esta notificación?")) return;
+    try {
+      const res = await fetch(`/api/admin/notifications?id=${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Notificación eliminada");
+        loadNotifications();
+      }
+    } catch {
+      toast.error("Error al eliminar");
+    }
+  }, [loadNotifications]);
+
   // ── Load Config + Keys when switching to config tab ──
   useEffect(() => {
     if (tab === "config") {
@@ -1168,15 +1253,19 @@ export default function AdminPage() {
     if (tab === "sellers") {
       loadSellers();
     }
-  }, [tab, loadConfig, loadKeys, loadSellers]);
+    if (tab === "notifications") {
+      loadNotifications();
+    }
+  }, [tab, loadConfig, loadKeys, loadSellers, loadNotifications]);
 
   // Tab config
   const tabs = [
     { key: "dashboard" as const, label: "Dashboard", icon: Activity },
     { key: "users" as const, label: "Usuarios", icon: Users },
-    { key: "sellers" as const, label: "Sellers", icon: Store },
     { key: "cookies" as const, label: "Cookies", icon: Cookie },
-    { key: "config" as const, label: "Configuración", icon: Settings },
+    { key: "sellers" as const, label: "Sellers", icon: Store },
+    { key: "notifications" as const, label: "Notif.", icon: Bell },
+    { key: "config" as const, label: "Config", icon: Settings },
   ];
 
   const tabIndex = tabs.findIndex((t) => t.key === tab);
@@ -1276,6 +1365,7 @@ export default function AdminPage() {
                     </Badge>
                   </motion.div>
                 )}
+                <NotificationBell />
                 <button
                   onClick={handleLogout}
                   className="h-9 w-9 rounded-xl border border-white/[0.06] bg-white/[0.03] flex items-center justify-center text-white/40 hover:text-red-400 hover:border-red-500/20 hover:bg-red-500/5 transition-all duration-200"
@@ -2375,6 +2465,140 @@ export default function AdminPage() {
             </motion.div>
           )}
 
+          {/* ═══ NOTIFICATIONS ═══ */}
+          {tab === "notifications" && (
+            <motion.div
+              key="notifications"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-6"
+            >
+              {/* Create Notification Card */}
+              <PanelCard
+                icon={Bell}
+                iconColor="from-amber-500/20 to-yellow-500/10"
+                title="Crear Notificación"
+                subtitle="Envía mensajes a todos los usuarios"
+              >
+                <div className="p-5 space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Título</label>
+                    <input
+                      type="text"
+                      value={newNotifTitle}
+                      onChange={(e) => setNewNotifTitle(e.target.value)}
+                      placeholder="Título de la notificación"
+                      className="premium-input w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-amber-500/30 transition-all duration-300"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Mensaje</label>
+                    <textarea
+                      value={newNotifMessage}
+                      onChange={(e) => setNewNotifMessage(e.target.value)}
+                      placeholder="Escribe el mensaje de la notificación..."
+                      rows={3}
+                      className="premium-input w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-amber-500/30 transition-all duration-300 resize-none"
+                    />
+                  </div>
+                  <div className="flex items-end gap-3">
+                    <div className="flex-1 space-y-1.5">
+                      <label className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Tipo</label>
+                      <select
+                        value={newNotifType}
+                        onChange={(e) => setNewNotifType(e.target.value)}
+                        className="premium-input w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-amber-500/30 transition-all duration-300 premium-select"
+                      >
+                        <option value="info">Info</option>
+                        <option value="warning">Advertencia</option>
+                        <option value="success">Éxito</option>
+                        <option value="welcome">Bienvenida</option>
+                      </select>
+                    </div>
+                    <button
+                      onClick={handleCreateNotif}
+                      disabled={creatingNotif || !newNotifTitle.trim() || !newNotifMessage.trim()}
+                      className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-amber-500/10 hover:shadow-amber-500/20 active:scale-[0.98] flex items-center gap-2"
+                    >
+                      {creatingNotif ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
+                      Crear
+                    </button>
+                  </div>
+                </div>
+              </PanelCard>
+
+              {/* Notifications List Card */}
+              <PanelCard
+                icon={Bell}
+                iconColor="from-blue-500/20 to-cyan-500/10"
+                title="Notificaciones Existentes"
+                subtitle={`${adminNotifs.length} notificaciones`}
+              >
+                <div className="p-2 premium-scroll max-h-[500px] overflow-y-auto">
+                  {loadingNotifs ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-6 w-6 animate-spin text-white/20" />
+                    </div>
+                  ) : adminNotifs.length === 0 ? (
+                    <EmptyState icon={Bell} text="Sin notificaciones" subtext="Crea una notificación arriba" />
+                  ) : (
+                    <div className="space-y-1.5">
+                      {adminNotifs.map((n: any) => (
+                        <div
+                          key={n.id}
+                          className="group flex items-center justify-between p-3 rounded-xl hover:bg-white/[0.03] transition-colors duration-200"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
+                              n.active ? "bg-emerald-500/10" : "bg-white/[0.03]"
+                            }`}>
+                              <Bell className={`h-3.5 w-3.5 ${n.active ? "text-emerald-400" : "text-white/20"}`} />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-white/80 text-sm font-medium truncate">{n.title}</span>
+                                <Badge className={`text-[9px] font-bold px-1.5 py-0 h-4 border-0 ${
+                                  n.active ? "bg-emerald-500/10 text-emerald-400" : "bg-white/5 text-white/30"
+                                }`}>
+                                  {n.active ? "Activa" : "Inactiva"}
+                                </Badge>
+                                <Badge className="text-[9px] font-bold px-1.5 py-0 h-4 border-0 bg-blue-500/10 text-blue-400">
+                                  {n.type}
+                                </Badge>
+                              </div>
+                              <p className="text-white/25 text-[11px] truncate max-w-md">{n.message}</p>
+                              <p className="text-white/10 text-[10px] mt-0.5">{new Date(n.createdAt).toLocaleDateString("es", { day: "numeric", month: "short", year: "numeric" })}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                            <button
+                              onClick={() => handleToggleNotif(n.id, n.active)}
+                              className={`h-7 px-2.5 rounded-lg text-[10px] font-semibold transition-all ${
+                                n.active
+                                  ? "bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20"
+                                  : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20"
+                              }`}
+                            >
+                              {n.active ? "Desactivar" : "Activar"}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteNotif(n.id)}
+                              className="h-7 w-7 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 hover:bg-red-500/20 transition-all"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </PanelCard>
+            </motion.div>
+          )}
+
           {/* ═══ CONFIG ═══ */}
           {tab === "config" && (
             <motion.div
@@ -2417,6 +2641,8 @@ export default function AdminPage() {
                         { key: "CHECKER_RESET_COST", label: "Costo Reiniciar Checker", icon: RefreshCw, desc: "Créditos para reiniciar" },
                         { key: "REGION_COST", label: "Costo Cambiar Región", icon: Globe, desc: "Créditos por cambiar región" },
                         { key: "REGISTER_BONUS", label: "Créditos por Registro", icon: UserPlus, desc: "Bonus al registrarse" },
+                        { key: "REFERRER_CREDIT", label: "Créditos para quien refiere", icon: UserPlus, desc: "Créditos al referir a alguien" },
+                        { key: "REFERRED_CREDIT", label: "Créditos para el referido", icon: UserPlus, desc: "Créditos al usar código de referido" },
                       ].map(({ key, label, icon: Ic, desc }) => (
                         <div key={key} className="rounded-xl bg-white/[0.02] border border-white/[0.06] p-3.5 hover:bg-white/[0.04] transition-all duration-200">
                           <div className="flex items-center gap-2 mb-2">

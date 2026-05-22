@@ -13,6 +13,8 @@ export async function GET() {
       CHECKER_DAILY_LIMIT: await getConfig("CHECKER_DAILY_LIMIT", 10),
       CHECKER_RESET_COST: await getConfig("CHECKER_RESET_COST", 2),
       REGISTER_BONUS: await getConfig("REGISTER_BONUS", 3),
+      REFERRER_CREDIT: await getConfig("REFERRER_CREDIT", 3),
+      REFERRED_CREDIT: await getConfig("REFERRED_CREDIT", 2),
       WHATSAPP_LINK: await getConfigString("WHATSAPP_LINK", ""),
       WHATSAPP_VISIBLE: await getConfigString("WHATSAPP_VISIBLE", "false") === "true",
     };
@@ -30,6 +32,8 @@ export async function GET() {
         CHECKER_DAILY_LIMIT: 10,
         CHECKER_RESET_COST: 2,
         REGISTER_BONUS: 3,
+        REFERRER_CREDIT: 3,
+        REFERRED_CREDIT: 2,
         WHATSAPP_LINK: "",
         WHATSAPP_VISIBLE: false,
       },

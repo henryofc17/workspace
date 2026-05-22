@@ -17,6 +17,8 @@ export async function GET() {
       { key: "CHECKER_DAILY_LIMIT", defaultValue: 10 },
       { key: "CHECKER_RESET_COST", defaultValue: 2 },
       { key: "REGISTER_BONUS", defaultValue: 3 },
+      { key: "REFERRER_CREDIT", defaultValue: 3 },
+      { key: "REFERRED_CREDIT", defaultValue: 2 },
     ];
 
     const stringKeys = [
@@ -65,6 +67,8 @@ export async function PUT(request: Request) {
       "CHECKER_DAILY_LIMIT",
       "CHECKER_RESET_COST",
       "REGISTER_BONUS",
+      "REFERRER_CREDIT",
+      "REFERRED_CREDIT",
     ]);
 
     const allowedStringKeys = new Set([
