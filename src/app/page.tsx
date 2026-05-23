@@ -873,19 +873,7 @@ export default function Home() {
                     <span className="text-white/35 text-xs flex-1">Región</span>
                     <span className="text-white/60 text-xs font-semibold">{siteConfig.REGION_COST} crédito{siteConfig.REGION_COST !== 1 ? "s" : ""}</span>
                   </div>
-                  <div className="relative h-px w-full my-1">
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-amber-500/20 to-transparent" />
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <div className="h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.5)]" />
-                    <span className="text-white/35 text-xs flex-1">Por referir</span>
-                    <span className="text-amber-400/80 text-xs font-semibold">+{siteConfig.REFERRER_CREDIT} crédito{siteConfig.REFERRER_CREDIT !== 1 ? "s" : ""}</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <div className="h-1.5 w-1.5 rounded-full bg-teal-400 shadow-[0_0_6px_rgba(45,212,191,0.5)]" />
-                    <span className="text-white/35 text-xs flex-1">Código referido</span>
-                    <span className="text-teal-400/80 text-xs font-semibold">+{siteConfig.REFERRED_CREDIT} crédito{siteConfig.REFERRED_CREDIT !== 1 ? "s" : ""}</span>
-                  </div>
+
                 </div>
               </CardContent>
             </div>
@@ -1085,7 +1073,24 @@ export default function Home() {
 
                 {/* Share text */}
                 <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-                  <p className="text-white/30 text-[11px] mb-1">Texto para compartir:</p>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-white/30 text-[11px]">Texto para compartir:</p>
+                    <button
+                      onClick={async () => {
+                        const shareText = `¡Únete a Netflix Cookies Vip! Usa mi código ${referralCode} al registrarte y gana ${siteConfig.REFERRED_CREDIT} créditos gratis`;
+                        try {
+                          await navigator.clipboard.writeText(shareText);
+                          toast.success("Texto copiado");
+                        } catch {
+                          toast.error("No se pudo copiar");
+                        }
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/15 text-amber-400 text-[10px] font-semibold hover:bg-amber-500/20 transition-all"
+                    >
+                      <CopyIcon className="h-3 w-3" />
+                      Copiar
+                    </button>
+                  </div>
                   <p className="text-white/50 text-xs">
                     ¡Únete a Netflix Cookies Vip! Usa mi código <span className="text-amber-400 font-bold">{referralCode}</span> al registrarte y gana <span className="text-amber-400 font-bold">{siteConfig.REFERRED_CREDIT}</span> créditos gratis
                   </p>
