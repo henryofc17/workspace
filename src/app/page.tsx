@@ -177,6 +177,8 @@ export default function Home() {
     REGION_COST: 3,
     CHECKER_DAILY_LIMIT: 10,
     CHECKER_RESET_COST: 2,
+    REFERRER_CREDIT: 3,
+    REFERRED_CREDIT: 2,
   });
 
   // Gift key state
@@ -871,6 +873,19 @@ export default function Home() {
                     <span className="text-white/35 text-xs flex-1">Región</span>
                     <span className="text-white/60 text-xs font-semibold">{siteConfig.REGION_COST} crédito{siteConfig.REGION_COST !== 1 ? "s" : ""}</span>
                   </div>
+                  <div className="relative h-px w-full my-1">
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-amber-500/20 to-transparent" />
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.5)]" />
+                    <span className="text-white/35 text-xs flex-1">Por referir</span>
+                    <span className="text-amber-400/80 text-xs font-semibold">+{siteConfig.REFERRER_CREDIT} crédito{siteConfig.REFERRER_CREDIT !== 1 ? "s" : ""}</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-1.5 w-1.5 rounded-full bg-teal-400 shadow-[0_0_6px_rgba(45,212,191,0.5)]" />
+                    <span className="text-white/35 text-xs flex-1">Código referido</span>
+                    <span className="text-teal-400/80 text-xs font-semibold">+{siteConfig.REFERRED_CREDIT} crédito{siteConfig.REFERRED_CREDIT !== 1 ? "s" : ""}</span>
+                  </div>
                 </div>
               </CardContent>
             </div>
@@ -888,7 +903,7 @@ export default function Home() {
                 </div>
                 <div className="relative text-left">
                   <p className="text-white/80 text-xs font-semibold group-hover:text-amber-300 transition-colors">Referidos</p>
-                  <p className="text-white/20 text-[10px]">Gana créditos</p>
+                  <p className="text-white/20 text-[10px]">+{siteConfig.REFERRER_CREDIT} créditos/referido</p>
                 </div>
               </button>
               {/* Canjear Key */}
@@ -1026,7 +1041,7 @@ export default function Home() {
                   <Users className="h-4 w-4 text-amber-400" />
                   Referidos
                 </h2>
-                <p className="text-white/25 text-xs">Comparte tu código y gana créditos</p>
+                <p className="text-white/25 text-xs">Comparte tu código y gana {siteConfig.REFERRER_CREDIT} crédito{siteConfig.REFERRER_CREDIT !== 1 ? "s" : ""} por referido</p>
               </div>
             </div>
             {/* Referral Code Card */}
@@ -1041,7 +1056,7 @@ export default function Home() {
                   Tu Código de Referido
                 </CardTitle>
                 <CardDescription className="text-white/25 text-xs ml-[38px]">
-                  Comparte tu código y gana créditos por cada amigo que se registre
+                  Por cada amigo que se registre, ganas {siteConfig.REFERRER_CREDIT} crédito{siteConfig.REFERRER_CREDIT !== 1 ? "s" : ""} y él recibe {siteConfig.REFERRED_CREDIT} crédito{siteConfig.REFERRED_CREDIT !== 1 ? "s" : ""} gratis
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-5 pb-5 relative space-y-4">
@@ -1072,7 +1087,7 @@ export default function Home() {
                 <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
                   <p className="text-white/30 text-[11px] mb-1">Texto para compartir:</p>
                   <p className="text-white/50 text-xs">
-                    ¡Únete a Netflix Cookies Vip! Usa mi código <span className="text-amber-400 font-bold">{referralCode}</span> al registrarte y gana créditos gratis
+                    ¡Únete a Netflix Cookies Vip! Usa mi código <span className="text-amber-400 font-bold">{referralCode}</span> al registrarte y gana <span className="text-amber-400 font-bold">{siteConfig.REFERRED_CREDIT}</span> créditos gratis
                   </p>
                 </div>
 
@@ -1124,12 +1139,12 @@ export default function Home() {
                       Comparte tu código HF-XXXXX con amigos
                     </div>
                     <div className="flex items-center gap-2 text-[11px] text-white/40">
-                      <span className="h-4 w-4 rounded-full bg-violet-500/10 flex items-center justify-center text-violet-400 text-[9px] font-bold shrink-0">2</span>
-                      Ellos lo usan al registrarse
+                      <span className="h-4 w-4 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-400 text-[9px] font-bold shrink-0">2</span>
+                      Ellos usan tu código al registrarse y ganan <span className="text-amber-400 font-semibold">{siteConfig.REFERRED_CREDIT} crédito{siteConfig.REFERRED_CREDIT !== 1 ? "s" : ""}</span> gratis
                     </div>
                     <div className="flex items-center gap-2 text-[11px] text-white/40">
-                      <span className="h-4 w-4 rounded-full bg-violet-500/10 flex items-center justify-center text-violet-400 text-[9px] font-bold shrink-0">3</span>
-                      Ambos ganan créditos automáticamente
+                      <span className="h-4 w-4 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 text-[9px] font-bold shrink-0">3</span>
+                      Tú recibes <span className="text-emerald-400 font-semibold">{siteConfig.REFERRER_CREDIT} crédito{siteConfig.REFERRER_CREDIT !== 1 ? "s" : ""}</span> por cada referido
                     </div>
                   </div>
                 </div>
