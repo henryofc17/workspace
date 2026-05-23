@@ -23,6 +23,12 @@ interface WorkerState {
 
 const STALE_MS = 30 * 60 * 1000; // 30 min — stale task timeout
 
+// ─── In-memory cancellation flag ─────────────────────────────────────────────
+// This is the KEY improvement: cancellation is instant because it's in-memory.
+// No DB read needed — the worker checks this variable directly.
+let cancelFlag = false;
+let workerAbortController: AbortController | null = null;
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 async function getState(): Promise<WorkerState | null> {
@@ -39,9 +45,8 @@ async function clearState(): Promise<void> {
   await setConfig("BG_WORKER_STATE", "");
 }
 
-async function isCancelled(): Promise<boolean> {
-  const state = await getState();
-  return state?.cancelled === true;
+function isCancelled(): boolean {
+  return cancelFlag;
 }
 
 function isStale(state: WorkerState): boolean {
@@ -49,15 +54,13 @@ function isStale(state: WorkerState): boolean {
 }
 
 // ─── Worker: Refresh Cookies ────────────────────────────────────────────────
-//
-// Optimizations over previous version:
-//   - Batch size increased from 5 to 10 (faster processing)
-//   - Skip metadata re-extraction for cookies that already have country/plan
-//     (only validate the cookie is still alive)
-//   - More responsive cancellation checks
-//   - Reduced state save frequency (every 2 batches instead of every batch)
 
 async function runRefreshCookies() {
+  // Create AbortController for this worker run
+  const ac = new AbortController();
+  workerAbortController = ac;
+  cancelFlag = false;
+
   try {
     const cookies = await prisma.cookie.findMany({ where: { status: "ACTIVE" } });
 
@@ -93,14 +96,14 @@ async function runRefreshCookies() {
     const { checkCookie, getMetadata, extractCountryFromNetflixId } = await import("@/lib/netflix-checker");
     let alive = 0;
     let dead = 0;
-    let skipped = 0; // cookies that timed out or had connection errors (NOT marked dead)
+    let skipped = 0;
 
-    // Process in parallel batches of 20 for faster speed
     const BATCH_SIZE = 20;
+    let batchCount = 0;
 
     for (let i = 0; i < cookies.length; i += BATCH_SIZE) {
-      // Check cancellation before each batch
-      if (await isCancelled()) {
+      // Check cancellation — instant in-memory check
+      if (isCancelled()) {
         await saveState({
           task: "REFRESH_COOKIES",
           status: "CANCELLED",
@@ -120,6 +123,9 @@ async function runRefreshCookies() {
 
       const batchResults = await Promise.allSettled(
         batch.map(async (cookie) => {
+          // Check cancellation INSIDE each cookie handler
+          if (isCancelled()) return "cancelled";
+
           const dict = extractCookiesFromText(cookie.rawCookie);
 
           if (!dict) {
@@ -131,15 +137,15 @@ async function runRefreshCookies() {
           }
 
           try {
-            // Step 1: Validate cookie is still alive
-            const result = await checkCookie(dict);
+            // Validate cookie is still alive
+            const result = await checkCookie(dict, ac.signal);
+            if (isCancelled()) return "cancelled";
+
             if (!result.success) {
-              // KEY CHANGE: If the error is transient (timeout/connection), do NOT mark as DEAD
-              // Just skip it — it might work later
-              if (result.isTransient) {
-                return "skipped";
-              }
-              // Only mark as DEAD if Netflix explicitly rejected the cookie
+              // Transient errors (timeout, connection) — do NOT mark as DEAD
+              if (result.isTransient) return "skipped";
+
+              // Only DEAD if Netflix explicitly rejected it
               await prisma.cookie.update({
                 where: { id: cookie.id },
                 data: { status: "DEAD", lastError: result.error || "Cookie inválida", lastUsed: new Date() },
@@ -147,16 +153,20 @@ async function runRefreshCookies() {
               return "dead";
             }
 
-            // Step 2: Only extract metadata if cookie doesn't have country/plan yet
+            // Extract metadata only if missing
             let country: string | null = cookie.country;
             let plan: string | null = cookie.plan;
 
             if (!country || !plan) {
               try {
-                const metadata = await getMetadata(dict);
+                const metadata = await getMetadata(dict, ac.signal);
+                if (isCancelled()) return "cancelled";
                 if (metadata.country && !country) country = metadata.country;
                 if (metadata.plan && !plan) plan = metadata.plan;
-              } catch { /* metadata fail, cookie still alive */ }
+              } catch (err: any) {
+                if (err.name === "AbortError") return "cancelled";
+                // metadata fail, cookie still alive
+              }
             }
 
             // Fallback: extract country from NetflixId (fast, no HTTP)
@@ -176,8 +186,8 @@ async function runRefreshCookies() {
             });
             return "alive";
           } catch (err: any) {
-            // Connection errors or unexpected errors — do NOT mark as DEAD
-            // These are transient failures, the cookie might still be valid
+            if (err.name === "AbortError") return "cancelled";
+            // Transient failure — don't mark as DEAD
             return "skipped";
           }
         })
@@ -187,14 +197,32 @@ async function runRefreshCookies() {
         if (r.status === "fulfilled") {
           if (r.value === "alive") alive++;
           else if (r.value === "dead") dead++;
+          else if (r.value === "cancelled") { /* counted below */ }
           else skipped++;
         } else {
-          // Promise rejected — transient error, don't count as dead
           skipped++;
         }
       }
 
-      // Update progress after every batch
+      // If cancelled during batch, exit now
+      if (isCancelled()) {
+        await saveState({
+          task: "REFRESH_COOKIES",
+          status: "CANCELLED",
+          startedAt: (await getState())?.startedAt || Date.now(),
+          finishedAt: Date.now(),
+          total: cookies.length,
+          processed: alive + dead + skipped,
+          results: { alive, dead, skipped },
+          message: `Cancelado: ${alive} vivas, ${dead} muertas, ${skipped} saltadas`,
+          error: null,
+          cancelled: true,
+        });
+        return;
+      }
+
+      // Save progress every batch
+      batchCount++;
       const processed = Math.min(i + BATCH_SIZE, cookies.length);
       await saveState({
         task: "REFRESH_COOKIES",
@@ -223,6 +251,23 @@ async function runRefreshCookies() {
       cancelled: false,
     });
   } catch (err: any) {
+    // If cancelled, don't mark as FAILED
+    if (isCancelled()) {
+      const prev = await getState();
+      await saveState({
+        task: "REFRESH_COOKIES",
+        status: "CANCELLED",
+        startedAt: prev?.startedAt || Date.now(),
+        finishedAt: Date.now(),
+        total: prev?.total || 0,
+        processed: prev?.processed || 0,
+        results: prev?.results || {},
+        message: "Cancelado",
+        error: null,
+        cancelled: true,
+      });
+      return;
+    }
     const prev = await getState();
     await saveState({
       task: "REFRESH_COOKIES",
@@ -240,12 +285,15 @@ async function runRefreshCookies() {
 }
 
 // ─── Worker: Detect Countries ───────────────────────────────────────────────
-//
-// Optimizations:
-//   - Batch size increased from 8 to 15 (country detection is lightweight)
-//   - More responsive cancellation checks
+// Two-phase approach for maximum speed:
+//   Phase 1: Extract from NetflixId only (INSTANT — no HTTP requests)
+//   Phase 2: Only for cookies still without country, fetch metadata (slow HTTP)
 
 async function runDetectCountries() {
+  const ac = new AbortController();
+  workerAbortController = ac;
+  cancelFlag = false;
+
   try {
     const cookies = await prisma.cookie.findMany({
       where: { status: "ACTIVE", country: null },
@@ -282,14 +330,13 @@ async function runDetectCountries() {
 
     const { extractCookiesFromText, extractCountryFromNetflixId, getMetadata } = await import("@/lib/netflix-checker");
     let detected = 0;
-    let skipped = 0; // cookies where country couldn't be determined (NOT a failure)
+    let skipped = 0;
 
-    // Larger batch size for speed — 25 cookies at a time
-    const BATCH_SIZE = 25;
+    // ═══ PHASE 1: NetflixId extraction — INSTANT (no HTTP) ═══
+    const needMetadata: typeof cookies = [];
 
-    for (let i = 0; i < cookies.length; i += BATCH_SIZE) {
-      // Check cancellation
-      if (await isCancelled()) {
+    for (const cookie of cookies) {
+      if (isCancelled()) {
         await saveState({
           task: "DETECT_COUNTRIES",
           status: "CANCELLED",
@@ -298,43 +345,104 @@ async function runDetectCountries() {
           total: cookies.length,
           processed: detected + skipped,
           results: { detected, skipped },
-          message: `Cancelado: ${detected} países detectados de ${detected + skipped} procesadas`,
+          message: `Cancelado en Fase 1: ${detected} países detectados`,
           error: null,
           cancelled: true,
         });
         return;
       }
 
-      const batch = cookies.slice(i, i + BATCH_SIZE);
+      const dict = extractCookiesFromText(cookie.rawCookie);
+      if (!dict) { skipped++; continue; }
+
+      const country = extractCountryFromNetflixId(dict);
+      if (country) {
+        await prisma.cookie.update({
+          where: { id: cookie.id },
+          data: { country },
+        });
+        detected++;
+      } else {
+        // Queue for Phase 2
+        needMetadata.push(cookie);
+      }
+    }
+
+    // Save Phase 1 progress
+    const phase1Processed = detected + skipped;
+    await saveState({
+      task: "DETECT_COUNTRIES",
+      status: "RUNNING",
+      startedAt: (await getState())?.startedAt || Date.now(),
+      finishedAt: null,
+      total: cookies.length,
+      processed: phase1Processed,
+      results: { detected, skipped },
+      message: `Fase 1 lista: ${detected} por NetflixId. Fase 2: ${needMetadata.length} por metadata...`,
+      error: null,
+      cancelled: false,
+    });
+
+    // ═══ PHASE 2: Metadata extraction — HTTP requests (slower) ═══
+    if (needMetadata.length === 0) {
+      await saveState({
+        task: "DETECT_COUNTRIES",
+        status: "COMPLETED",
+        startedAt: (await getState())?.startedAt || Date.now(),
+        finishedAt: Date.now(),
+        total: cookies.length,
+        processed: cookies.length,
+        results: { detected, skipped },
+        message: `Completado: ${detected} países detectados (todos por NetflixId), ${skipped} sin detectar`,
+        error: null,
+        cancelled: false,
+      });
+      return;
+    }
+
+    const META_BATCH_SIZE = 15; // Smaller batch for HTTP requests
+    let metaBatchCount = 0;
+
+    for (let i = 0; i < needMetadata.length; i += META_BATCH_SIZE) {
+      if (isCancelled()) {
+        await saveState({
+          task: "DETECT_COUNTRIES",
+          status: "CANCELLED",
+          startedAt: (await getState())?.startedAt || Date.now(),
+          finishedAt: Date.now(),
+          total: cookies.length,
+          processed: phase1Processed + detected - (needMetadata.length > 0 ? needMetadata.length - i : 0),
+          results: { detected, skipped },
+          message: `Cancelado en Fase 2: ${detected} países detectados`,
+          error: null,
+          cancelled: true,
+        });
+        return;
+      }
+
+      const batch = needMetadata.slice(i, i + META_BATCH_SIZE);
 
       const batchResults = await Promise.allSettled(
         batch.map(async (cookie) => {
+          if (isCancelled()) return "cancelled";
+
           const dict = extractCookiesFromText(cookie.rawCookie);
           if (!dict) return "skipped";
 
           try {
-            // Step 1: Fast — extract from NetflixId (local, no HTTP)
-            let country: string | null = extractCountryFromNetflixId(dict);
+            const metadata = await getMetadata(dict, ac.signal);
+            if (isCancelled()) return "cancelled";
 
-            // Step 2: Slow — fetch metadata from Netflix if still unknown
-            if (!country) {
-              try {
-                const metadata = await getMetadata(dict);
-                if (metadata.country) country = metadata.country;
-              } catch { /* metadata fetch failed, skip silently */ }
-            }
-
-            if (country) {
+            if (metadata.country) {
               await prisma.cookie.update({
                 where: { id: cookie.id },
-                data: { country },
+                data: { country: metadata.country },
               });
               return "detected";
             }
-            // Country not found — but cookie is still alive, just skip it
             return "skipped";
-          } catch {
-            // Any error — cookie might be fine, just couldn't detect country
+          } catch (err: any) {
+            if (err.name === "AbortError") return "cancelled";
             return "skipped";
           }
         })
@@ -343,22 +451,43 @@ async function runDetectCountries() {
       for (const r of batchResults) {
         if (r.status === "fulfilled") {
           if (r.value === "detected") detected++;
+          else if (r.value === "cancelled") { /* skip */ }
           else skipped++;
         } else {
           skipped++;
         }
       }
 
-      const processed = Math.min(i + BATCH_SIZE, cookies.length);
+      // If cancelled during batch, exit now
+      if (isCancelled()) {
+        await saveState({
+          task: "DETECT_COUNTRIES",
+          status: "CANCELLED",
+          startedAt: (await getState())?.startedAt || Date.now(),
+          finishedAt: Date.now(),
+          total: cookies.length,
+          processed: phase1Processed + i + META_BATCH_SIZE,
+          results: { detected, skipped },
+          message: `Cancelado: ${detected} países detectados`,
+          error: null,
+          cancelled: true,
+        });
+        return;
+      }
+
+      // Save progress every batch
+      metaBatchCount++;
+      const metaProcessed = Math.min(i + META_BATCH_SIZE, needMetadata.length);
+      const totalProcessed = phase1Processed + metaProcessed;
       await saveState({
         task: "DETECT_COUNTRIES",
         status: "RUNNING",
         startedAt: (await getState())?.startedAt || Date.now(),
         finishedAt: null,
         total: cookies.length,
-        processed,
+        processed: totalProcessed,
         results: { detected, skipped },
-        message: `Procesando ${processed}/${cookies.length}... (${detected} detectados)`,
+        message: `Fase 2: ${metaProcessed}/${needMetadata.length} metadata... (${detected} detectados total)`,
         error: null,
         cancelled: false,
       });
@@ -377,6 +506,22 @@ async function runDetectCountries() {
       cancelled: false,
     });
   } catch (err: any) {
+    if (isCancelled()) {
+      const prev = await getState();
+      await saveState({
+        task: "DETECT_COUNTRIES",
+        status: "CANCELLED",
+        startedAt: prev?.startedAt || Date.now(),
+        finishedAt: Date.now(),
+        total: prev?.total || 0,
+        processed: prev?.processed || 0,
+        results: prev?.results || {},
+        message: "Cancelado",
+        error: null,
+        cancelled: true,
+      });
+      return;
+    }
     const prev = await getState();
     await saveState({
       task: "DETECT_COUNTRIES",
@@ -453,6 +598,7 @@ export async function POST(request: NextRequest) {
 }
 
 // ─── DELETE — cancel a running background task ──────────────────────────────
+// KEY FIX: Uses in-memory flag + AbortController for INSTANT cancellation
 
 export async function DELETE() {
   try {
@@ -466,7 +612,16 @@ export async function DELETE() {
       });
     }
 
-    // Mark as cancelled — the worker loop will pick this up
+    // 1. Set in-memory flag — worker checks this instantly, no DB read
+    cancelFlag = true;
+
+    // 2. Abort all in-flight HTTP requests immediately
+    if (workerAbortController) {
+      workerAbortController.abort();
+      workerAbortController = null;
+    }
+
+    // 3. Also mark in DB for persistence
     await saveState({
       ...current,
       cancelled: true,
@@ -475,7 +630,7 @@ export async function DELETE() {
 
     return NextResponse.json({
       success: true,
-      message: "Señal de cancelación enviada",
+      message: "Cancelación ejecutada",
     });
   } catch (err: any) {
     if (err.message === "UNAUTHORIZED") {

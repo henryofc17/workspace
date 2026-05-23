@@ -255,7 +255,8 @@ export function buildCookieString(
 
 /** Call Netflix GraphQL API to generate NFToken */
 export async function checkCookie(
-  cookieDict: Record<string, string>
+  cookieDict: Record<string, string>,
+  externalSignal?: AbortSignal
 ): Promise<NFTokenResult> {
   const netflixId = cookieDict["NetflixId"];
   const secureNetflixId = cookieDict["SecureNetflixId"];
@@ -287,6 +288,10 @@ export async function checkCookie(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
+    // If external signal aborts, also abort our controller
+    const onExternalAbort = () => controller.abort();
+    externalSignal?.addEventListener("abort", onExternalAbort, { once: true });
+
     const response = await fetch(NETFLIX_GRAPHQL_URL, {
       method: "POST",
       headers: {
@@ -303,6 +308,7 @@ export async function checkCookie(
     });
 
     clearTimeout(timeoutId);
+    externalSignal?.removeEventListener("abort", onExternalAbort);
 
     if (!response.ok) {
       return {
@@ -424,7 +430,8 @@ export function extractCountryFromNetflixId(cookieDict: Record<string, string>):
 
 /** Fetch Netflix membership page and extract metadata */
 export async function getMetadata(
-  cookieDict: Record<string, string>
+  cookieDict: Record<string, string>,
+  externalSignal?: AbortSignal
 ): Promise<NetflixMetadata> {
   const metadata: NetflixMetadata = {};
   const cookieString = buildCookieString(cookieDict, false);
@@ -432,6 +439,10 @@ export async function getMetadata(
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+
+    // If external signal aborts, also abort our controller
+    const onExternalAbort = () => controller.abort();
+    externalSignal?.addEventListener("abort", onExternalAbort, { once: true });
 
     const response = await fetch(NETFLIX_MEMBERSHIP_URL, {
       method: "GET",
@@ -450,6 +461,7 @@ export async function getMetadata(
     });
 
     clearTimeout(timeoutId);
+    externalSignal?.removeEventListener("abort", onExternalAbort);
 
     if (!response.ok) {
       return metadata;
