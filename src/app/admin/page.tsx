@@ -782,7 +782,7 @@ export default function AdminPage() {
       } catch {}
     };
     fetchState();
-    workerPollRef.current = setInterval(fetchState, 2000);
+    workerPollRef.current = setInterval(fetchState, 1500);
   }, [loadData]);
 
   // ── Cancel Background Worker ──

@@ -68,7 +68,7 @@ async function runRefreshCookies() {
       finishedAt: null,
       total: cookies.length,
       processed: 0,
-      results: { alive: 0, dead: 0 },
+      results: { alive: 0, dead: 0, skipped: 0 },
       message: `Procesando ${cookies.length} cookies...`,
       error: null,
       cancelled: false,
@@ -82,7 +82,7 @@ async function runRefreshCookies() {
         finishedAt: Date.now(),
         total: 0,
         processed: 0,
-        results: { alive: 0, dead: 0 },
+        results: { alive: 0, dead: 0, skipped: 0 },
         message: "No hay cookies activas para refrescar",
         error: null,
         cancelled: false,
@@ -93,9 +93,10 @@ async function runRefreshCookies() {
     const { checkCookie, getMetadata, extractCountryFromNetflixId } = await import("@/lib/netflix-checker");
     let alive = 0;
     let dead = 0;
+    let skipped = 0; // cookies that timed out or had connection errors (NOT marked dead)
 
-    // Process in parallel batches of 10 for faster speed
-    const BATCH_SIZE = 10;
+    // Process in parallel batches of 20 for faster speed
+    const BATCH_SIZE = 20;
 
     for (let i = 0; i < cookies.length; i += BATCH_SIZE) {
       // Check cancellation before each batch
@@ -106,9 +107,9 @@ async function runRefreshCookies() {
           startedAt: (await getState())?.startedAt || Date.now(),
           finishedAt: Date.now(),
           total: cookies.length,
-          processed: alive + dead,
-          results: { alive, dead },
-          message: `Cancelado: ${alive} vivas, ${dead} muertas (de ${alive + dead} procesadas)`,
+          processed: alive + dead + skipped,
+          results: { alive, dead, skipped },
+          message: `Cancelado: ${alive} vivas, ${dead} muertas, ${skipped} saltadas`,
           error: null,
           cancelled: true,
         });
@@ -133,6 +134,12 @@ async function runRefreshCookies() {
             // Step 1: Validate cookie is still alive
             const result = await checkCookie(dict);
             if (!result.success) {
+              // KEY CHANGE: If the error is transient (timeout/connection), do NOT mark as DEAD
+              // Just skip it — it might work later
+              if (result.isTransient) {
+                return "skipped";
+              }
+              // Only mark as DEAD if Netflix explicitly rejected the cookie
               await prisma.cookie.update({
                 where: { id: cookie.id },
                 data: { status: "DEAD", lastError: result.error || "Cookie inválida", lastUsed: new Date() },
@@ -141,8 +148,6 @@ async function runRefreshCookies() {
             }
 
             // Step 2: Only extract metadata if cookie doesn't have country/plan yet
-            // This is the key optimization — skip expensive metadata calls for cookies
-            // that already have their metadata populated
             let country: string | null = cookie.country;
             let plan: string | null = cookie.plan;
 
@@ -171,11 +176,9 @@ async function runRefreshCookies() {
             });
             return "alive";
           } catch (err: any) {
-            await prisma.cookie.update({
-              where: { id: cookie.id },
-              data: { status: "DEAD", lastError: err.message || "Error de conexión" },
-            });
-            return "dead";
+            // Connection errors or unexpected errors — do NOT mark as DEAD
+            // These are transient failures, the cookie might still be valid
+            return "skipped";
           }
         })
       );
@@ -183,9 +186,11 @@ async function runRefreshCookies() {
       for (const r of batchResults) {
         if (r.status === "fulfilled") {
           if (r.value === "alive") alive++;
-          else dead++;
+          else if (r.value === "dead") dead++;
+          else skipped++;
         } else {
-          dead++;
+          // Promise rejected — transient error, don't count as dead
+          skipped++;
         }
       }
 
@@ -198,8 +203,8 @@ async function runRefreshCookies() {
         finishedAt: null,
         total: cookies.length,
         processed,
-        results: { alive, dead },
-        message: `Procesando ${processed}/${cookies.length}...`,
+        results: { alive, dead, skipped },
+        message: `Procesando ${processed}/${cookies.length}... (${alive} vivas, ${dead} muertas, ${skipped} saltadas)`,
         error: null,
         cancelled: false,
       });
@@ -212,8 +217,8 @@ async function runRefreshCookies() {
       finishedAt: Date.now(),
       total: cookies.length,
       processed: cookies.length,
-      results: { alive, dead },
-      message: `Completado: ${alive} vivas, ${dead} muertas`,
+      results: { alive, dead, skipped },
+      message: `Completado: ${alive} vivas, ${dead} muertas, ${skipped} saltadas`,
       error: null,
       cancelled: false,
     });
@@ -253,7 +258,7 @@ async function runDetectCountries() {
       finishedAt: null,
       total: cookies.length,
       processed: 0,
-      results: { detected: 0, failed: 0 },
+      results: { detected: 0, skipped: 0 },
       message: `Detectando país en ${cookies.length} cookies...`,
       error: null,
       cancelled: false,
@@ -267,7 +272,7 @@ async function runDetectCountries() {
         finishedAt: Date.now(),
         total: 0,
         processed: 0,
-        results: { detected: 0, failed: 0 },
+        results: { detected: 0, skipped: 0 },
         message: "Todas las cookies activas ya tienen país",
         error: null,
         cancelled: false,
@@ -277,10 +282,10 @@ async function runDetectCountries() {
 
     const { extractCookiesFromText, extractCountryFromNetflixId, getMetadata } = await import("@/lib/netflix-checker");
     let detected = 0;
-    let failed = 0;
+    let skipped = 0; // cookies where country couldn't be determined (NOT a failure)
 
-    // Larger batch size — country detection is lightweight
-    const BATCH_SIZE = 15;
+    // Larger batch size for speed — 25 cookies at a time
+    const BATCH_SIZE = 25;
 
     for (let i = 0; i < cookies.length; i += BATCH_SIZE) {
       // Check cancellation
@@ -291,9 +296,9 @@ async function runDetectCountries() {
           startedAt: (await getState())?.startedAt || Date.now(),
           finishedAt: Date.now(),
           total: cookies.length,
-          processed: detected + failed,
-          results: { detected, failed },
-          message: `Cancelado: ${detected} países detectados de ${detected + failed} procesadas`,
+          processed: detected + skipped,
+          results: { detected, skipped },
+          message: `Cancelado: ${detected} países detectados de ${detected + skipped} procesadas`,
           error: null,
           cancelled: true,
         });
@@ -305,7 +310,7 @@ async function runDetectCountries() {
       const batchResults = await Promise.allSettled(
         batch.map(async (cookie) => {
           const dict = extractCookiesFromText(cookie.rawCookie);
-          if (!dict) return "failed";
+          if (!dict) return "skipped";
 
           try {
             // Step 1: Fast — extract from NetflixId (local, no HTTP)
@@ -316,7 +321,7 @@ async function runDetectCountries() {
               try {
                 const metadata = await getMetadata(dict);
                 if (metadata.country) country = metadata.country;
-              } catch { /* skip */ }
+              } catch { /* metadata fetch failed, skip silently */ }
             }
 
             if (country) {
@@ -326,9 +331,11 @@ async function runDetectCountries() {
               });
               return "detected";
             }
-            return "failed";
+            // Country not found — but cookie is still alive, just skip it
+            return "skipped";
           } catch {
-            return "failed";
+            // Any error — cookie might be fine, just couldn't detect country
+            return "skipped";
           }
         })
       );
@@ -336,9 +343,9 @@ async function runDetectCountries() {
       for (const r of batchResults) {
         if (r.status === "fulfilled") {
           if (r.value === "detected") detected++;
-          else failed++;
+          else skipped++;
         } else {
-          failed++;
+          skipped++;
         }
       }
 
@@ -350,8 +357,8 @@ async function runDetectCountries() {
         finishedAt: null,
         total: cookies.length,
         processed,
-        results: { detected, failed },
-        message: `Procesando ${processed}/${cookies.length}...`,
+        results: { detected, skipped },
+        message: `Procesando ${processed}/${cookies.length}... (${detected} detectados)`,
         error: null,
         cancelled: false,
       });
@@ -364,8 +371,8 @@ async function runDetectCountries() {
       finishedAt: Date.now(),
       total: cookies.length,
       processed: cookies.length,
-      results: { detected, failed },
-      message: `Completado: ${detected} países detectados de ${cookies.length}`,
+      results: { detected, skipped },
+      message: `Completado: ${detected} países detectados, ${skipped} sin detectar`,
       error: null,
       cancelled: false,
     });

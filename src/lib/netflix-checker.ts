@@ -7,6 +7,8 @@ export interface NFTokenResult {
   token?: string;
   link?: string;
   error?: string;
+  /** If true, the error is transient (timeout, connection) — cookie should NOT be marked DEAD */
+  isTransient?: boolean;
 }
 
 export interface NetflixMetadata {
@@ -45,7 +47,7 @@ const NETFLIX_MEMBERSHIP_URL = "https://www.netflix.com/account/membership";
 const NF_TOKEN_BASE = "https://netflix.com";
 // ================================
 
-const FETCH_TIMEOUT = 30000;
+const FETCH_TIMEOUT = 12000;
 
 const DROID_USER_AGENT =
   "com.netflix.mediaclient/63884 (Linux; U; Android 13; ro; M2007J3SG; Build/TQ1A.230205.001.A2; Cronet/143.0.7445.0)";
@@ -343,11 +345,12 @@ export async function checkCookie(
     };
   } catch (err: any) {
     if (err.name === "AbortError") {
-      return { success: false, error: "Timeout: Netflix no respondió a tiempo" };
+      return { success: false, error: "TIMEOUT", isTransient: true };
     }
     return {
       success: false,
-      error: `Error de conexión: ${err.message || "Desconocido"}`,
+      error: `CONNECTION_ERROR: ${err.message || "Desconocido"}`,
+      isTransient: true,
     };
   }
 }

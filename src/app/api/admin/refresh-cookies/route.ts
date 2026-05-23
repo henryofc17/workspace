@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
     const { getCountryName } = await import("@/lib/countries");
     let alive = 0;
     let dead = 0;
+    let skipped = 0; // transient errors (timeout/connection) — not marked dead
     const countriesSet = new Set<string>();
     const countriesList: Record<string, { code: string; name: string; count: number }> = {};
     let metadataErrors = 0;
@@ -47,6 +48,11 @@ export async function POST(request: NextRequest) {
         const result = await checkCookie(dict);
 
         if (!result.success) {
+          // If the error is transient (timeout/connection), do NOT mark as DEAD
+          if (result.isTransient) {
+            skipped++;
+            continue;
+          }
           await prisma.cookie.update({
             where: { id: cookie.id },
             data: {
@@ -116,11 +122,9 @@ export async function POST(request: NextRequest) {
         });
         alive++;
       } catch (err: any) {
-        await prisma.cookie.update({
-          where: { id: cookie.id },
-          data: { status: "DEAD", lastError: err.message || "Error de conexión" },
-        });
-        dead++;
+        // Connection errors or unexpected errors — do NOT mark as DEAD
+        // These are transient failures, the cookie might still be valid
+        skipped++;
       }
     }
 
@@ -129,11 +133,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Validación completa: ${alive} vivas, ${dead} muertas, ${countries.length} región(es) detectada(s)`,
+      message: `Validación completa: ${alive} vivas, ${dead} muertas, ${skipped} saltadas, ${countries.length} región(es) detectada(s)`,
       results: {
         checked: cookies.length,
         alive,
         dead,
+        skipped,
         countriesFound: countries.length,
         metadataErrors,
       },

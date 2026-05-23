@@ -19,7 +19,7 @@ export async function POST() {
       return NextResponse.json({
         success: true,
         message: "Todas las cookies activas ya tienen país detectado",
-        results: { processed: 0, detected: 0, failed: 0 },
+        results: { processed: 0, detected: 0, skipped: 0 },
       });
     }
 
@@ -27,13 +27,13 @@ export async function POST() {
     const { getCountryName } = await import("@/lib/countries");
 
     let detected = 0;
-    let failed = 0;
+    let skipped = 0; // cookies where country couldn't be determined (NOT a failure)
     const countries: Record<string, { code: string; name: string; count: number }> = {};
 
     for (const cookie of cookies) {
       const dict = extractCookiesFromText(cookie.rawCookie);
       if (!dict) {
-        failed++;
+        skipped++;
         continue;
       }
 
@@ -71,9 +71,13 @@ export async function POST() {
               count: 1,
             };
           }
+        } else {
+          // Country not found — cookie is still alive, just skip it
+          skipped++;
         }
       } catch {
-        failed++;
+        // Any error — cookie might be fine, just couldn't detect country
+        skipped++;
       }
     }
 
@@ -87,8 +91,7 @@ export async function POST() {
       results: {
         processed: cookies.length,
         detected,
-        failed,
-        skipped: cookies.length - detected - failed,
+        skipped,
       },
       countries: countriesList,
     });
