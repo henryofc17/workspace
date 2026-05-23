@@ -27,9 +27,10 @@ interface SiteConfigForOnboarding {
 interface OnboardingGuideProps {
   onComplete: () => void;
   siteConfig: SiteConfigForOnboarding;
+  username: string;
 }
 
-const OnboardingGuide = React.memo(function OnboardingGuide({ onComplete, siteConfig }: OnboardingGuideProps) {
+const OnboardingGuide = React.memo(function OnboardingGuide({ onComplete, siteConfig, username }: OnboardingGuideProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [direction, setDirection] = useState(0);
   const [finishing, setFinishing] = useState(false);
@@ -83,8 +84,9 @@ const OnboardingGuide = React.memo(function OnboardingGuide({ onComplete, siteCo
     } catch {
       // silent - still mark locally
     }
-    localStorage.setItem("hjflix_onboarding_done", "true");
-  }, []);
+    // Per-user localStorage key so different users on same browser don't conflict
+    localStorage.setItem(`hjflix_onboarding_${username}`, "true");
+  }, [username]);
 
   const handleSkip = useCallback(async () => {
     setFinishing(true);

@@ -335,9 +335,9 @@ export default function Home() {
           loadRegion();
           loadReferral();
           setLoading(false);
-          // Show onboarding for new users (server-side check + localStorage fallback)
+          // Show onboarding for new users (server-side check + per-user localStorage fallback)
           const serverSeen = data.user.hasSeenOnboarding === true;
-          const localSeen = typeof window !== "undefined" && localStorage.getItem("hjflix_onboarding_done") === "true";
+          const localSeen = typeof window !== "undefined" && localStorage.getItem(`hjflix_onboarding_${data.user.username}`) === "true";
           if (!serverSeen && !localSeen) {
             setShowOnboarding(true);
           }
@@ -637,7 +637,7 @@ export default function Home() {
     <div className="min-h-screen flex flex-col bg-[#050508]">
       {/* Onboarding Guide */}
       {showOnboarding && (
-        <OnboardingGuide onComplete={() => setShowOnboarding(false)} siteConfig={siteConfig} />
+        <OnboardingGuide onComplete={() => setShowOnboarding(false)} siteConfig={siteConfig} username={username} />
       )}
 
       {/* ─── Animated Gradient Header Bar ─── */}

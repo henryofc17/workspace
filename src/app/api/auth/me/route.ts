@@ -12,17 +12,37 @@ export async function GET() {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.userId },
-      select: {
-        id: true,
-        username: true,
-        role: true,
-        credits: true,
-        createdAt: true,
-        hasSeenOnboarding: true,
-      },
-    });
+    // Try to get hasSeenOnboarding — if the column doesn't exist yet in DB,
+    // fall back gracefully
+    let user;
+    try {
+      user = await prisma.user.findUnique({
+        where: { id: session.userId },
+        select: {
+          id: true,
+          username: true,
+          role: true,
+          credits: true,
+          createdAt: true,
+          hasSeenOnboarding: true,
+        },
+      });
+    } catch {
+      // Column might not exist yet — fallback without it
+      user = await prisma.user.findUnique({
+        where: { id: session.userId },
+        select: {
+          id: true,
+          username: true,
+          role: true,
+          credits: true,
+          createdAt: true,
+        },
+      });
+      if (user) {
+        (user as any).hasSeenOnboarding = false;
+      }
+    }
 
     if (!user) {
       return NextResponse.json(
