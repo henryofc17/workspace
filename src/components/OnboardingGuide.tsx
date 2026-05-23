@@ -8,77 +8,102 @@ import {
   Search,
   Zap,
   Gift,
-  Headphones,
   ChevronRight,
   ChevronLeft,
   X,
 } from "lucide-react";
 
-interface OnboardingStep {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  color: string;
-  bgColor: string;
+interface SiteConfigForOnboarding {
+  GENERATE_COST: number;
+  COPY_COST: number;
+  TV_ACTIVATE_COST: number;
+  REGION_COST: number;
+  CHECKER_DAILY_LIMIT: number;
+  CHECKER_RESET_COST: number;
+  REFERRER_CREDIT: number;
+  REFERRED_CREDIT: number;
 }
-
-const STEPS: OnboardingStep[] = [
-  {
-    icon: Sparkles,
-    title: "¡Bienvenido!",
-    description:
-      "Te damos la bienvenida a Netflix Cookies Vip. Aquí puedes verificar, generar y administrar cookies de Netflix de forma rápida y segura. Exploremos juntos la plataforma.",
-    color: "text-[#E50914]",
-    bgColor: "from-[#E50914]/20 to-[#E50914]/5",
-  },
-  {
-    icon: Coins,
-    title: "Créditos",
-    description:
-      "Los créditos son la moneda de la plataforma. Cada acción avanzada consume créditos: generar tokens, copiar cookies, activar TV y cambiar región. Puedes obtener más créditos canjeando Gift Keys o contactando al administrador.",
-    color: "text-amber-400",
-    bgColor: "from-amber-500/20 to-amber-500/5",
-  },
-  {
-    icon: Search,
-    title: "Checker",
-    description:
-      "El Checker es gratuito. Puedes verificar hasta 10 cookies diariamente sin costo. Si necesitas más verificaciones, puedes reiniciar el contador con créditos. Solo pega tu cookie y presiona verificar.",
-    color: "text-sky-400",
-    bgColor: "from-sky-500/20 to-sky-500/5",
-  },
-  {
-    icon: Zap,
-    title: "Generar Token & Cookie",
-    description:
-      "Genera tokens de acceso o copia cookies completas directamente. Generar un token cuesta 1 crédito, copiar una cookie cuesta 3 créditos. También puedes activar TV (5 créditos) y cambiar la región (3 créditos).",
-    color: "text-emerald-400",
-    bgColor: "from-emerald-500/20 to-emerald-500/5",
-  },
-  {
-    icon: Gift,
-    title: "Gift Keys & Soporte",
-    description:
-      "¿Tienes un código HJFLIX-XXXXX? Canjéalo en el dashboard para obtener créditos gratis. Si necesitas ayuda o quieres comprar más créditos, contacta al administrador por WhatsApp o Telegram. ¡Estamos para ayudarte!",
-    color: "text-teal-400",
-    bgColor: "from-teal-500/20 to-teal-500/5",
-  },
-];
 
 interface OnboardingGuideProps {
   onComplete: () => void;
+  siteConfig: SiteConfigForOnboarding;
 }
 
-export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
+const OnboardingGuide = React.memo(function OnboardingGuide({ onComplete, siteConfig }: OnboardingGuideProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [direction, setDirection] = useState(0);
+  const [finishing, setFinishing] = useState(false);
+
+  const STEPS = [
+    {
+      icon: Sparkles,
+      title: "Bienvenido a HFLIX",
+      description:
+        "Te damos la bienvenida a HFLIX. Aqui puedes verificar, generar y administrar cookies de Netflix de forma rapida y segura. Exploremos juntos la plataforma.",
+      color: "text-[#E50914]",
+      bgColor: "from-[#E50914]/20 to-[#E50914]/5",
+    },
+    {
+      icon: Coins,
+      title: "Creditos",
+      description:
+        `Los creditos son la moneda de la plataforma. Cada accion consume creditos: generar tokens (${siteConfig.GENERATE_COST} credito${siteConfig.GENERATE_COST !== 1 ? "s" : ""}), copiar cookies (${siteConfig.COPY_COST} creditos), activar TV (${siteConfig.TV_ACTIVATE_COST} creditos) y cambiar region (${siteConfig.REGION_COST} creditos). Puedes obtener mas creditos canjeando Gift Keys o contactando al administrador.`,
+      color: "text-amber-400",
+      bgColor: "from-amber-500/20 to-amber-500/5",
+    },
+    {
+      icon: Search,
+      title: "Checker",
+      description:
+        `El Checker es gratuito. Puedes verificar hasta ${siteConfig.CHECKER_DAILY_LIMIT} cookies diariamente sin costo. Si necesitas mas verificaciones, puedes reiniciar el contador con ${siteConfig.CHECKER_RESET_COST} creditos. Solo pega tu cookie y presiona verificar.`,
+      color: "text-sky-400",
+      bgColor: "from-sky-500/20 to-sky-500/5",
+    },
+    {
+      icon: Zap,
+      title: "Generar Token & Cookie",
+      description:
+        `Genera tokens de acceso o copia cookies completas directamente. Generar un token cuesta ${siteConfig.GENERATE_COST} credito${siteConfig.GENERATE_COST !== 1 ? "s" : ""}, copiar una cookie cuesta ${siteConfig.COPY_COST} creditos. Tambien puedes activar TV (${siteConfig.TV_ACTIVATE_COST} creditos) y cambiar la region (${siteConfig.REGION_COST} creditos).`,
+      color: "text-emerald-400",
+      bgColor: "from-emerald-500/20 to-emerald-500/5",
+    },
+    {
+      icon: Gift,
+      title: "Gift Keys, Referidos & Soporte",
+      description:
+        `Tienes un codigo HJFLIX-XXXXX? Canjealo para obtener creditos gratis. Tambien puedes referir amigos: por cada referido ganas ${siteConfig.REFERRER_CREDIT} creditos y tu amigo recibe ${siteConfig.REFERRED_CREDIT} creditos al usar tu codigo. Si necesitas ayuda, contacta al administrador.`,
+      color: "text-teal-400",
+      bgColor: "from-teal-500/20 to-teal-500/5",
+    },
+  ];
+
+  const markSeen = useCallback(async () => {
+    try {
+      await fetch("/api/user/onboarding", { method: "POST" });
+    } catch {
+      // silent - still mark locally
+    }
+    localStorage.setItem("hjflix_onboarding_done", "true");
+  }, []);
+
+  const handleSkip = useCallback(async () => {
+    setFinishing(true);
+    await markSeen();
+    onComplete();
+  }, [onComplete, markSeen]);
+
+  const handleFinish = useCallback(async () => {
+    setFinishing(true);
+    await markSeen();
+    onComplete();
+  }, [onComplete, markSeen]);
 
   const handleNext = useCallback(() => {
     if (currentStep < STEPS.length - 1) {
       setDirection(1);
       setCurrentStep((s) => s + 1);
     }
-  }, [currentStep]);
+  }, [currentStep, STEPS.length]);
 
   const handlePrev = useCallback(() => {
     if (currentStep > 0) {
@@ -86,16 +111,6 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
       setCurrentStep((s) => s - 1);
     }
   }, [currentStep]);
-
-  const handleSkip = useCallback(() => {
-    localStorage.setItem("hjflix_onboarding_done", "true");
-    onComplete();
-  }, [onComplete]);
-
-  const handleFinish = useCallback(() => {
-    localStorage.setItem("hjflix_onboarding_done", "true");
-    onComplete();
-  }, [onComplete]);
 
   const step = STEPS[currentStep];
   const Icon = step.icon;
@@ -128,7 +143,8 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
         {/* Skip button */}
         <button
           onClick={handleSkip}
-          className="absolute top-4 right-4 z-20 h-8 w-8 rounded-full bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-white/40 hover:text-white/70 hover:bg-white/[0.1] transition-all"
+          disabled={finishing}
+          className="absolute top-4 right-4 z-20 h-8 w-8 rounded-full bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-white/40 hover:text-white/70 hover:bg-white/[0.1] transition-all disabled:opacity-50"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -137,7 +153,7 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
         <div className="h-1 w-full bg-gradient-to-r from-[#E50914] via-purple-500 to-[#E50914] bg-[length:200%_100%] animate-[gradient-shift_3s_ease_infinite]" />
 
         {/* Step content */}
-        <div className="relative px-8 pt-10 pb-6 overflow-hidden" style={{ minHeight: 260 }}>
+        <div className="relative px-8 pt-10 pb-6 overflow-hidden" style={{ minHeight: 280 }}>
           <AnimatePresence mode="wait" custom={direction}>
             <motion.div
               key={currentStep}
@@ -215,10 +231,11 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={handleFinish}
-              className="flex items-center gap-1.5 px-6 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-[#E50914] to-[#B2070F] text-white shadow-lg shadow-[#E50914]/20 hover:shadow-[#E50914]/30 transition-all duration-300"
+              disabled={finishing}
+              className="flex items-center gap-1.5 px-6 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-[#E50914] to-[#B2070F] text-white shadow-lg shadow-[#E50914]/20 hover:shadow-[#E50914]/30 transition-all duration-300 disabled:opacity-50"
             >
-              Comenzar
-              <Sparkles className="h-4 w-4" />
+              {finishing ? "Guardando..." : "Comenzar"}
+              {!finishing && <Sparkles className="h-4 w-4" />}
             </motion.button>
           ) : (
             <motion.button
@@ -238,13 +255,16 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
           <div className="text-center pb-4">
             <button
               onClick={handleSkip}
-              className="text-[11px] text-white/20 hover:text-white/40 transition-colors"
+              disabled={finishing}
+              className="text-[11px] text-white/20 hover:text-white/40 transition-colors disabled:opacity-50"
             >
-              Omitir guía
+              Omitir guia
             </button>
           </div>
         )}
       </motion.div>
     </div>
   );
-}
+});
+
+export default OnboardingGuide;

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function POST() {
   try {
     const session = await getSession();
     if (!session) {
@@ -12,26 +12,12 @@ export async function GET() {
       );
     }
 
-    const user = await prisma.user.findUnique({
+    await prisma.user.update({
       where: { id: session.userId },
-      select: {
-        id: true,
-        username: true,
-        role: true,
-        credits: true,
-        createdAt: true,
-        hasSeenOnboarding: true,
-      },
+      data: { hasSeenOnboarding: true },
     });
 
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: "Usuario no encontrado" },
-        { status: 401 }
-      );
-    }
-
-    return NextResponse.json({ success: true, user });
+    return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json(
       { success: false, error: "Error del servidor" },

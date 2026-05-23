@@ -335,8 +335,10 @@ export default function Home() {
           loadRegion();
           loadReferral();
           setLoading(false);
-          // Show onboarding for new users
-          if (typeof window !== "undefined" && !localStorage.getItem("hjflix_onboarding_done")) {
+          // Show onboarding for new users (server-side check + localStorage fallback)
+          const serverSeen = data.user.hasSeenOnboarding === true;
+          const localSeen = typeof window !== "undefined" && localStorage.getItem("hjflix_onboarding_done") === "true";
+          if (!serverSeen && !localSeen) {
             setShowOnboarding(true);
           }
         }
@@ -635,7 +637,7 @@ export default function Home() {
     <div className="min-h-screen flex flex-col bg-[#050508]">
       {/* Onboarding Guide */}
       {showOnboarding && (
-        <OnboardingGuide onComplete={() => setShowOnboarding(false)} />
+        <OnboardingGuide onComplete={() => setShowOnboarding(false)} siteConfig={siteConfig} />
       )}
 
       {/* ─── Animated Gradient Header Bar ─── */}

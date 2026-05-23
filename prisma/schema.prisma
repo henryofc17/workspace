@@ -20,9 +20,10 @@ model User {
   region       String?  // ISO country code (e.g., PE, MX)
   sellerId     String?  // ID of the seller who created this user
   referralCode String?  @unique // e.g. HF-A3K9M
-  referredBy   String?  // userId of the user who referred this user
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  referredBy      String?  // userId of the user who referred this user
+  hasSeenOnboarding Boolean @default(false) // tutorial de bienvenida
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   transactions        Transaction[]
   createdKeys         GiftKey[]   @relation("CreatedKeys")
