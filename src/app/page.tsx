@@ -132,7 +132,7 @@ export default function Home() {
 
   // Navigation state
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [activeView, setActiveView] = useState<"dashboard" | "checker" | "generate" | "copy" | "tv" | "region" | "password" | "referral">("dashboard");
+  const [activeView, setActiveView] = useState<"dashboard" | "checker" | "generate" | "copy" | "tv" | "region" | "password" | "referral" | "redeem" | "buy">("dashboard");
 
   // Checker state
   const [cookieText, setCookieText] = useState("");
@@ -807,7 +807,75 @@ export default function Home() {
             ═══════════════════════════════════════════════════════════════════ */}
         {activeView === "dashboard" && (
           <>
-            {/* ═══ Quick Actions ═══ */}
+            {/* ═══ Combined Welcome + Credits Card ═══ */}
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
+              <div className="absolute inset-0 bg-gradient-to-br from-[#E50914]/5 via-transparent to-purple-950/5" />
+              <div className="absolute top-0 right-0 w-40 h-40 bg-[#E50914]/5 rounded-full blur-3xl" />
+              <div className="absolute bottom-0 left-0 w-32 h-32 bg-amber-500/5 rounded-full blur-3xl" />
+              <CardContent className="relative p-5">
+                {/* Welcome Row */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-[#E50914]/20 to-purple-500/10 border border-[#E50914]/20 flex items-center justify-center">
+                      <User className="h-5 w-5 text-[#E50914]" />
+                    </div>
+                    <div>
+                      <p className="text-white/30 text-[10px] uppercase tracking-widest">Bienvenido de vuelta</p>
+                      <h2 className="text-white/90 text-lg font-bold tracking-tight">
+                        <span className="bg-gradient-to-r from-[#E50914] via-purple-400 to-[#3B82F6] bg-clip-text text-transparent">{username}</span>
+                      </h2>
+                    </div>
+                  </div>
+                  {/* Credits Badge */}
+                  <div className="flex items-center gap-2.5 bg-gradient-to-br from-amber-950/30 to-yellow-950/10 border border-amber-500/15 rounded-2xl px-4 py-2.5 shadow-[0_0_20px_rgba(251,191,36,0.08)]">
+                    <div className="relative">
+                      <Coins className="h-5 w-5 text-amber-400" />
+                      <div className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-400 animate-pulse shadow-[0_0_6px_rgba(251,191,36,0.6)]" />
+                    </div>
+                    <div className="text-right">
+                      <p className="text-amber-300 font-bold text-xl tabular-nums tracking-tight leading-none">{credits}</p>
+                      <p className="text-white/20 text-[8px] uppercase tracking-widest mt-0.5">Créditos</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Gradient Divider */}
+                <div className="relative h-px w-full mb-4">
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" />
+                </div>
+
+                {/* Price List */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
+                    <span className="text-white/35 text-xs flex-1">Token</span>
+                    <span className="text-white/60 text-xs font-semibold">{siteConfig.GENERATE_COST} crédito{siteConfig.GENERATE_COST !== 1 ? "s" : ""}</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-1.5 w-1.5 rounded-full bg-violet-400 shadow-[0_0_6px_rgba(167,139,250,0.5)]" />
+                    <span className="text-white/35 text-xs flex-1">Cookie</span>
+                    <span className="text-white/60 text-xs font-semibold">{siteConfig.COPY_COST} crédito{siteConfig.COPY_COST !== 1 ? "s" : ""}</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.5)]" />
+                    <span className="text-white/35 text-xs flex-1">Checker</span>
+                    <span className="text-white/60 text-xs font-semibold">{siteConfig.CHECKER_DAILY_LIMIT}/día</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-1.5 w-1.5 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(251,113,133,0.5)]" />
+                    <span className="text-white/35 text-xs flex-1">Activar TV</span>
+                    <span className="text-white/60 text-xs font-semibold">{siteConfig.TV_ACTIVATE_COST} crédito{siteConfig.TV_ACTIVATE_COST !== 1 ? "s" : ""}</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.5)]" />
+                    <span className="text-white/35 text-xs flex-1">Región</span>
+                    <span className="text-white/60 text-xs font-semibold">{siteConfig.REGION_COST} crédito{siteConfig.REGION_COST !== 1 ? "s" : ""}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </div>
+
+            {/* ═══ 4 Quick Action Buttons ═══ */}
             <div className="grid grid-cols-2 gap-3">
               {/* Referidos */}
               <button
@@ -825,11 +893,7 @@ export default function Home() {
               </button>
               {/* Canjear Key */}
               <button
-                onClick={() => {
-                  const keyInput = document.getElementById("gift-key-input");
-                  if (keyInput) keyInput.focus();
-                  else setActiveView("dashboard");
-                }}
+                onClick={() => setActiveView("redeem")}
                 className="group relative flex items-center gap-3 p-4 rounded-2xl bg-[#0a0a10]/60 border border-white/[0.06] hover:border-teal-500/20 transition-all duration-500 overflow-hidden"
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-teal-500/[0.03] to-emerald-500/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -843,10 +907,7 @@ export default function Home() {
               </button>
               {/* Comprar Créditos */}
               <button
-                onClick={() => {
-                  const buySection = document.getElementById("buy-credits-section");
-                  if (buySection) buySection.scrollIntoView({ behavior: "smooth", block: "center" });
-                }}
+                onClick={() => setActiveView("buy")}
                 className="group relative flex items-center gap-3 p-4 rounded-2xl bg-[#0a0a10]/60 border border-white/[0.06] hover:border-emerald-500/20 transition-all duration-500 overflow-hidden"
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.03] to-sky-500/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -861,163 +922,17 @@ export default function Home() {
               {/* Cambiar Contraseña */}
               <button
                 onClick={() => setActiveView("password")}
-                className="group relative flex items-center gap-3 p-4 rounded-2xl bg-[#0a0a10]/60 border border-white/[0.06] hover:border-rose-500/20 transition-all duration-500 overflow-hidden"
+                className="group relative flex items-center gap-3 p-4 rounded-2xl bg-[#0a0a10]/60 border border-white/[0.06] hover:border-sky-500/20 transition-all duration-500 overflow-hidden"
               >
-                <div className="absolute inset-0 bg-gradient-to-br from-rose-500/[0.03] to-pink-500/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-rose-500/15 to-pink-500/10 border border-rose-500/15 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-300">
-                  <Shield className="h-4.5 w-4.5 text-rose-400" />
+                <div className="absolute inset-0 bg-gradient-to-br from-sky-500/[0.03] to-indigo-500/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-sky-500/15 to-indigo-500/10 border border-sky-500/15 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-300">
+                  <Shield className="h-4.5 w-4.5 text-sky-400" />
                 </div>
                 <div className="relative text-left">
-                  <p className="text-white/80 text-xs font-semibold group-hover:text-rose-300 transition-colors">Contraseña</p>
+                  <p className="text-white/80 text-xs font-semibold group-hover:text-sky-300 transition-colors">Contraseña</p>
                   <p className="text-white/20 text-[10px]">Cambiar clave</p>
                 </div>
               </button>
-            </div>
-
-            {/* ═══ Welcome Greeting ═══ */}
-            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
-              <div className="absolute inset-0 bg-gradient-to-br from-[#E50914]/5 via-transparent to-purple-950/5" />
-              <div className="absolute top-0 right-0 w-32 h-32 bg-[#E50914]/5 rounded-full blur-3xl" />
-              <CardContent className="relative p-5">
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-[#E50914]/20 to-purple-500/10 border border-[#E50914]/20 flex items-center justify-center">
-                    <User className="h-5 w-5 text-[#E50914]" />
-                  </div>
-                  <div>
-                    <p className="text-white/30 text-[10px] uppercase tracking-widest">Bienvenido de vuelta</p>
-                    <h2 className="text-white/90 text-xl font-bold tracking-tight">
-                      Hola, <span className="bg-gradient-to-r from-[#E50914] via-purple-400 to-[#3B82F6] bg-clip-text text-transparent">{username}</span>
-                    </h2>
-                  </div>
-                </div>
-              </CardContent>
-            </div>
-
-            {/* ═══ Premium Credit Banner ═══ */}
-            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
-              <div className="absolute inset-0 bg-gradient-to-br from-amber-950/10 via-transparent to-orange-950/5" />
-              <div className="absolute top-0 right-0 w-40 h-40 bg-amber-500/5 rounded-full blur-3xl" />
-              <CardContent className="relative p-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="relative">
-                      <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-yellow-600/10 border border-amber-500/20 flex items-center justify-center">
-                        <Coins className="h-5 w-5 text-amber-400" />
-                      </div>
-                      <div className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-amber-400 animate-pulse shadow-[0_0_8px_rgba(251,191,36,0.6)]" />
-                    </div>
-                    <div>
-                      <p className="text-amber-300 font-bold text-2xl tabular-nums tracking-tight animate-pulse-slow">{credits}</p>
-                      <p className="text-white/25 text-[10px] uppercase tracking-widest">Créditos disponibles</p>
-                    </div>
-                  </div>
-                  <div className="text-right space-y-2">
-                    <div className="flex items-center gap-2 justify-end">
-                      <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
-                      <span className="text-white/40 text-[11px]">Token: <span className="text-white/70 font-medium">{siteConfig.GENERATE_COST} crédito{siteConfig.GENERATE_COST !== 1 ? "s" : ""}</span></span>
-                    </div>
-                    <div className="flex items-center gap-2 justify-end">
-                      <div className="h-1.5 w-1.5 rounded-full bg-violet-400 shadow-[0_0_6px_rgba(167,139,250,0.5)]" />
-                      <span className="text-white/40 text-[11px]">Cookie: <span className="text-white/70 font-medium">{siteConfig.COPY_COST} crédito{siteConfig.COPY_COST !== 1 ? "s" : ""}</span></span>
-                    </div>
-                    <div className="flex items-center gap-2 justify-end">
-                      <div className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.5)]" />
-                      <span className="text-white/40 text-[11px]">Checker: <span className="text-white/70 font-medium">{siteConfig.CHECKER_DAILY_LIMIT}/día</span></span>
-                    </div>
-                    <div className="flex items-center gap-2 justify-end">
-                      <div className="h-1.5 w-1.5 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(251,113,133,0.5)]" />
-                      <span className="text-white/40 text-[11px]">Activar TV: <span className="text-white/70 font-medium">{siteConfig.TV_ACTIVATE_COST} crédito{siteConfig.TV_ACTIVATE_COST !== 1 ? "s" : ""}</span></span>
-                    </div>
-                    <div className="flex items-center gap-2 justify-end">
-                      <div className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.5)]" />
-                      <span className="text-white/40 text-[11px]">Región: <span className="text-white/70 font-medium">{siteConfig.REGION_COST} crédito{siteConfig.REGION_COST !== 1 ? "s" : ""}</span></span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </div>
-
-            {/* ═══ Gradient Section Divider ═══ */}
-            <div className="relative h-px w-full">
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#E50914]/30 to-transparent" />
-            </div>
-
-            {/* ═══ Gift Key Redemption Card ═══ */}
-            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
-              <div className="absolute inset-0 bg-gradient-to-br from-teal-950/10 via-transparent to-emerald-950/5" />
-              <div className="absolute -top-16 -left-16 w-32 h-32 bg-teal-500/5 rounded-full blur-3xl" />
-              <CardHeader className="pb-3 px-5 pt-5 relative">
-                <CardTitle className="text-teal-300 text-sm flex items-center gap-2.5">
-                  <div className="h-7 w-7 rounded-lg bg-teal-500/10 border border-teal-500/20 flex items-center justify-center">
-                    <KeyRound className="h-3.5 w-3.5 text-teal-400" />
-                  </div>
-                  Canjear Gift Key
-                </CardTitle>
-                <CardDescription className="text-white/25 text-xs ml-[38px]">
-                  Ingresa tu código <span className="text-white/60 font-semibold">HJFLIX-XXXXX</span> para obtener créditos.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="px-5 pb-5 relative">
-                <div className="flex gap-2">
-                  <Input
-                    id="gift-key-input"
-                    value={giftKeyCode}
-                    onChange={(e) => setGiftKeyCode(e.target.value.toUpperCase())}
-                    placeholder="HJFLIX-XXXXX"
-                    className="flex-1 bg-[#050508]/80 border-white/[0.06] text-white/80 placeholder:text-white/15 uppercase font-mono rounded-xl focus:border-teal-500/30 focus:ring-1 focus:ring-teal-500/10 transition-all duration-300 text-sm"
-                  />
-                  <Button
-                    onClick={handleRedeemGiftKey}
-                    disabled={redeemingKey || !giftKeyCode.trim()}
-                    className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-medium h-10 px-5 disabled:opacity-40 shrink-0 rounded-xl shadow-[0_0_15px_rgba(20,184,166,0.15)] transition-all duration-300"
-                  >
-                    {redeemingKey ? <Loader2 className="h-4 w-4 animate-spin" /> : "Canjear Key"}
-                  </Button>
-                </div>
-              </CardContent>
-            </div>
-
-            {/* ═══ Buy Credits Notice ═══ */}
-            <div id="buy-credits-section" className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/10 via-transparent to-sky-950/5" />
-              <div className="absolute -top-16 -left-16 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl" />
-              <CardContent className="relative p-5 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500/15 to-sky-500/10 border border-emerald-500/20 flex items-center justify-center">
-                      <Coins className="h-4.5 w-4.5 text-emerald-400" />
-                    </div>
-                    <div className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
-                  </div>
-                  <div>
-                    <p className="text-white/80 text-sm font-semibold">¿Necesitas comprar  créditos?</p>
-                    <p className="text-white/25 text-[11px]">Contacta al administrador para adquirir paquetes</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <a
-                    href="https://wa.me/524437863111"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#25D366]/5 hover:bg-[#25D366]/12 border border-[#25D366]/15 hover:border-[#25D366]/25 transition-all duration-300 text-[#25D366] text-xs font-semibold shadow-[0_0_15px_rgba(37,211,102,0.05)] hover:shadow-[0_0_25px_rgba(37,211,102,0.12)] group"
-                  >
-                    <svg className="h-4 w-4 group-hover:scale-110 transition-transform duration-300" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                    WhatsApp
-                  </a>
-                  <a
-                    href="https://t.me/HcheJotaA_Bot"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#229ED9]/5 hover:bg-[#229ED9]/12 border border-[#229ED9]/15 hover:border-[#229ED9]/25 transition-all duration-300 text-[#229ED9] text-xs font-semibold shadow-[0_0_15px_rgba(34,158,217,0.05)] hover:shadow-[0_0_25px_rgba(34,158,217,0.12)] group"
-                  >
-                    <svg className="h-4 w-4 group-hover:scale-110 transition-transform duration-300" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
-                    Telegram
-                  </a>
-                </div>
-                <p className="text-white/15 text-[10px] text-center">
-                  Respuesta rápida. Paquetes a tu medida.
-                </p>
-              </CardContent>
             </div>
 
             {/* ═══ Transaction History ═══ */}
@@ -1091,30 +1006,6 @@ export default function Home() {
               </CardContent>
             </div>
 
-            {/* ═══ Change Password (Button to open modal) ═══ */}
-            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
-              <div className="absolute inset-0 bg-gradient-to-br from-sky-950/10 via-transparent to-indigo-950/5" />
-              <CardContent className="relative p-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-sky-500/10 border border-sky-500/15 flex items-center justify-center">
-                      <KeyRound className="h-4.5 w-4.5 text-sky-400" />
-                    </div>
-                    <div>
-                      <p className="text-white/70 text-sm font-medium">Cambiar Contraseña</p>
-                      <p className="text-white/20 text-[11px]">Actualiza tu contraseña para mantener tu cuenta segura</p>
-                    </div>
-                  </div>
-                  <Button
-                    onClick={() => setActiveView("password")}
-                    variant="ghost"
-                    className="h-9 px-4 rounded-xl text-sky-400/70 hover:text-sky-400 hover:bg-sky-500/5 border border-sky-500/10 text-xs font-medium transition-all"
-                  >
-                    Cambiar
-                  </Button>
-                </div>
-              </CardContent>
-            </div>
           </>
         )}
 
@@ -1338,11 +1229,125 @@ export default function Home() {
         )}
 
         {/* ═══════════════════════════════════════════════════════════════════
+            REDEEM KEY VIEW
+            ═══════════════════════════════════════════════════════════════════ */}
+        {activeView === "redeem" && (
+          <>
+            <div className="flex items-center gap-3 mb-2">
+              <button
+                onClick={() => setActiveView("dashboard")}
+                className="h-8 w-8 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-gray-500 hover:text-white/70 hover:bg-white/[0.06] transition-all"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <div>
+                <h2 className="text-white/80 text-lg font-bold flex items-center gap-2">
+                  <KeyRound className="h-4 w-4 text-teal-400" />
+                  Canjear Gift Key
+                </h2>
+                <p className="text-white/25 text-xs">Ingresa tu código para obtener créditos</p>
+              </div>
+            </div>
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
+              <div className="absolute inset-0 bg-gradient-to-br from-teal-950/10 via-transparent to-emerald-950/5" />
+              <div className="absolute -top-16 -left-16 w-32 h-32 bg-teal-500/5 rounded-full blur-3xl" />
+              <CardContent className="relative p-5 space-y-4">
+                <div className="flex flex-col items-center gap-4 py-3">
+                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-teal-500/15 to-emerald-500/10 border border-teal-500/20 flex items-center justify-center shadow-[0_0_20px_rgba(20,184,166,0.1)]">
+                    <KeyRound className="h-6 w-6 text-teal-400" />
+                  </div>
+                  <p className="text-white/25 text-xs text-center">Ingresa tu código <span className="text-white/60 font-semibold">HJFLIX-XXXXX</span> para obtener créditos.</p>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={giftKeyCode}
+                    onChange={(e) => setGiftKeyCode(e.target.value.toUpperCase())}
+                    placeholder="HJFLIX-XXXXX"
+                    className="flex-1 bg-[#050508]/80 border-white/[0.06] text-white/80 placeholder:text-white/15 uppercase font-mono rounded-xl focus:border-teal-500/30 focus:ring-1 focus:ring-teal-500/10 transition-all duration-300 text-sm"
+                  />
+                  <Button
+                    onClick={handleRedeemGiftKey}
+                    disabled={redeemingKey || !giftKeyCode.trim()}
+                    className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-medium h-10 px-5 disabled:opacity-40 shrink-0 rounded-xl shadow-[0_0_15px_rgba(20,184,166,0.15)] transition-all duration-300"
+                  >
+                    {redeemingKey ? <Loader2 className="h-4 w-4 animate-spin" /> : "Canjear"}
+                  </Button>
+                </div>
+              </CardContent>
+            </div>
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            BUY CREDITS VIEW
+            ═══════════════════════════════════════════════════════════════════ */}
+        {activeView === "buy" && (
+          <>
+            <div className="flex items-center gap-3 mb-2">
+              <button
+                onClick={() => setActiveView("dashboard")}
+                className="h-8 w-8 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-gray-500 hover:text-white/70 hover:bg-white/[0.06] transition-all"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <div>
+                <h2 className="text-white/80 text-lg font-bold flex items-center gap-2">
+                  <Coins className="h-4 w-4 text-emerald-400" />
+                  Comprar Créditos
+                </h2>
+                <p className="text-white/25 text-xs">Contacta al administrador para adquirir paquetes</p>
+              </div>
+            </div>
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/10 via-transparent to-sky-950/5" />
+              <div className="absolute -top-16 -left-16 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl" />
+              <CardContent className="relative p-5 space-y-5">
+                <div className="flex flex-col items-center gap-4 py-3">
+                  <div className="relative">
+                    <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-500/15 to-sky-500/10 border border-emerald-500/20 flex items-center justify-center shadow-[0_0_20px_rgba(52,211,153,0.1)]">
+                      <Coins className="h-6 w-6 text-emerald-400" />
+                    </div>
+                    <div className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-white/80 text-sm font-semibold">¿Necesitas comprar créditos?</p>
+                    <p className="text-white/25 text-[11px] mt-1">Contacta al administrador para adquirir paquetes</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <a
+                    href="https://wa.me/524437863111"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-[#25D366]/5 hover:bg-[#25D366]/12 border border-[#25D366]/15 hover:border-[#25D366]/25 transition-all duration-300 text-[#25D366] text-xs font-semibold shadow-[0_0_15px_rgba(37,211,102,0.05)] hover:shadow-[0_0_25px_rgba(37,211,102,0.12)] group"
+                  >
+                    <svg className="h-4 w-4 group-hover:scale-110 transition-transform duration-300" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                    WhatsApp
+                  </a>
+                  <a
+                    href="https://t.me/HcheJotaA_Bot"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-[#229ED9]/5 hover:bg-[#229ED9]/12 border border-[#229ED9]/15 hover:border-[#229ED9]/25 transition-all duration-300 text-[#229ED9] text-xs font-semibold shadow-[0_0_15px_rgba(34,158,217,0.05)] hover:shadow-[0_0_25px_rgba(34,158,217,0.12)] group"
+                  >
+                    <svg className="h-4 w-4 group-hover:scale-110 transition-transform duration-300" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+                    Telegram
+                  </a>
+                </div>
+                <p className="text-white/15 text-[10px] text-center">
+                  Respuesta rápida. Paquetes a tu medida.
+                </p>
+              </CardContent>
+            </div>
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════
             TOOL VIEWS — Rendered ONLY when selected from drawer
             ═══════════════════════════════════════════════════════════════════ */}
 
         {/* ── Back to Dashboard Button ── */}
-        {activeView !== "dashboard" && (
+        {activeView !== "dashboard" && activeView !== "referral" && activeView !== "password" && activeView !== "redeem" && activeView !== "buy" && (
           <button
             onClick={() => setActiveView("dashboard")}
             className="flex items-center gap-2 text-white/40 hover:text-white/70 text-xs font-medium transition-all duration-300"
