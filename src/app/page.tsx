@@ -808,33 +808,69 @@ export default function Home() {
         {activeView === "dashboard" && (
           <>
             {/* ═══ Quick Actions ═══ */}
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-2 gap-3">
+              {/* Referidos */}
               <button
-                onClick={() => setActiveView("checker")}
-                className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-[#0a0a10]/60 border border-white/[0.06] hover:bg-sky-500/5 hover:border-sky-500/15 transition-all duration-300 group"
+                onClick={() => setActiveView("referral")}
+                className="group relative flex items-center gap-3 p-4 rounded-2xl bg-[#0a0a10]/60 border border-white/[0.06] hover:border-amber-500/20 transition-all duration-500 overflow-hidden"
               >
-                <div className="h-9 w-9 rounded-xl bg-sky-500/10 border border-sky-500/15 flex items-center justify-center group-hover:bg-sky-500/15 transition-colors">
-                  <Search className="h-4 w-4 text-sky-400" />
+                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/[0.03] to-orange-500/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-amber-500/15 to-orange-500/10 border border-amber-500/15 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-300">
+                  <Users className="h-4.5 w-4.5 text-amber-400" />
                 </div>
-                <span className="text-white/50 text-[11px] font-medium group-hover:text-sky-400 transition-colors">Checker</span>
+                <div className="relative text-left">
+                  <p className="text-white/80 text-xs font-semibold group-hover:text-amber-300 transition-colors">Referidos</p>
+                  <p className="text-white/20 text-[10px]">Gana créditos</p>
+                </div>
               </button>
+              {/* Canjear Key */}
               <button
-                onClick={() => setActiveView("generate")}
-                className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-[#0a0a10]/60 border border-white/[0.06] hover:bg-emerald-500/5 hover:border-emerald-500/15 transition-all duration-300 group"
+                onClick={() => {
+                  const keyInput = document.getElementById("gift-key-input");
+                  if (keyInput) keyInput.focus();
+                  else setActiveView("dashboard");
+                }}
+                className="group relative flex items-center gap-3 p-4 rounded-2xl bg-[#0a0a10]/60 border border-white/[0.06] hover:border-teal-500/20 transition-all duration-500 overflow-hidden"
               >
-                <div className="h-9 w-9 rounded-xl bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center group-hover:bg-emerald-500/15 transition-colors">
-                  <Zap className="h-4 w-4 text-emerald-400" />
+                <div className="absolute inset-0 bg-gradient-to-br from-teal-500/[0.03] to-emerald-500/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-teal-500/15 to-emerald-500/10 border border-teal-500/15 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-300">
+                  <KeyRound className="h-4.5 w-4.5 text-teal-400" />
                 </div>
-                <span className="text-white/50 text-[11px] font-medium group-hover:text-emerald-400 transition-colors">Token</span>
+                <div className="relative text-left">
+                  <p className="text-white/80 text-xs font-semibold group-hover:text-teal-300 transition-colors">Canjear Key</p>
+                  <p className="text-white/20 text-[10px]">Código de regalo</p>
+                </div>
               </button>
+              {/* Comprar Créditos */}
               <button
-                onClick={() => setActiveView("copy")}
-                className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-[#0a0a10]/60 border border-white/[0.06] hover:bg-violet-500/5 hover:border-violet-500/15 transition-all duration-300 group"
+                onClick={() => {
+                  const buySection = document.getElementById("buy-credits-section");
+                  if (buySection) buySection.scrollIntoView({ behavior: "smooth", block: "center" });
+                }}
+                className="group relative flex items-center gap-3 p-4 rounded-2xl bg-[#0a0a10]/60 border border-white/[0.06] hover:border-emerald-500/20 transition-all duration-500 overflow-hidden"
               >
-                <div className="h-9 w-9 rounded-xl bg-violet-500/10 border border-violet-500/15 flex items-center justify-center group-hover:bg-violet-500/15 transition-colors">
-                  <RefreshCw className="h-4 w-4 text-violet-400" />
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.03] to-sky-500/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500/15 to-sky-500/10 border border-emerald-500/15 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-300">
+                  <Coins className="h-4.5 w-4.5 text-emerald-400" />
                 </div>
-                <span className="text-white/50 text-[11px] font-medium group-hover:text-violet-400 transition-colors">Cookie</span>
+                <div className="relative text-left">
+                  <p className="text-white/80 text-xs font-semibold group-hover:text-emerald-300 transition-colors">Comprar</p>
+                  <p className="text-white/20 text-[10px]">Paquetes de créditos</p>
+                </div>
+              </button>
+              {/* Cambiar Contraseña */}
+              <button
+                onClick={() => setActiveView("password")}
+                className="group relative flex items-center gap-3 p-4 rounded-2xl bg-[#0a0a10]/60 border border-white/[0.06] hover:border-rose-500/20 transition-all duration-500 overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-rose-500/[0.03] to-pink-500/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-rose-500/15 to-pink-500/10 border border-rose-500/15 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-300">
+                  <Shield className="h-4.5 w-4.5 text-rose-400" />
+                </div>
+                <div className="relative text-left">
+                  <p className="text-white/80 text-xs font-semibold group-hover:text-rose-300 transition-colors">Contraseña</p>
+                  <p className="text-white/20 text-[10px]">Cambiar clave</p>
+                </div>
               </button>
             </div>
 
@@ -924,6 +960,7 @@ export default function Home() {
               <CardContent className="px-5 pb-5 relative">
                 <div className="flex gap-2">
                   <Input
+                    id="gift-key-input"
                     value={giftKeyCode}
                     onChange={(e) => setGiftKeyCode(e.target.value.toUpperCase())}
                     placeholder="HJFLIX-XXXXX"
@@ -941,7 +978,7 @@ export default function Home() {
             </div>
 
             {/* ═══ Buy Credits Notice ═══ */}
-            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
+            <div id="buy-credits-section" className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a10]/60 backdrop-blur-sm">
               <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/10 via-transparent to-sky-950/5" />
               <div className="absolute -top-16 -left-16 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl" />
               <CardContent className="relative p-5 space-y-4">

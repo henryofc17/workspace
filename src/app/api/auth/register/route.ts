@@ -189,7 +189,7 @@ export async function POST(request: Request) {
             createdAt: { gte: oneDayAgo },
           },
         });
-        if (recentReferralsByThisReferrer >= 5) {
+        if (recentReferralsByThisReferrer >= 10) {
           referralMessage = " El límite de referidos diarios ha sido alcanzado.";
           logSecurityEvent({
             level: "warn",
