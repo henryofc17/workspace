@@ -107,16 +107,48 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Nombre de usuario no disponible." }, { status: 400 });
     }
 
-    // ── ANTI-ABUSE: Max 1 account per IP ──
+    // ── ANTI-ABUSE: Smart IP + Fingerprint checks ──
+    // Allow up to 2 accounts per IP (shared WiFi/VPN is common)
+    // But block if same IP AND same fingerprint (same device trying multi-accounts)
     const ipCount = await prisma.user.count({ where: { ipAddress: clientIP } });
-    if (ipCount >= 1) {
-      return NextResponse.json({ success: false, error: "Solo se permite una cuenta por dispositivo." }, { status: 429 });
+    if (ipCount >= 3) {
+      logSecurityEvent({
+        level: "warn",
+        event: SecurityEvents.REGISTER_BLOCKED,
+        ip: clientIP,
+        details: { reason: "ip_limit_exceeded", count: ipCount },
+      });
+      return NextResponse.json({ success: false, error: "Límite de cuentas para esta red alcanzado. Contacta al administrador." }, { status: 429 });
     }
 
-    // ── ANTI-ABUSE: Fingerprint check ──
-    const fpCount = await prisma.user.count({ where: { fingerprint } });
-    if (fpCount >= 1) {
-      return NextResponse.json({ success: false, error: "Ya tienes una cuenta registrada en este navegador." }, { status: 429 });
+    // Same IP + same fingerprint = same device, block
+    if (fingerprint) {
+      const sameDeviceCount = await prisma.user.count({
+        where: { ipAddress: clientIP, fingerprint },
+      });
+      if (sameDeviceCount >= 1) {
+        logSecurityEvent({
+          level: "warn",
+          event: SecurityEvents.REGISTER_BLOCKED,
+          ip: clientIP,
+          details: { reason: "same_device_different_account", fingerprint, count: sameDeviceCount },
+        });
+        return NextResponse.json({ success: false, error: "Solo se permite una cuenta por dispositivo." }, { status: 429 });
+      }
+    }
+
+    // Fingerprint alone on different IPs = also suspicious (same browser, different VPNs)
+    if (fingerprint) {
+      const fpCount = await prisma.user.count({ where: { fingerprint } });
+      if (fpCount >= 2) {
+        logSecurityEvent({
+          level: "warn",
+          event: SecurityEvents.REGISTER_BLOCKED,
+          ip: clientIP,
+          details: { reason: "fingerprint_multi_ip", fingerprint, count: fpCount },
+        });
+        return NextResponse.json({ success: false, error: "Ya tienes una cuenta registrada en este navegador." }, { status: 429 });
+      }
     }
 
     // ── Check username unique ──
