@@ -4,6 +4,10 @@
  * Uses Upstash Redis for distributed state across serverless functions.
  * This module is fully Edge-compatible (no Node.js APIs).
  *
+ * IMPORTANT: Redis is OPTIONAL. If UPSTASH_REDIS_REST_URL and
+ * UPSTASH_REDIS_REST_TOKEN are not configured, all rate limiting
+ * functions fail-open (allow the request) instead of crashing.
+ *
  * Rate Limit Tiers (adjusted for production — avoids false positives):
  *   - Login:    5 attempts / 5 minutes per IP
  *   - Register: 3 registrations / 15 minutes per IP
@@ -18,43 +22,62 @@
 import { Redis } from "@upstash/redis";
 import { Ratelimit } from "@upstash/ratelimit";
 
-// ─── Redis Setup ──────────────────────────────────────────────────────────────
+// ─── Redis Setup (optional) ──────────────────────────────────────────────────
 
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-});
+const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
+const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+let redis: Redis | null = null;
+
+if (REDIS_URL && REDIS_TOKEN) {
+  try {
+    redis = new Redis({ url: REDIS_URL, token: REDIS_TOKEN });
+  } catch (err: any) {
+    console.warn("[edge-ratelimit] Redis init failed:", err.message);
+    redis = null;
+  }
+} else {
+  console.log("[edge-ratelimit] Redis not configured — rate limiting disabled (fail-open)");
+}
 
 /** Export Redis instance for reuse in proxy and other Edge modules */
-export function getRedis(): Redis {
+export function getRedis(): Redis | null {
   return redis;
 }
 
 // ─── Rate Limiters ────────────────────────────────────────────────────────────
 
-/** Login-specific: 5 attempts per 5 minutes */
-export const loginLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(5, "5 m"),
-  prefix: "ratelimit:auth:login",
-  analytics: true,
-});
+let loginLimiter: Ratelimit | null = null;
+let registerLimiter: Ratelimit | null = null;
+let authLightLimiter: Ratelimit | null = null;
 
-/** Register-specific: 3 registrations per 15 minutes */
-export const registerLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(3, "15 m"),
-  prefix: "ratelimit:auth:register",
-  analytics: true,
-});
+if (redis) {
+  /** Login-specific: 5 attempts per 5 minutes */
+  loginLimiter = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(5, "5 m"),
+    prefix: "ratelimit:auth:login",
+    analytics: true,
+  });
 
-/** Logout/me: 60 req/min per IP (lightweight endpoints — generous limit) */
-export const authLightLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(60, "1 m"),
-  prefix: "ratelimit:auth:light",
-  analytics: true,
-});
+  /** Register-specific: 3 registrations per 15 minutes */
+  registerLimiter = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(3, "15 m"),
+    prefix: "ratelimit:auth:register",
+    analytics: true,
+  });
+
+  /** Logout/me: 60 req/min per IP (lightweight endpoints — generous limit) */
+  authLightLimiter = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(60, "1 m"),
+    prefix: "ratelimit:auth:light",
+    analytics: true,
+  });
+}
+
+export { loginLimiter, registerLimiter, authLightLimiter };
 
 // ─── IP Blocklist ─────────────────────────────────────────────────────────────
 
@@ -63,13 +86,15 @@ const DEFAULT_BLOCK_DURATION = 5 * 60; // 5 minutes (first offense)
 
 /**
  * Check if an IP is currently blocked.
- * Returns { blocked: boolean, reason?: string, expiresAt?: number }
+ * Fail-open if Redis is not available.
  */
 export async function isIPBlocked(ip: string): Promise<{
   blocked: boolean;
   reason?: string;
   expiresAt?: number;
 }> {
+  if (!redis) return { blocked: false };
+
   try {
     const data = await redis.get<{ reason: string; expiresAt: number }>(
       `${BLOCKLIST_PREFIX}${ip}`
@@ -102,6 +127,8 @@ export async function blockIP(
   reason: string,
   durationSeconds: number = DEFAULT_BLOCK_DURATION
 ): Promise<void> {
+  if (!redis) return;
+
   try {
     await redis.set(
       `${BLOCKLIST_PREFIX}${ip}`,
@@ -117,6 +144,8 @@ export async function blockIP(
  * Unblock an IP manually (for admin use).
  */
 export async function unblockIP(ip: string): Promise<void> {
+  if (!redis) return;
+
   try {
     await redis.del(`${BLOCKLIST_PREFIX}${ip}`);
     // Also clear violations
@@ -214,7 +243,7 @@ export function getClientIPEdge(request: Request): string {
 
 export type AuthRouteType = "login" | "register" | "logout" | "me" | "other";
 
-export function getAuthRouteLimiter(routeType: AuthRouteType) {
+export function getAuthRouteLimiter(routeType: AuthRouteType): Ratelimit | null {
   switch (routeType) {
     case "login":
       return loginLimiter;

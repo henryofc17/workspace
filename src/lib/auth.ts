@@ -1,27 +1,31 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { createHmac } from "crypto";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
+//
+// JWT secrets can be set explicitly via JWT_SECRET / REFRESH_TOKEN_SECRET.
+// If they're NOT set, we auto-derive them from ADMIN_PASSWORD + DATABASE_URL
+// so the app works without extra env vars. The derivation is deterministic —
+// the same env vars always produce the same keys.
+//
+// IMPORTANT: never throw at module level — Next.js imports this during build
+// (page data collection) when env vars are not yet available.
 
-// Lazy validation: do NOT throw at module level — Next.js imports this during build
-// (page data collection) when env vars are not yet available. Instead, validate
-// on first actual use at runtime.
-let _secretsValidated = false;
-
-function ensureSecrets(): void {
-  if (_secretsValidated) return;
-  _secretsValidated = true;
-  if (process.env.NODE_ENV === "production" && (!process.env.JWT_SECRET || !process.env.REFRESH_TOKEN_SECRET)) {
-    throw new Error("JWT_SECRET and REFRESH_TOKEN_SECRET must be set in production");
-  }
+function deriveSecret(purpose: string): string {
+  const adminPwd = process.env.ADMIN_PASSWORD || "";
+  const dbUrl = process.env.DATABASE_URL || "";
+  // Deterministic HMAC-based derivation from available env vars
+  const base = `${purpose}:${adminPwd}:${dbUrl}`;
+  return createHmac("sha256", base).update("nf-checker-jwt-key").digest("hex");
 }
 
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "dev-only-secret-not-for-production"
+  process.env.JWT_SECRET || deriveSecret("access")
 );
 
 const REFRESH_SECRET = new TextEncoder().encode(
-  process.env.REFRESH_TOKEN_SECRET || "dev-only-refresh-secret-not-for-production"
+  process.env.REFRESH_TOKEN_SECRET || deriveSecret("refresh")
 );
 
 const ACCESS_TOKEN_EXPIRY = "30m";  // Short-lived access token
@@ -45,7 +49,6 @@ export interface AuthTokens {
 // ─── Access Token ────────────────────────────────────────────────────────────
 
 export async function createAccessToken(payload: JWTPayload): Promise<string> {
-  ensureSecrets();
   return await new SignJWT({ userId: payload.userId, username: payload.username, role: payload.role } as any)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -56,7 +59,6 @@ export async function createAccessToken(payload: JWTPayload): Promise<string> {
 }
 
 export async function verifyAccessToken(token: string): Promise<JWTPayload | null> {
-  ensureSecrets();
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET, {
       issuer: "nf-checker",
@@ -71,7 +73,6 @@ export async function verifyAccessToken(token: string): Promise<JWTPayload | nul
 // ─── Refresh Token ───────────────────────────────────────────────────────────
 
 export async function createRefreshToken(payload: JWTPayload): Promise<string> {
-  ensureSecrets();
   return await new SignJWT({ userId: payload.userId, username: payload.username, role: payload.role } as any)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -82,7 +83,6 @@ export async function createRefreshToken(payload: JWTPayload): Promise<string> {
 }
 
 export async function verifyRefreshToken(token: string): Promise<JWTPayload | null> {
-  ensureSecrets();
   try {
     const { payload } = await jwtVerify(token, REFRESH_SECRET, {
       issuer: "nf-checker",

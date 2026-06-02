@@ -75,6 +75,7 @@ const VIOLATIONS_PREFIX = "violations:";
 async function incrementViolations(ip: string): Promise<number> {
   try {
     const redis = getRedis();
+    if (!redis) return 0; // Redis not configured — skip violation tracking
     const key = `${VIOLATIONS_PREFIX}${ip}`;
     const count = await redis.incr(key);
     if (count === 1) {
@@ -190,6 +191,10 @@ async function applyAntiBotProtection(
   // logout/me are lightweight — don't rate-limit them in proxy
   if (routeType === "login" || routeType === "register") {
     const routeLimiter = getAuthRouteLimiter(routeType);
+    if (!routeLimiter) {
+      // Redis not configured — skip rate limiting (fail-open)
+      return null;
+    }
     try {
       const routeResult = await routeLimiter.limit(ip);
       if (!routeResult.success) {
