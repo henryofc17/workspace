@@ -70,7 +70,7 @@ export type ValidationFailure = { success: false; error: string };
 export type ValidationSuccess<T> = { success: true; data: T };
 export type ValidationResult<T> = ValidationFailure | ValidationSuccess<T>;
 
-export function validateBody<T>(schema: z.ZodSchema<T>, body: unknown): ValidationResult<T> {
+export function validateBody<T>(schema: z.ZodType<T>, body: unknown): ValidationResult<T> {
   const result = schema.safeParse(body);
   if (!result.success) {
     const firstError = result.error.issues[0];

@@ -9,6 +9,9 @@ import {
 import type { CheckResult, NFTokenResult, NetflixMetadata } from "@/lib/netflix-checker";
 import { checkRateLimit } from "@/lib/security";
 
+// Vercel serverless function max duration
+export const maxDuration = 120; // 2 minutes
+
 // Rate limit: max 3 batch checks per user per 2 minutes
 const BATCH_RATE_LIMIT = { maxRequests: 3, windowMs: 2 * 60 * 1000, blockDurationMs: 5 * 60 * 1000 };
 

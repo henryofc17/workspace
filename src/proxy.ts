@@ -291,7 +291,7 @@ export async function proxy(request: NextRequest) {
   const refreshToken = request.cookies.get("refresh-token")?.value;
   const legacyToken = request.cookies.get("auth-token")?.value;
 
-  let session = null;
+  let session: any = null;
 
   if (accessToken) {
     session = await verifyAccessToken(accessToken);

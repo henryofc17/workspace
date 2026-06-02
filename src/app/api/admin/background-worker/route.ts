@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { getConfigString, setConfig } from "@/lib/config";
 import { prisma } from "@/lib/prisma";
 import { extractCookiesFromText } from "@/lib/netflix-checker";
+
+// Vercel serverless function max duration (requires Pro plan for >10s)
+export const maxDuration = 300; // 5 minutes
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -574,11 +578,13 @@ export async function POST(request: NextRequest) {
 
     await clearState();
 
-    // Fire-and-forget: do NOT await the worker function
+    // Use after() so the worker runs AFTER the response is sent.
+    // This keeps the Vercel function alive while allowing the client
+    // to get an immediate response and start polling for progress.
     if (task === "REFRESH_COOKIES") {
-      runRefreshCookies();
+      after(() => runRefreshCookies());
     } else {
-      runDetectCountries();
+      after(() => runDetectCountries());
     }
 
     return NextResponse.json({

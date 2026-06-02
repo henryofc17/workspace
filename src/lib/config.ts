@@ -58,7 +58,11 @@ export async function getConfigString(key: string, defaultValue: string): Promis
  */
 export async function setConfig(key: string, value: string): Promise<void> {
   try {
-    await ensureMigrations();
+    if (!migrationsChecked) {
+      const { ensureMigrations } = await import("@/lib/migrate");
+      await ensureMigrations();
+      migrationsChecked = true;
+    }
     await prisma.siteConfig.upsert({
       where: { key },
       update: { value, updatedAt: new Date() },

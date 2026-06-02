@@ -3,6 +3,9 @@ import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { extractCookiesFromText } from "@/lib/netflix-checker";
 
+// Vercel serverless function max duration (requires Pro plan for >10s)
+export const maxDuration = 300; // 5 minutes
+
 export async function POST(request: NextRequest) {
   try {
     await requireAdmin();
