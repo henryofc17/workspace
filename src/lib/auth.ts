@@ -3,8 +3,17 @@ import { cookies } from "next/headers";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-if (process.env.NODE_ENV === "production" && (!process.env.JWT_SECRET || !process.env.REFRESH_TOKEN_SECRET)) {
-  throw new Error("JWT_SECRET and REFRESH_TOKEN_SECRET must be set in production");
+// Lazy validation: do NOT throw at module level — Next.js imports this during build
+// (page data collection) when env vars are not yet available. Instead, validate
+// on first actual use at runtime.
+let _secretsValidated = false;
+
+function ensureSecrets(): void {
+  if (_secretsValidated) return;
+  _secretsValidated = true;
+  if (process.env.NODE_ENV === "production" && (!process.env.JWT_SECRET || !process.env.REFRESH_TOKEN_SECRET)) {
+    throw new Error("JWT_SECRET and REFRESH_TOKEN_SECRET must be set in production");
+  }
 }
 
 const JWT_SECRET = new TextEncoder().encode(
@@ -36,6 +45,7 @@ export interface AuthTokens {
 // ─── Access Token ────────────────────────────────────────────────────────────
 
 export async function createAccessToken(payload: JWTPayload): Promise<string> {
+  ensureSecrets();
   return await new SignJWT({ userId: payload.userId, username: payload.username, role: payload.role } as any)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -46,6 +56,7 @@ export async function createAccessToken(payload: JWTPayload): Promise<string> {
 }
 
 export async function verifyAccessToken(token: string): Promise<JWTPayload | null> {
+  ensureSecrets();
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET, {
       issuer: "nf-checker",
@@ -60,6 +71,7 @@ export async function verifyAccessToken(token: string): Promise<JWTPayload | nul
 // ─── Refresh Token ───────────────────────────────────────────────────────────
 
 export async function createRefreshToken(payload: JWTPayload): Promise<string> {
+  ensureSecrets();
   return await new SignJWT({ userId: payload.userId, username: payload.username, role: payload.role } as any)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -70,6 +82,7 @@ export async function createRefreshToken(payload: JWTPayload): Promise<string> {
 }
 
 export async function verifyRefreshToken(token: string): Promise<JWTPayload | null> {
+  ensureSecrets();
   try {
     const { payload } = await jwtVerify(token, REFRESH_SECRET, {
       issuer: "nf-checker",
