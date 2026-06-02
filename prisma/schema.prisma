@@ -33,6 +33,13 @@ model User {
   referredByUser      User?       @relation("ReferralRelation", fields: [referredBy], references: [id])
   referredUsers       User[]      @relation("ReferralRelation")
   createdNotifications Notification[] @relation("CreatedNotifications")
+
+  @@index([role])
+  @@index([sellerId])
+  @@index([referredBy])
+  @@index([ipAddress])
+  @@index([fingerprint])
+  @@index([region])
 }
 
 model Notification {
@@ -46,6 +53,9 @@ model Notification {
   updatedAt DateTime @updatedAt
 
   creator   User     @relation("CreatedNotifications", fields: [createdBy], references: [id])
+
+  @@index([active])
+  @@index([createdAt])
 }
 
 model Cookie {
@@ -59,6 +69,10 @@ model Cookie {
   plan      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([country])
+  @@index([status, country])
 }
 
 model Transaction {
@@ -70,6 +84,10 @@ model Transaction {
   createdAt   DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
 }
 
 model SiteConfig {
@@ -90,4 +108,7 @@ model GiftKey {
 
   creator     User      @relation("CreatedKeys", fields: [createdBy], references: [id])
   redeemer    User?     @relation("RedeemedKeys", fields: [redeemedBy], references: [id])
+
+  @@index([redeemedBy])
+  @@index([createdBy])
 }

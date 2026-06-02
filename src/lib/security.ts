@@ -46,16 +46,19 @@ interface RateLimitEntry {
 }
 
 const rateLimitStore = new Map<string, RateLimitEntry>();
+const MAX_STORE_SIZE = 5000; // Prevent memory leaks on serverless
 
-// Cleanup every 10 minutes
-setInterval(() => {
+/** Lazy cleanup: remove expired entries on access instead of setInterval */
+function cleanupStore() {
   const now = Date.now();
-  for (const [key, entry] of rateLimitStore.entries()) {
-    if (now > entry.resetAt && now > entry.blockedUntil) {
-      rateLimitStore.delete(key);
+  if (rateLimitStore.size > MAX_STORE_SIZE) {
+    for (const [key, entry] of rateLimitStore.entries()) {
+      if (now > entry.resetAt && now > entry.blockedUntil) {
+        rateLimitStore.delete(key);
+      }
     }
   }
-}, 10 * 60 * 1000);
+}
 
 export interface RateLimitConfig {
   maxRequests: number;
@@ -77,6 +80,7 @@ export function checkRateLimit(
   identifier: string,
   config: Partial<RateLimitConfig> = {}
 ): { allowed: boolean; retryAfter?: number } {
+  cleanupStore();
   const cfg = { ...DEFAULT_CONFIG, ...config };
   const now = Date.now();
   const entry = rateLimitStore.get(identifier);
@@ -248,17 +252,21 @@ export async function guardBodySize(request: NextRequest): Promise<{ ok: boolean
     return { ok: false, error: "Request body too large" };
   }
 
-  try {
-    const cloned = request.clone();
-    const body = await cloned.json();
-    const bodyStr = JSON.stringify(body);
-    if (bodyStr.length > MAX_BODY_SIZE) {
-      return { ok: false, error: "Request body too large" };
+  // Only parse body if Content-Length is missing or suspicious
+  if (!contentLength) {
+    try {
+      const cloned = request.clone();
+      const body = await cloned.json();
+      const bodyStr = JSON.stringify(body);
+      if (bodyStr.length > MAX_BODY_SIZE) {
+        return { ok: false, error: "Request body too large" };
+      }
+    } catch {
+      return { ok: false, error: "Invalid request body" };
     }
-    return { ok: true };
-  } catch {
-    return { ok: false, error: "Invalid request body" };
   }
+
+  return { ok: true };
 }
 
 // ─── Security Headers Helper ─────────────────────────────────────────────────

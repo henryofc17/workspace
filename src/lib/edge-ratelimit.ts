@@ -25,6 +25,11 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 });
 
+/** Export Redis instance for reuse in proxy and other Edge modules */
+export function getRedis(): Redis {
+  return redis;
+}
+
 // ─── Rate Limiters ────────────────────────────────────────────────────────────
 
 /** Login-specific: 5 attempts per 5 minutes */

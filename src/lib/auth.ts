@@ -3,12 +3,16 @@ import { cookies } from "next/headers";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
+if (process.env.NODE_ENV === "production" && (!process.env.JWT_SECRET || !process.env.REFRESH_TOKEN_SECRET)) {
+  throw new Error("JWT_SECRET and REFRESH_TOKEN_SECRET must be set in production");
+}
+
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "fallback-secret-change-in-prod-2024"
+  process.env.JWT_SECRET || "dev-only-secret-not-for-production"
 );
 
 const REFRESH_SECRET = new TextEncoder().encode(
-  process.env.REFRESH_TOKEN_SECRET || "fallback-refresh-secret-change-in-prod-2024"
+  process.env.REFRESH_TOKEN_SECRET || "dev-only-refresh-secret-not-for-production"
 );
 
 const ACCESS_TOKEN_EXPIRY = "30m";  // Short-lived access token

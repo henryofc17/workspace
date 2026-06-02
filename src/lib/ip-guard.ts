@@ -2,8 +2,8 @@ import { logSecurityEvent, SecurityEvents } from "@/lib/security";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-const SCAMALYTICS_USER = "69fd100acf678";
-const SCAMALYTICS_KEY = "ed5bd93e4c5dc656e10a0c4990745a7be152b17c367d5fc96c1ad55a34341704";
+const SCAMALYTICS_USER = process.env.SCAMALYTICS_USER || "";
+const SCAMALYTICS_KEY = process.env.SCAMALYTICS_KEY || "";
 const SCAMALYTICS_BASE = "https://api11.scamalytics.com/v3";
 
 const API_TIMEOUT_MS = 3000;   // 3s — don't block the user
@@ -45,14 +45,17 @@ interface CacheEntry {
 }
 
 const ipCache = new Map<string, CacheEntry>();
+const MAX_CACHE_SIZE = 2000;
 
-// Cleanup every 10 minutes
-setInterval(() => {
+/** Lazy cleanup: remove expired entries on access instead of setInterval */
+function cleanupCache() {
   const now = Date.now();
-  for (const [key, entry] of ipCache.entries()) {
-    if (now > entry.expiresAt) ipCache.delete(key);
+  if (ipCache.size > MAX_CACHE_SIZE) {
+    for (const [key, entry] of ipCache.entries()) {
+      if (now > entry.expiresAt) ipCache.delete(key);
+    }
   }
-}, 10 * 60 * 1000);
+}
 
 // ─── Core check ──────────────────────────────────────────────────────────────
 
@@ -71,6 +74,13 @@ export async function checkIPRisk(ip: string): Promise<IPRiskResult> {
   if (!ip || ip === "unknown" || ip === "::1" || ip === "127.0.0.1" || ip.startsWith("10.") || ip.startsWith("192.168.")) {
     return { blocked: false, reason: null, score: null, risk: null, details: null, apiFailed: false };
   }
+
+  // Skip if Scamalytics not configured
+  if (!SCAMALYTICS_USER || !SCAMALYTICS_KEY) {
+    return { blocked: false, reason: null, score: null, risk: null, details: null, apiFailed: false };
+  }
+
+  cleanupCache();
 
   // Check cache
   const cached = ipCache.get(ip);

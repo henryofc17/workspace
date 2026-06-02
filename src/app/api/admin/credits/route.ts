@@ -84,24 +84,52 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: true, user: updatedTarget });
     }
 
-    // For non-seller users or negative amounts (deductions), use original logic
-    const newCredits = user.credits + numericAmount;
-    if (newCredits < 0) {
-      return NextResponse.json({ success: false, error: "Créditos insuficientes" }, { status: 400 });
+    // For non-seller users or negative amounts (deductions), use atomic increment with guard
+    if (numericAmount < 0) {
+      // For deductions, use transaction with balance check
+      try {
+        const updatedUser = await prisma.$transaction(async (tx) => {
+          const u = await tx.user.update({
+            where: { id: userId, credits: { gte: Math.abs(numericAmount) } },
+            data: { credits: { increment: numericAmount } },
+            select: { id: true, username: true, credits: true },
+          });
+          await tx.transaction.create({
+            data: {
+              userId,
+              type: "ADMIN_DEDUCT",
+              credits: numericAmount,
+              description: description || "Créditos deducidos por admin",
+            },
+          });
+          return u;
+        });
+        logSecurityEvent({
+          level: "info",
+          event: "ADMIN_UPDATE_CREDITS",
+          userId: session.userId,
+          username: session.username,
+          details: { targetUser: updatedUser.username, amount, newCredits: updatedUser.credits },
+        });
+        return NextResponse.json({ success: true, user: updatedUser });
+      } catch {
+        return NextResponse.json({ success: false, error: "Créditos insuficientes" }, { status: 400 });
+      }
     }
 
+    // For positive amounts to non-sellers, use atomic increment
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: { credits: newCredits },
+      data: { credits: { increment: numericAmount } },
       select: { id: true, username: true, credits: true },
     });
 
     await prisma.transaction.create({
       data: {
         userId,
-        type: numericAmount >= 0 ? "ADMIN_GRANT" : "ADMIN_DEDUCT",
+        type: "ADMIN_GRANT",
         credits: numericAmount,
-        description: description || (numericAmount >= 0 ? "Créditos otorgados por admin" : "Créditos deducidos por admin"),
+        description: description || "Créditos otorgados por admin",
       },
     });
 

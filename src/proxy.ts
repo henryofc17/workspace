@@ -18,13 +18,14 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAccessToken } from "@/lib/auth";
+import { verifyAccessToken, verifyRefreshToken } from "@/lib/auth";
 import {
   getClientIPEdge,
   classifyAuthRoute,
   getAuthRouteLimiter,
   isIPBlocked,
   blockIP,
+  getRedis,
 } from "@/lib/edge-ratelimit";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -73,11 +74,7 @@ const VIOLATIONS_PREFIX = "violations:";
 
 async function incrementViolations(ip: string): Promise<number> {
   try {
-    const { Redis } = await import("@upstash/redis");
-    const redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-    });
+    const redis = getRedis();
     const key = `${VIOLATIONS_PREFIX}${ip}`;
     const count = await redis.incr(key);
     if (count === 1) {
@@ -278,7 +275,7 @@ export async function proxy(request: NextRequest) {
 
   // ── Skip non-API/non-protected page routes ──
   const isAPI = pathname.startsWith("/api/");
-  const isProtectedPage = pathname === "/" || pathname.startsWith("/admin");
+  const isProtectedPage = pathname === "/" || pathname.startsWith("/admin") || pathname.startsWith("/seller");
 
   if (!isAPI && !isProtectedPage) {
     return addSecurityHeaders(NextResponse.next());
@@ -300,7 +297,7 @@ export async function proxy(request: NextRequest) {
     session = await verifyAccessToken(accessToken);
   }
   if (!session && refreshToken) {
-    session = await verifyAccessToken(refreshToken);
+    session = await verifyRefreshToken(refreshToken);
   }
   if (!session && legacyToken) {
     session = await verifyAccessToken(legacyToken);

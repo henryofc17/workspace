@@ -1,18 +1,10 @@
 import { prisma } from "@/lib/prisma";
+import { generateReferralCode } from "@/lib/referral";
 
 // ─── Auto-Migration: Ensures new tables exist in production ──────────────────
 // Called once on cold start or first API access.
 
 let migrated = false;
-
-function generateReferralCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "HF-";
-  for (let i = 0; i < 5; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}
 
 export async function ensureMigrations(): Promise<void> {
   if (migrated) return;

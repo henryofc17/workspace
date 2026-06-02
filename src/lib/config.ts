@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { ensureMigrations } from "@/lib/migrate";
 
 // ─── In-memory cache with TTL ────────────────────────────────────────────────
 
@@ -9,7 +8,10 @@ interface CacheEntry {
 }
 
 const cache = new Map<string, CacheEntry>();
-const TTL_MS = 5_000; // 5 seconds
+const TTL_MS = 30_000; // 30 seconds — increased from 5s to reduce DB load
+
+// Track if migrations have been checked this invocation
+let migrationsChecked = false;
 
 /**
  * Read a numeric config value from the SiteConfig table.
@@ -35,7 +37,12 @@ export async function getConfigString(key: string, defaultValue: string): Promis
   }
 
   try {
-    await ensureMigrations();
+    // Only check migrations once per cold start
+    if (!migrationsChecked) {
+      const { ensureMigrations } = await import("@/lib/migrate");
+      await ensureMigrations();
+      migrationsChecked = true;
+    }
     const row = await prisma.siteConfig.findUnique({ where: { key } });
     const value = row ? row.value : defaultValue;
     cache.set(key, { value, expiresAt: now + TTL_MS });

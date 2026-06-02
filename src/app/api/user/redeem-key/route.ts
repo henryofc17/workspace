@@ -34,27 +34,30 @@ export async function POST(request: Request) {
     // Atomic: find + validate + credit + mark redeemed in a single transaction
     try {
       const result = await prisma.$transaction(async (tx) => {
-        // Lock the key row for this transaction
-        const key = await tx.giftKey.findUnique({ where: { code: cleanCode } });
+        // Use raw query with FOR UPDATE to lock the row and prevent race conditions
+        const [keyRow] = await tx.$queryRawUnsafe<Array<{id: string, code: string, credits: number, createdBy: string, redeemedBy: string | null, redeemedAt: Date | null, createdAt: Date}>>(
+          `SELECT * FROM "GiftKey" WHERE "code" = $1 FOR UPDATE`,
+          cleanCode
+        );
 
-        if (!key) {
+        if (!keyRow) {
           return { error: "NOT_FOUND", status: 404 };
         }
 
-        if (key.redeemedBy) {
+        if (keyRow.redeemedBy) {
           return { error: "ALREADY_REDEEMED", status: 400 };
         }
 
         // Credit the user
         const updatedUser = await tx.user.update({
           where: { id: session.userId },
-          data: { credits: { increment: key.credits } },
+          data: { credits: { increment: keyRow.credits } },
           select: { credits: true },
         });
 
         // Mark key as redeemed
         await tx.giftKey.update({
-          where: { id: key.id },
+          where: { id: keyRow.id },
           data: {
             redeemedBy: session.userId,
             redeemedAt: new Date(),
@@ -66,12 +69,12 @@ export async function POST(request: Request) {
           data: {
             userId: session.userId,
             type: "GIFT_KEY",
-            credits: key.credits,
+            credits: keyRow.credits,
             description: `Key canjeada: ${cleanCode}`,
           },
         });
 
-        return { success: true, credits: key.credits, totalCredits: updatedUser.credits };
+        return { success: true, credits: keyRow.credits, totalCredits: updatedUser.credits };
       });
 
       if (result.error === "NOT_FOUND") {
