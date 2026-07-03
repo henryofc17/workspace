@@ -87,7 +87,7 @@ interface UserDetail extends UserRecord {
 
 interface CookieRecord {
   id: string;
-  rawCookie: string;
+  // rawCookie intentionally excluded — sensitive data, not sent by API
   status: string;
   usedCount: number;
   lastUsed: string | null;
@@ -880,29 +880,12 @@ export default function AdminPage() {
     setCheckingDuplicates(true);
     setDuplicateCount(null);
     try {
-      const cookiesRes = await fetch("/api/admin/cookies").then((r) => r.json());
-      if (!cookiesRes.success) { toast.error("Error al obtener cookies"); return; }
-
-      const seenIds = new Map<string, number>();
-      let dupes = 0;
-      for (const cookie of cookiesRes.cookies) {
-        const match = cookie.rawCookie.match(/NetflixId=([^;]+)/);
-        if (!match) continue;
-        const netflixId = match[1];
-        if (seenIds.has(netflixId)) {
-          dupes++;
-        } else {
-          seenIds.set(netflixId, 1);
-        }
-      }
-      setDuplicateCount(dupes);
-      if (dupes === 0) {
-        toast.success("No hay cookies duplicadas");
-      } else {
-        toast.info(`Se encontraron ${dupes} cookies duplicadas`);
-      }
+      // Duplicate detection requires rawCookie which is excluded from
+      // the API response for security. The server-side DELETE endpoint
+      // handles detection + deletion atomically. Just inform the user.
+      toast.info("Haz clic en \"Eliminar Duplicados\" para detectar y eliminar duplicados automaticamente");
     } catch {
-      toast.error("Error al buscar duplicados");
+      toast.error("Error al verificar duplicados");
     } finally {
       setCheckingDuplicates(false);
     }
@@ -910,7 +893,7 @@ export default function AdminPage() {
 
   // ── Delete Duplicates ──
   const handleDeleteDuplicates = useCallback(async () => {
-    if (!confirm(`¿Eliminar ${duplicateCount} cookies duplicadas? Se mantendrá la más antigua de cada grupo.`)) return;
+    if (!confirm("¿Eliminar cookies duplicadas? Se mantendrá la más antigua de cada grupo.")) return;
     setDeletingDuplicates(true);
     try {
       const res = await fetch("/api/admin/cookies?type=duplicates", { method: "DELETE" });
@@ -927,7 +910,7 @@ export default function AdminPage() {
     } finally {
       setDeletingDuplicates(false);
     }
-  }, [duplicateCount, loadData]);
+  }, [loadData]);
 
   // ── Logout ──
   const handleLogout = useCallback(async () => {
@@ -2055,7 +2038,7 @@ export default function AdminPage() {
                             </span>
                           </div>
                           <p className="text-white/15 text-[10px] font-mono truncate leading-relaxed">
-                            {c.rawCookie.substring(0, 100)}...
+                            ID: {c.id.substring(0, 12)}…
                           </p>
                           <div className="flex items-center gap-3 mt-2 flex-wrap">
                             {c.lastError && (
