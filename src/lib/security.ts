@@ -239,36 +239,6 @@ export const SecurityEvents = {
   INPUT_VALIDATION_FAILED: "INPUT_VALIDATION_FAILED",
 } as const;
 
-// ─── Request Body Size Guard ─────────────────────────────────────────────────
-
-const MAX_BODY_SIZE = 1 * 1024 * 1024; // 1MB
-
-/**
- * Guard against oversized request bodies
- */
-export async function guardBodySize(request: NextRequest): Promise<{ ok: boolean; error?: string }> {
-  const contentLength = request.headers.get("content-length");
-  if (contentLength && parseInt(contentLength) > MAX_BODY_SIZE) {
-    return { ok: false, error: "Request body too large" };
-  }
-
-  // Only parse body if Content-Length is missing or suspicious
-  if (!contentLength) {
-    try {
-      const cloned = request.clone();
-      const body = await cloned.json();
-      const bodyStr = JSON.stringify(body);
-      if (bodyStr.length > MAX_BODY_SIZE) {
-        return { ok: false, error: "Request body too large" };
-      }
-    } catch {
-      return { ok: false, error: "Invalid request body" };
-    }
-  }
-
-  return { ok: true };
-}
-
 // ─── Security Headers Helper ─────────────────────────────────────────────────
 
 export function getSecurityHeaders(): Record<string, string> {

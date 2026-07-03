@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { getClientIP, logSecurityEvent, sanitizeString, checkRateLimit } from "@/lib/security";
+import { getClientIP, logSecurityEvent, checkRateLimit } from "@/lib/security";
 
 export async function POST(request: Request) {
   try {

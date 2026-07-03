@@ -141,19 +141,33 @@ export async function getBlockedIPs(): Promise<
   if (!redis) return [];
 
   try {
-    const keys = await redis.keys(`${BLOCKLIST_PREFIX}*`);
     const results: Array<{ ip: string; reason: string; expiresAt: number }> = [];
+    let cursor = 0;
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, {
+        match: `${BLOCKLIST_PREFIX}*`,
+        count: 100,
+      });
+      cursor = nextCursor;
 
-    for (const key of keys) {
-      const data = await redis.get<{ reason: string; expiresAt: number }>(key);
-      if (data && Date.now() < data.expiresAt) {
-        results.push({
-          ip: key.replace(BLOCKLIST_PREFIX, ""),
-          reason: data.reason,
-          expiresAt: data.expiresAt,
-        });
+      if (keys.length > 0) {
+        const values = await Promise.all(
+          keys.map((key) =>
+            redis.get<{ reason: string; expiresAt: number }>(key)
+          )
+        );
+        for (let i = 0; i < keys.length; i++) {
+          const data = values[i];
+          if (data && Date.now() < data.expiresAt) {
+            results.push({
+              ip: keys[i].replace(BLOCKLIST_PREFIX, ""),
+              reason: data.reason,
+              expiresAt: data.expiresAt,
+            });
+          }
+        }
       }
-    }
+    } while (cursor !== 0);
 
     return results;
   } catch {

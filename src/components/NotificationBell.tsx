@@ -147,13 +147,6 @@ export default function NotificationBell() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      <style jsx global>{`
-        .premium-scroll::-webkit-scrollbar { width: 4px; }
-        .premium-scroll::-webkit-scrollbar-track { background: transparent; }
-        .premium-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 10px; }
-        .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-      `}</style>
     </div>
   );
 }

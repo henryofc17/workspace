@@ -6,7 +6,6 @@ import {
   getClientIP,
   logSecurityEvent,
   SecurityEvents,
-  sanitizeString,
 } from "@/lib/security";
 import { validateBody, registerSchema } from "@/lib/validators";
 import { getConfig } from "@/lib/config";
@@ -27,7 +26,7 @@ async function generateUniqueReferralCode(): Promise<string> {
   while (attempts < 20) {
     code = "HF-";
     for (let i = 0; i < 5; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
+      code += chars.charAt(crypto.randomInt(0, chars.length));
     }
     const exists = await prisma.user.findUnique({ where: { referralCode: code } });
     if (!exists) return code;
@@ -230,39 +229,36 @@ export async function POST(request: Request) {
             details: { reason: "referral_daily_limit", referrerId: referrer.id, count: recentReferralsByThisReferrer },
           });
         } else {
-          // Valid referral
+          // Valid referral — atomic transaction
           const REFERRER_CREDIT = await getConfig("REFERRER_CREDIT", 3);
           const REFERRED_CREDIT = await getConfig("REFERRED_CREDIT", 2);
 
-          // Update referrer credits
-          await prisma.user.update({
-            where: { id: referrer.id },
-            data: { credits: { increment: REFERRER_CREDIT } },
-          });
-
-          await prisma.transaction.create({
-            data: {
-              userId: referrer.id,
-              type: "REFERRAL_BONUS",
-              credits: REFERRER_CREDIT,
-              description: `Referido: ${user.username} usó tu código`,
-            },
-          });
-
-          // Update referred user credits
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { credits: { increment: REFERRED_CREDIT }, referredBy: referrer.id },
-          });
-
-          await prisma.transaction.create({
-            data: {
-              userId: user.id,
-              type: "REFERRAL_BONUS",
-              credits: REFERRED_CREDIT,
-              description: `Bonificación por código de referido de ${referrer.username}`,
-            },
-          });
+          await prisma.$transaction([
+            prisma.user.update({
+              where: { id: referrer.id },
+              data: { credits: { increment: REFERRER_CREDIT } },
+            }),
+            prisma.transaction.create({
+              data: {
+                userId: referrer.id,
+                type: "REFERRAL_BONUS",
+                credits: REFERRER_CREDIT,
+                description: `Referido: ${user.username} usó tu código`,
+              },
+            }),
+            prisma.user.update({
+              where: { id: user.id },
+              data: { credits: { increment: REFERRED_CREDIT }, referredBy: referrer.id },
+            }),
+            prisma.transaction.create({
+              data: {
+                userId: user.id,
+                type: "REFERRAL_BONUS",
+                credits: REFERRED_CREDIT,
+                description: `Bonificación por código de referido de ${referrer.username}`,
+              },
+            }),
+          ]);
 
           referralMessage = ` ¡Ganaste ${REFERRED_CREDIT} créditos extra por el código de referido!`;
 
@@ -285,8 +281,10 @@ export async function POST(request: Request) {
       role: user.role,
     });
 
-    // Fetch updated credits (with referral bonus if any)
-    const updatedUser = await prisma.user.findUnique({ where: { id: user.id }, select: { credits: true } });
+    // Compute final credits without extra DB query
+    const finalCredits = referralMessage
+      ? REGISTER_BONUS + REFERRED_CREDIT
+      : REGISTER_BONUS;
 
     const response = NextResponse.json({
       success: true,
@@ -294,9 +292,9 @@ export async function POST(request: Request) {
         id: user.id,
         username: user.username,
         role: user.role,
-        credits: updatedUser?.credits || user.credits,
+        credits: finalCredits,
       },
-      message: `¡Cuenta creada! Tienes ${updatedUser?.credits || REGISTER_BONUS} créditos de bienvenida.${referralMessage}`,
+      message: `¡Cuenta creada! Tienes ${finalCredits} créditos de bienvenida.${referralMessage}`,
     });
 
     setAuthCookies(response, tokens);

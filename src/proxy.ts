@@ -47,7 +47,6 @@ const PUBLIC_PATHS = [
   "/api/auth/register",
   "/api/auth/me",
   "/login",
-  "/api/setup",
   "/api/config",
 ];
 

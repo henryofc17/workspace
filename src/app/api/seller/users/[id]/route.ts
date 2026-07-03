@@ -156,28 +156,28 @@ export async function PUT(
         return NextResponse.json({ success: true, user: updatedUser });
       }
 
-      // Negative amount (deduct from user) — no need to deduct from seller
-      const newCredits = user.credits + amount;
-      if (newCredits < 0) {
+      // Negative amount (deduct from user) — atomic with guard
+      try {
+        const updatedUser = await prisma.$transaction(async (tx) => {
+          const u = await tx.user.update({
+            where: { id, credits: { gte: Math.abs(amount) } },
+            data: { credits: { increment: amount } },
+            select: { id: true, username: true, credits: true },
+          });
+          await tx.transaction.create({
+            data: {
+              userId: id,
+              type: "SELLER_DEDUCT",
+              credits: amount,
+              description: creditDescription || "Créditos deducidos por seller",
+            },
+          });
+          return u;
+        });
+        return NextResponse.json({ success: true, user: updatedUser });
+      } catch {
         return NextResponse.json({ success: false, error: "Créditos insuficientes" }, { status: 400 });
       }
-
-      const updatedUser = await prisma.user.update({
-        where: { id },
-        data: { credits: newCredits },
-        select: { id: true, username: true, credits: true },
-      });
-
-      await prisma.transaction.create({
-        data: {
-          userId: id,
-          type: "SELLER_DEDUCT",
-          credits: amount,
-          description: creditDescription || "Créditos deducidos por seller",
-        },
-      });
-
-      return NextResponse.json({ success: true, user: updatedUser });
     }
 
     // If only password was changed

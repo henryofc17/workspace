@@ -177,13 +177,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (success) {
-      const TV_COST = await getConfig("TV_ACTIVATE_COST", 5);
-
       try {
         const updated = await prisma.$transaction(async (tx) => {
           const u = await tx.user.update({
-            where: { id: session.userId, credits: { gte: TV_COST } },
-            data: { credits: { decrement: TV_COST } },
+            where: { id: session.userId, credits: { gte: TV_ACTIVATE_COST } },
+            data: { credits: { decrement: TV_ACTIVATE_COST } },
             select: { credits: true },
           });
           await tx.cookie.update({
@@ -194,7 +192,7 @@ export async function POST(request: NextRequest) {
             data: {
               userId: session.userId,
               type: "TV_ACTIVATE",
-              credits: -TV_COST,
+              credits: -TV_ACTIVATE_COST,
               description: `Activación TV (${cleanCode}) con cookie #${cookie.id.slice(0, 6)}${picked.regionName ? ` [${picked.regionName}]` : ""}`,
             },
           });

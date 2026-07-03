@@ -10,29 +10,25 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "No autenticado" }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.userId },
-      select: { referralCode: true, referredBy: true },
-    });
-
-    // Count how many users I've referred
-    const referredCount = await prisma.user.count({
-      where: { referredBy: session.userId },
-    });
-
-    // Get my referral earnings
-    const referralEarnings = await prisma.transaction.aggregate({
-      where: { userId: session.userId, type: "REFERRAL_BONUS" },
-      _sum: { credits: true },
-    });
-
-    // Get list of referred users (last 20)
-    const referredUsers = await prisma.user.findMany({
-      where: { referredBy: session.userId },
-      select: { id: true, username: true, createdAt: true },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    });
+    const [user, referredCount, referralEarnings, referredUsers] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: session.userId },
+        select: { referralCode: true, referredBy: true },
+      }),
+      prisma.user.count({
+        where: { referredBy: session.userId },
+      }),
+      prisma.transaction.aggregate({
+        where: { userId: session.userId, type: "REFERRAL_BONUS" },
+        _sum: { credits: true },
+      }),
+      prisma.user.findMany({
+        where: { referredBy: session.userId },
+        select: { id: true, username: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+    ]);
 
     return NextResponse.json({
       success: true,

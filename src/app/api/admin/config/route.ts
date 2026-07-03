@@ -27,12 +27,15 @@ export async function GET() {
     ];
 
     const result: Record<string, string | number> = {};
-    for (const { key, defaultValue } of numKeys) {
-      result[key] = await getConfig(key, defaultValue);
-    }
-    for (const { key, defaultValue } of stringKeys) {
-      result[key] = await getConfigString(key, defaultValue);
-    }
+    const numResults = await Promise.all(
+      numKeys.map(({ key, defaultValue }) => getConfig(key, defaultValue))
+    );
+    const strResults = await Promise.all(
+      stringKeys.map(({ key, defaultValue }) => getConfigString(key, defaultValue))
+    );
+
+    numKeys.forEach(({ key }, i) => { result[key] = numResults[i]; });
+    stringKeys.forEach(({ key }, i) => { result[key] = strResults[i]; });
 
     return NextResponse.json({ success: true, config: result });
   } catch (err: any) {
