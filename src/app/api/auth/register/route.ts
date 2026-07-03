@@ -26,7 +26,7 @@ async function generateUniqueReferralCode(): Promise<string> {
   while (attempts < 20) {
     code = "HF-";
     for (let i = 0; i < 5; i++) {
-      code += chars.charAt(crypto.randomInt(0, chars.length));
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     const exists = await prisma.user.findUnique({ where: { referralCode: code } });
     if (!exists) return code;
@@ -282,8 +282,13 @@ export async function POST(request: Request) {
     });
 
     // Compute final credits without extra DB query
-    const finalCredits = referralMessage
-      ? REGISTER_BONUS + REFERRED_CREDIT
+    let referredCreditAmount = 0;
+    if (referralMessage && referralMessage.includes("créditos extra")) {
+      const match = referralMessage.match(/(\d+) créditos extra/);
+      if (match) referredCreditAmount = parseInt(match[1], 10);
+    }
+    const finalCredits = referredCreditAmount > 0
+      ? REGISTER_BONUS + referredCreditAmount
       : REGISTER_BONUS;
 
     const response = NextResponse.json({

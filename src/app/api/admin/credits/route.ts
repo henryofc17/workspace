@@ -43,33 +43,34 @@ export async function PUT(request: NextRequest) {
       }
 
       // Use a transaction to ensure atomicity: deduct from admin, add to seller, record both transactions
-      const [updatedTarget] = await prisma.$transaction([
-        prisma.user.update({
+      const updatedTarget = await prisma.$transaction(async (tx) => {
+        const target = await tx.user.update({
           where: { id: userId },
           data: { credits: { increment: numericAmount } },
           select: { id: true, username: true, credits: true },
-        }),
-        prisma.user.update({
+        });
+        await tx.user.update({
           where: { id: session.userId },
           data: { credits: { decrement: numericAmount } },
-        }),
-        prisma.transaction.create({
+        });
+        await tx.transaction.create({
           data: {
             userId,
             type: "ADMIN_GRANT",
             credits: numericAmount,
             description: description || "Créditos otorgados por admin",
           },
-        }),
-        prisma.transaction.create({
+        });
+        await tx.transaction.create({
           data: {
             userId: session.userId,
             type: "ADMIN_DEDUCT",
             credits: -numericAmount,
-            description: `Transferencia a seller ${updatedTarget?.username || userId}`,
+            description: `Transferencia a seller ${target.username || userId}`,
           },
-        }),
-      ]);
+        });
+        return target;
+      });
 
       logSecurityEvent({
         level: "info",

@@ -142,7 +142,7 @@ export async function getBlockedIPs(): Promise<
 
   try {
     const results: Array<{ ip: string; reason: string; expiresAt: number }> = [];
-    let cursor = 0;
+    let cursor: string | number = "0";
     do {
       const [nextCursor, keys] = await redis.scan(cursor, {
         match: `${BLOCKLIST_PREFIX}*`,
