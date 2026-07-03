@@ -97,11 +97,10 @@ export async function POST(request: Request) {
         },
       });
 
-      const activeCount = await prisma.cookie.count({
-        where: { status: "ACTIVE" },
-      });
-
-      const totalCount = await prisma.cookie.count();
+      const [activeCount, totalCount] = await Promise.all([
+        prisma.cookie.count({ where: { status: "ACTIVE" } }),
+        prisma.cookie.count(),
+      ]);
 
       const noMoreCookies =
         totalCount > 0 && activeCount === 0;

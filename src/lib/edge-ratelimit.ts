@@ -171,7 +171,12 @@ export async function verifyTurnstileEdge(
 ): Promise<{ success: boolean; error?: string }> {
   const secret = process.env.TURNSTILE_SECRET_KEY;
   if (!secret) {
-    // If no secret configured, skip verification (dev mode)
+    // In production, fail closed — reject if CAPTCHA not configured
+    if (process.env.NODE_ENV === "production") {
+      console.error("[SECURITY] TURNSTILE_SECRET_KEY not set in production — rejecting request");
+      return { success: false, error: "Verificación no configurada" };
+    }
+    // Dev mode: skip verification
     return { success: true };
   }
 
@@ -227,15 +232,19 @@ export async function verifyTurnstileEdge(
 // ─── Helper: Get Client IP (Edge-compatible) ─────────────────────────────────
 
 export function getClientIPEdge(request: Request): string {
+  // Use trusted headers first (Vercel/Cloudflare set these directly)
+  const vercelIP = request.headers.get("x-vercel-forwarded-for");
+  if (vercelIP) return vercelIP.split(",")[0]?.trim() || "unknown";
+  const cfIP = request.headers.get("cf-connecting-ip");
+  if (cfIP) return cfIP;
+  const realIP = request.headers.get("x-real-ip");
+  if (realIP) return realIP;
+  // x-forwarded-for is easily spoofed — only use as last resort
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) {
     const ips = forwarded.split(",").map((ip) => ip.trim());
-    return ips[0] || "unknown";
+    return ips[ips.length - 1] || "unknown";
   }
-  const realIP = request.headers.get("x-real-ip");
-  if (realIP) return realIP;
-  const cfIP = request.headers.get("cf-connecting-ip");
-  if (cfIP) return cfIP;
   return "unknown";
 }
 

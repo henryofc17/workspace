@@ -47,13 +47,17 @@ export default function NotificationBell() {
   }, []);
 
   useEffect(() => {
-    // Poll notifications every 30 seconds, starting immediately
-    const interval = setInterval(loadNotifications, 30000);
-    // Initial load - schedule via setTimeout to avoid synchronous setState in effect
-    const initial = setTimeout(loadNotifications, 0);
+    // Poll notifications every 60s, pause when tab is hidden to save Vercel invocations
+    const load = () => { if (!document.hidden) loadNotifications(); };
+    const interval = setInterval(load, 60000);
+    const initial = setTimeout(load, 0);
+    // Pause/resume on visibility change
+    const onVisibility = () => { if (!document.hidden) load(); };
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       clearInterval(interval);
       clearTimeout(initial);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [loadNotifications]);
 

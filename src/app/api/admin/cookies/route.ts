@@ -10,6 +10,18 @@ export async function GET() {
 
     const cookies = await prisma.cookie.findMany({
       orderBy: { createdAt: "desc" },
+      take: 500,
+      select: {
+        id: true,
+        status: true,
+        country: true,
+        plan: true,
+        usedCount: true,
+        lastUsed: true,
+        lastError: true,
+        createdAt: true,
+        // rawCookie intentionally excluded — sensitive data
+      },
     });
 
     const active = cookies.filter((c) => c.status === "ACTIVE").length;
@@ -112,7 +124,7 @@ export async function POST(request: NextRequest) {
     if (err.message === "FORBIDDEN") {
       return NextResponse.json({ success: false, error: "Acceso denegado" }, { status: 403 });
     }
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Error del servidor" }, { status: 500 });
   }
 }
 

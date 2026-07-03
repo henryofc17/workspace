@@ -144,34 +144,21 @@ export async function POST(req: Request) {
       );
     }
 
-    // ── Layer 6: Find user (case-insensitive) ──
+    // ── Layer 6: Find user (case-insensitive) & timing-safe password check ──
+    const DUMMY_HASH = "$2a$10$abcdefghijklmnopqrstuvwxABCDEFGHIJ";
     const user = await prisma.user.findFirst({
       where: { username: { equals: username, mode: "insensitive" } },
     });
 
-    if (!user) {
-      logSecurityEvent({
-        level: "warn",
-        event: SecurityEvents.LOGIN_FAILED,
-        ip: clientIP,
-        details: { username, reason: "user_not_found" },
-      });
-      return NextResponse.json(
-        { error: "Credenciales inválidas" },
-        { status: 401 }
-      );
-    }
+    // Always run bcrypt.compare to prevent timing-based user enumeration
+    const valid = user ? await bcrypt.compare(password, user.password) : await bcrypt.compare(password, DUMMY_HASH);
 
-    // ── Layer 7: Compare password ──
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) {
+    if (!user || !valid) {
       logSecurityEvent({
         level: "warn",
         event: SecurityEvents.LOGIN_FAILED,
         ip: clientIP,
-        userId: user.id,
-        username: user.username,
-        details: { reason: "wrong_password" },
+        details: { username, reason: user ? "wrong_password" : "user_not_found" },
       });
       return NextResponse.json(
         { error: "Credenciales inválidas" },

@@ -21,7 +21,7 @@ export const registerSchema = z.object({
     .transform((v) => v.trim()),
   password: z
     .string()
-    .min(4, "Contraseña debe tener al menos 4 caracteres")
+    .min(6, "Contraseña debe tener al menos 6 caracteres")
     .max(64, "Contraseña muy larga"),
   fingerprint: z.string().min(1, "Fingerprint requerido").max(200),
   turnstileToken: z.string().min(1, "Verificación requerida").max(5000),

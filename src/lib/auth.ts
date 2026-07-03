@@ -13,11 +13,15 @@ import { createHmac } from "crypto";
 // (page data collection) when env vars are not yet available.
 
 function deriveSecret(purpose: string): string {
+  // SECURITY: Only used as fallback when env vars are missing.
+  // In production, JWT_SECRET and REFRESH_TOKEN_SECRET should always be set.
+  if (process.env.NODE_ENV === "production") {
+    console.error(`[CRITICAL] JWT secret for '${purpose}' not set. Set JWT_SECRET and REFRESH_TOKEN_SECRET env vars.`);
+  }
   const adminPwd = process.env.ADMIN_PASSWORD || "";
   const dbUrl = process.env.DATABASE_URL || "";
-  // Deterministic HMAC-based derivation from available env vars
   const base = `${purpose}:${adminPwd}:${dbUrl}`;
-  return createHmac("sha256", base).update("nf-checker-jwt-key").digest("hex");
+  return createHmac("sha256", base).update("nf-checker-jwt-key-v2-secure").update(Date.now().toString(36).slice(-4)).digest("hex");
 }
 
 const JWT_SECRET = new TextEncoder().encode(
@@ -124,19 +128,27 @@ export async function getSession(): Promise<JWTPayload | null> {
       if (payload) return payload;
     }
 
-    // If access token expired, try refresh token
+    // If access token expired, try refresh token and ROTATE it
     const refreshToken = cookieStore.get("refresh-token")?.value;
     if (refreshToken) {
       const payload = await verifyRefreshToken(refreshToken);
       if (payload) {
-        // Auto-rotate: issue new access token
+        // Rotate: issue new access + refresh token pair to prevent replay
         const newAccessToken = await createAccessToken(payload);
+        const newRefreshToken = await createRefreshToken(payload);
         const cookieStore2 = await cookies();
         cookieStore2.set("access-token", newAccessToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
           sameSite: "strict",
           maxAge: 30 * 60, // 30 min
+          path: "/",
+        });
+        cookieStore2.set("refresh-token", newRefreshToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "strict",
+          maxAge: 7 * 24 * 60 * 60, // 7 days
           path: "/",
         });
         return payload;

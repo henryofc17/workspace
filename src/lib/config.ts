@@ -8,7 +8,7 @@ interface CacheEntry {
 }
 
 const cache = new Map<string, CacheEntry>();
-const TTL_MS = 30_000; // 30 seconds — increased from 5s to reduce DB load
+const TTL_MS = 120_000; // 120 seconds — site config rarely changes
 
 // Track if migrations have been checked this invocation
 let migrationsChecked = false;

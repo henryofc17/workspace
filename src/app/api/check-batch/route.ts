@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import AdmZip from "adm-zip";
+// adm-zip is heavy (~100KB) — only load when a ZIP file is actually uploaded
 import {
   extractCookiesFromText,
   checkCookie,
@@ -25,11 +25,14 @@ async function processCookie(
   index: number
 ): Promise<BatchResult> {
   const cookieDict = extractCookiesFromText(rawCookie);
+  const truncated = typeof rawCookie === 'string' && rawCookie.length > 20
+    ? rawCookie.slice(0, 20) + '...'
+    : rawCookie;
 
   if (!cookieDict || Object.keys(cookieDict).length === 0) {
     return {
       index,
-      rawCookie,
+      rawCookie: truncated,
       success: false,
       error: "No se pudieron extraer cookies",
     };
@@ -40,7 +43,7 @@ async function processCookie(
   if (!tokenResult.success) {
     return {
       index,
-      rawCookie,
+      rawCookie: truncated,
       success: false,
       error: tokenResult.error || "Error al generar NFToken",
     };
@@ -53,7 +56,7 @@ async function processCookie(
 
   return {
     index,
-    rawCookie,
+    rawCookie: truncated,
     success: true,
     token: tokenResult.token,
     link: tokenResult.link,
@@ -91,11 +94,19 @@ function parseTxtFile(content: string): string[] {
   return cookies;
 }
 
-/** Extract cookie strings from a .zip file */
-function parseZipFile(buffer: Buffer): string[] {
+/** Extract cookie strings from a .zip file — dynamic import to avoid loading adm-zip for non-ZIP requests */
+async function parseZipFile(buffer: Buffer): Promise<string[]> {
   const cookies: string[] = [];
-  let zip: AdmZip;
 
+  let AdmZip: any;
+  try {
+    AdmZip = (await import("adm-zip")).default;
+  } catch {
+    console.error("adm-zip not available");
+    return cookies;
+  }
+
+  let zip: any;
   try {
     zip = new AdmZip(buffer);
   } catch (err) {
@@ -169,7 +180,7 @@ export async function POST(request: NextRequest) {
         const buffer = Buffer.from(await file.arrayBuffer());
 
         if (file.name.endsWith(".zip")) {
-          cookieTexts = parseZipFile(buffer);
+          cookieTexts = await parseZipFile(buffer);
         } else {
           const content = buffer.toString("utf-8");
           cookieTexts = parseTxtFile(content);

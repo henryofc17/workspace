@@ -128,15 +128,20 @@ export function checkRateLimit(
  * Get client IP from request
  */
 export function getClientIP(request: NextRequest): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    const ips = forwarded.split(",").map((ip) => ip.trim());
-    return ips[0] || "unknown";
-  }
-  const realIP = request.headers.get("x-real-ip");
-  if (realIP) return realIP;
+  // Use trusted headers first (Vercel/Cloudflare set these directly)
+  const vercelIP = request.headers.get("x-vercel-forwarded-for");
+  if (vercelIP) return vercelIP.split(",")[0]?.trim() || "unknown";
   const cfIP = request.headers.get("cf-connecting-ip");
   if (cfIP) return cfIP;
+  const realIP = request.headers.get("x-real-ip");
+  if (realIP) return realIP;
+  // x-forwarded-for is easily spoofed — only use as last resort
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) {
+    // Take the RIGHTMOST IP (closest to your server) instead of leftmost (easiest to spoof)
+    const ips = forwarded.split(",").map((ip) => ip.trim());
+    return ips[ips.length - 1] || "unknown";
+  }
   return "unknown";
 }
 

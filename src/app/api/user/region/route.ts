@@ -4,6 +4,28 @@ import { prisma } from "@/lib/prisma";
 import { COUNTRIES, getCountryName } from "@/lib/countries";
 import { getConfig } from "@/lib/config";
 
+// Cache available countries for 120s — they only change when admin uploads cookies
+let regionCache: { data: Array<{ code: string; name: string }>; expiresAt: number } | null = null;
+const REGION_CACHE_TTL = 120_000;
+
+async function getAvailableCountries(): Promise<Array<{ code: string; name: string }>> {
+  const now = Date.now();
+  if (regionCache && regionCache.expiresAt > now) {
+    return regionCache.data;
+  }
+  const cookieCountries = await prisma.cookie.findMany({
+    where: { status: "ACTIVE", country: { not: null } },
+    select: { country: true },
+    distinct: ["country"],
+  });
+  const availableCodes = new Set(cookieCountries.map(c => c.country).filter(Boolean) as string[]);
+  const data = COUNTRIES
+    .filter(c => availableCodes.has(c.code))
+    .map(c => ({ code: c.code, name: c.name }));
+  regionCache = { data, expiresAt: now + REGION_CACHE_TTL };
+  return data;
+}
+
 // ─── GET: Return user's region + available countries (from cookies) ─────────
 export async function GET() {
   try {
@@ -17,17 +39,7 @@ export async function GET() {
       select: { region: true },
     });
 
-    // Get distinct country codes from active cookies (admin refreshes these)
-    const cookieCountries = await prisma.cookie.findMany({
-      where: { status: "ACTIVE", country: { not: null } },
-      select: { country: true },
-      distinct: ["country"],
-    });
-
-    const availableCodes = new Set(cookieCountries.map(c => c.country).filter(Boolean) as string[]);
-    const availableCountries = COUNTRIES
-      .filter(c => availableCodes.has(c.code))
-      .map(c => ({ code: c.code, name: c.name }));
+    const availableCountries = await getAvailableCountries();
 
     return NextResponse.json({
       success: true,
