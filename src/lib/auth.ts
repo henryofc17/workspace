@@ -15,13 +15,19 @@ import { createHmac } from "crypto";
 function deriveSecret(purpose: string): string {
   // SECURITY: Only used as fallback when env vars are missing.
   // In production, JWT_SECRET and REFRESH_TOKEN_SECRET should always be set.
+  // CRITICAL: This MUST be deterministic — the same inputs always produce the
+  // same key. The proxy (Edge) and route handlers (Node.js) run in separate
+  // Vercel instances and load this module independently. If the secret differs
+  // between them, the proxy will reject every token the login route creates,
+  // causing an infinite redirect loop (/ → proxy rejects → /login → login
+  // succeeds → / → proxy rejects → /login ...).
   if (process.env.NODE_ENV === "production") {
-    console.error(`[CRITICAL] JWT secret for '${purpose}' not set. Set JWT_SECRET and REFRESH_TOKEN_SECRET env vars.`);
+    console.error(`[CRITICAL] JWT secret for '${purpose}' not set. Set JWT_SECRET and REFRESH_TOKEN_SECRET env vars to avoid cross-runtime key mismatch.`);
   }
   const adminPwd = process.env.ADMIN_PASSWORD || "";
   const dbUrl = process.env.DATABASE_URL || "";
   const base = `${purpose}:${adminPwd}:${dbUrl}`;
-  return createHmac("sha256", base).update("nf-checker-jwt-key-v2-secure").update(Date.now().toString(36).slice(-4)).digest("hex");
+  return createHmac("sha256", base).update("nf-checker-jwt-key").digest("hex");
 }
 
 const JWT_SECRET = new TextEncoder().encode(
