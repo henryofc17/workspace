@@ -9,11 +9,20 @@ import {
 import type { CheckResult, NFTokenResult, NetflixMetadata } from "@/lib/netflix-checker";
 import { checkRateLimit } from "@/lib/security";
 
-// Vercel serverless function max duration
-export const maxDuration = 120; // 2 minutes
+// Vercel Free tier: max 10s execution
+// No maxDuration export — default 10s applies
 
 // Rate limit: max 3 batch checks per user per 2 minutes
 const BATCH_RATE_LIMIT = { maxRequests: 3, windowMs: 2 * 60 * 1000, blockDurationMs: 5 * 60 * 1000 };
+
+/** Maximum cookies per request — keeps execution under Vercel Free 10s limit */
+const MAX_COOKIES = 20;
+
+/** Payload size limit: 2 MB */
+const MAX_PAYLOAD_BYTES = 2 * 1024 * 1024;
+
+/** Process cookies in parallel chunks to maximize throughput without overwhelming Netflix */
+const CHUNK_SIZE = 5;
 
 interface BatchResult extends CheckResult {
   index: number;
@@ -135,6 +144,15 @@ async function parseZipFile(buffer: Buffer): Promise<string[]> {
 
 export async function POST(request: NextRequest) {
   try {
+    // ── Reject payloads > 2MB before any processing ──
+    const contentLength = request.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > MAX_PAYLOAD_BYTES) {
+      return NextResponse.json(
+        { success: false, error: "Payload demasiado grande. Máximo 2 MB." },
+        { status: 413 }
+      );
+    }
+
     // Auth check
     const session = await getSession();
     if (!session) {
@@ -207,14 +225,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (cookieTexts.length > 50) {
-      cookieTexts = cookieTexts.slice(0, 50);
+    // ── Enforce max 20 cookies for Vercel Free 10s limit ──
+    if (cookieTexts.length > MAX_COOKIES) {
+      cookieTexts = cookieTexts.slice(0, MAX_COOKIES);
     }
 
+    // ── Process in parallel chunks of 5 ──
     const results: BatchResult[] = [];
-    for (let i = 0; i < cookieTexts.length; i++) {
-      const result = await processCookie(cookieTexts[i], i);
-      results.push(result);
+    for (let i = 0; i < cookieTexts.length; i += CHUNK_SIZE) {
+      const chunk = cookieTexts.slice(i, i + CHUNK_SIZE);
+      const chunkResults = await Promise.all(
+        chunk.map((raw, j) => processCookie(raw, i + j))
+      );
+      results.push(...chunkResults);
     }
 
     const hits = results.filter((r) => r.success).length;

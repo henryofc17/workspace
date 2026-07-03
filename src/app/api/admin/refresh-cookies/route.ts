@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { extractCookiesFromText } from "@/lib/netflix-checker";
+import type { NetflixMetadata } from "@/lib/netflix-checker";
 
-// Vercel serverless function max duration (requires Pro plan for >10s)
-export const maxDuration = 300; // 5 minutes
+// No maxDuration — Vercel Free default (10s) applies.
+// This is a Micro-Job: each call processes only a small batch.
+// Call it repeatedly from the frontend until all cookies are validated.
+
+/** Cookies processed per micro-job invocation */
+const BATCH_SIZE = 15;
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,139 +18,143 @@ export async function POST(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const onlyActive = searchParams.get("active") === "true";
 
-    const where = onlyActive ? { status: "ACTIVE" } : {};
-    const cookies = await prisma.cookie.findMany({ where });
+    // ── Micro-Job: take only the oldest BATCH_SIZE cookies ──
+    // Oldest first = least recently validated = highest priority
+    const where = onlyActive
+      ? { status: "ACTIVE" }
+      : {};
+
+    const cookies = await prisma.cookie.findMany({
+      where,
+      orderBy: { lastUsed: "asc" },
+      take: BATCH_SIZE,
+    });
 
     if (cookies.length === 0) {
       return NextResponse.json({
         success: true,
         message: "No hay cookies para validar",
-        results: { checked: 0, alive: 0, dead: 0, countriesFound: 0 },
+        results: { checked: 0, alive: 0, dead: 0, skipped: 0, countriesFound: 0 },
         countries: [],
+        remaining: 0,
       });
     }
 
+    // Count total remaining for frontend progress
+    const remaining = await prisma.cookie.count({ where });
+
     const { checkCookie, getMetadata, extractCountryFromNetflixId } = await import("@/lib/netflix-checker");
     const { getCountryName } = await import("@/lib/countries");
-    let alive = 0;
-    let dead = 0;
-    let skipped = 0; // transient errors (timeout/connection) — not marked dead
-    const countriesSet = new Set<string>();
-    const countriesList: Record<string, { code: string; name: string; count: number }> = {};
-    let metadataErrors = 0;
 
-    for (const cookie of cookies) {
-      const dict = extractCookiesFromText(cookie.rawCookie);
+    // ── Process all cookies in parallel with Promise.all ──
+    const results = await Promise.all(
+      cookies.map(async (cookie) => {
+        const dict = extractCookiesFromText(cookie.rawCookie);
 
-      if (!dict) {
-        await prisma.cookie.update({
-          where: { id: cookie.id },
-          data: { status: "DEAD", lastError: "No se pudo parsear" },
-        });
-        dead++;
-        continue;
-      }
+        if (!dict) {
+          await prisma.cookie.update({
+            where: { id: cookie.id },
+            data: { status: "DEAD", lastError: "No se pudo parsear" },
+          }).catch(() => {});
+          return { status: "dead" as const };
+        }
 
-      try {
-        // Step 1: Validate cookie can generate token
-        const result = await checkCookie(dict);
+        try {
+          const result = await checkCookie(dict);
 
-        if (!result.success) {
-          // If the error is transient (timeout/connection), do NOT mark as DEAD
-          if (result.isTransient) {
-            skipped++;
-            continue;
+          if (!result.success) {
+            if (result.isTransient) {
+              return { status: "skipped" as const };
+            }
+            await prisma.cookie.update({
+              where: { id: cookie.id },
+              data: {
+                status: "DEAD",
+                lastError: result.error || "Cookie inválida",
+                lastUsed: new Date(),
+              },
+            }).catch(() => {});
+            return { status: "dead" as const };
           }
+
+          // Extract metadata in parallel with the country fallback
+          const [metadata, fallbackCountry] = await Promise.all([
+            getMetadata(dict).catch(() => ({} as NetflixMetadata)),
+            Promise.resolve(extractCountryFromNetflixId(dict)),
+          ]);
+
+          const meta = metadata as NetflixMetadata;
+          let country = meta.country || fallbackCountry || null;
+          let plan = meta.plan || null;
+          let countryName: string | undefined;
+
+          if (country) {
+            countryName = meta.countryName || getCountryName(country);
+          }
+
           await prisma.cookie.update({
             where: { id: cookie.id },
             data: {
-              status: "DEAD",
-              lastError: result.error || "Cookie inválida",
+              status: "ACTIVE",
               lastUsed: new Date(),
+              ...(country && { country }),
+              ...(plan && { plan }),
             },
-          });
-          dead++;
-          continue;
-        }
+          }).catch(() => {});
 
-        // Step 2: Extract metadata (country, plan, etc.) from Netflix membership page
-        let country: string | null = null;
-        let plan: string | null = null;
-
-        try {
-          const metadata = await getMetadata(dict);
-
-          if (metadata.country) {
-            country = metadata.country;
-            countriesSet.add(country);
-
-            // Track country counts
-            if (countriesList[country]) {
-              countriesList[country].count++;
-            } else {
-              countriesList[country] = {
-                code: country,
-                name: metadata.countryName || country,
-                count: 1,
-              };
-            }
-          }
-
-          if (metadata.plan) {
-            plan = metadata.plan;
-          }
+          return {
+            status: "alive" as const,
+            country,
+            countryName,
+          };
         } catch {
-          // Metadata extraction failed but cookie is still valid
-          metadataErrors++;
+          // Transient network error — don't mark as DEAD
+          return { status: "skipped" as const };
         }
+      })
+    );
 
-        // Step 2b: Fallback — extract country from NetflixId if still unknown
-        if (!country) {
-          const fallbackCountry = extractCountryFromNetflixId(dict);
-          if (fallbackCountry) {
-            country = fallbackCountry;
-            countriesSet.add(country);
-            if (countriesList[country]) {
-              countriesList[country].count++;
-            } else {
-              countriesList[country] = { code: country, name: getCountryName(country), count: 1 };
-            }
+    // ── Aggregate results ──
+    let alive = 0;
+    let dead = 0;
+    let skipped = 0;
+    const countriesList: Record<string, { code: string; name: string; count: number }> = {};
+
+    for (const r of results) {
+      if (r.status === "alive") {
+        alive++;
+        if (r.country) {
+          if (countriesList[r.country]) {
+            countriesList[r.country].count++;
+          } else {
+            countriesList[r.country] = {
+              code: r.country,
+              name: r.countryName || r.country,
+              count: 1,
+            };
           }
         }
-
-        // Step 3: Update cookie with ACTIVE status + metadata
-        await prisma.cookie.update({
-          where: { id: cookie.id },
-          data: {
-            status: "ACTIVE",
-            lastUsed: new Date(),
-            ...(country && { country }),
-            ...(plan && { plan }),
-          },
-        });
-        alive++;
-      } catch (err: any) {
-        // Connection errors or unexpected errors — do NOT mark as DEAD
-        // These are transient failures, the cookie might still be valid
+      } else if (r.status === "dead") {
+        dead++;
+      } else {
         skipped++;
       }
     }
 
-    // Build sorted countries list
     const countries = Object.values(countriesList).sort((a, b) => b.count - a.count);
 
     return NextResponse.json({
       success: true,
-      message: `Validación completa: ${alive} vivas, ${dead} muertas, ${skipped} saltadas, ${countries.length} región(es) detectada(s)`,
+      message: `Lote: ${alive} vivas, ${dead} muertas, ${skipped} saltadas${remaining > cookies.length ? ` — quedan ${remaining - cookies.length} cookies` : ""}`,
       results: {
         checked: cookies.length,
         alive,
         dead,
         skipped,
         countriesFound: countries.length,
-        metadataErrors,
       },
       countries,
+      remaining: remaining - cookies.length,
     });
   } catch (err: any) {
     if (err.message === "UNAUTHORIZED") {

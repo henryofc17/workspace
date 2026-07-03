@@ -4,12 +4,12 @@
  * In Next.js 16, the middleware concept has been renamed to "proxy".
  * This file replaces the old middleware.ts pattern.
  *
- * Architecture:
- *   Layer 1: Skip non-essential requests (OPTIONS, HEAD, static assets, cdn-cgi)
- *   Layer 2: Block suspicious paths (.env, .git, wp-, phpmyadmin)
- *   Layer 3: IP Blocklist check (for POST to /api/auth/*)
- *   Layer 4: Route-specific rate limiting (login 5/5min, register 3/15min)
- *   Layer 5: Authentication verification for protected routes
+ * Architecture (optimized for Vercel Free):
+ *   Layer 0: Skip non-essential requests (OPTIONS, HEAD, static assets, cdn-cgi)
+ *   Layer 1: Block suspicious paths (.env, .git, wp-, phpmyadmin)
+ *   Layer 2: JWT verification FIRST for protected routes — reject before any Redis call
+ *   Layer 3: Anti-bot protection ONLY for public auth routes (login/register)
+ *   Layer 4: Rate limiting & IP blocklist only for authenticated requests to auth routes
  *
  * IMPORTANT: Turnstile verification is NOT done in proxy.
  * Turnstile tokens are single-use — verifying here would cause the
@@ -144,6 +144,18 @@ function getSecurityHeaders(): Record<string, string> {
       process.env.NODE_ENV === "production"
         ? "max-age=31536000; includeSubDomains; preload"
         : "max-age=300",
+    "Content-Security-Policy": [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: https://i.ibb.co https://assets.nflxext.com",
+      "font-src 'self' https://fonts.gstatic.com",
+      "connect-src 'self' https://challenges.cloudflare.com https://www.netflix.com",
+      "frame-src https://challenges.cloudflare.com",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+    ].join("; "),
   };
 }
 
@@ -155,7 +167,34 @@ function addSecurityHeaders(response: NextResponse): NextResponse {
   return response;
 }
 
-// ─── Anti-Bot Protection for POST /api/auth/* ────────────────────────────────
+// ─── JWT Verification (local, no network) ────────────────────────────────────
+
+/**
+ * Verify session from cookies using local JWT verification only.
+ * Returns null if no valid session — caller should reject immediately.
+ * This runs BEFORE any Redis/network call to save Upstash invocations.
+ */
+async function verifySessionLocally(request: NextRequest) {
+  const accessToken = request.cookies.get("access-token")?.value;
+  const refreshToken = request.cookies.get("refresh-token")?.value;
+  const legacyToken = request.cookies.get("auth-token")?.value;
+
+  if (accessToken) {
+    const payload = await verifyAccessToken(accessToken);
+    if (payload) return payload;
+  }
+  if (refreshToken) {
+    const payload = await verifyRefreshToken(refreshToken);
+    if (payload) return payload;
+  }
+  if (legacyToken) {
+    const payload = await verifyAccessToken(legacyToken);
+    if (payload) return payload;
+  }
+  return null;
+}
+
+// ─── Anti-Bot Protection for POST /api/auth/* (ONLY after JWT check) ──────
 
 async function applyAntiBotProtection(
   request: NextRequest,
@@ -166,14 +205,13 @@ async function applyAntiBotProtection(
   const method = request.method;
 
   // ── GET requests: only check blocklist, no rate limiting ──
-  // Opening /api/auth/me or refreshing the page should NEVER count as an attempt
   if (method === "GET") {
     const blockCheck = await isIPBlocked(ip);
     if (blockCheck.blocked) {
       edgeLog("warn", "IP_BLOCKED_GET", { ip, pathname });
       return blockResponse(blockCheck.reason || "IP bloqueada", blockCheck.expiresAt);
     }
-    return null; // Allow GET requests freely
+    return null;
   }
 
   // ── POST requests: full protection ──
@@ -187,11 +225,9 @@ async function applyAntiBotProtection(
   }
 
   // ── Layer 2: Route-Specific Rate Limit (login & register only) ──
-  // logout/me are lightweight — don't rate-limit them in proxy
   if (routeType === "login" || routeType === "register") {
     const routeLimiter = getAuthRouteLimiter(routeType);
     if (!routeLimiter) {
-      // Redis not configured — skip rate limiting (fail-open)
       return null;
     }
     try {
@@ -201,7 +237,6 @@ async function applyAntiBotProtection(
 
         const violations = await incrementViolations(ip);
         if (violations >= VIOLATIONS_BEFORE_BLOCK) {
-          // Progressive escalation based on number of times blocked
           const blockIndex = Math.min(
             violations - VIOLATIONS_BEFORE_BLOCK,
             BLOCK_DURATIONS.length - 1
@@ -227,11 +262,9 @@ async function applyAntiBotProtection(
         routeType,
         error: err instanceof Error ? err.message : "unknown",
       });
-      // Fail-open: if Redis is down, don't block legitimate users
     }
   }
 
-  // No block — pass through to route handler
   return null;
 }
 
@@ -246,7 +279,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── Skip static assets and internal paths ──
+  // ── Skip static assets and internal paths (zero network calls) ──
   if (ALWAYS_SKIP_PREFIXES.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
@@ -271,62 +304,59 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // ── Anti-Bot Protection for /api/auth/* ──
-  if (pathname.startsWith("/api/auth/")) {
-    const blocked = await applyAntiBotProtection(request, pathname);
-    if (blocked) return blocked;
-  }
-
-  // ── Skip non-API/non-protected page routes ──
+  // ── Classify route type ──
   const isAPI = pathname.startsWith("/api/");
   const isProtectedPage = pathname === "/" || pathname.startsWith("/admin") || pathname.startsWith("/seller");
+  const isPublicAPI = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  const isAuthRoute = pathname.startsWith("/api/auth/");
 
+  // ── Non-API, non-protected pages: just add security headers, done ──
   if (!isAPI && !isProtectedPage) {
     return addSecurityHeaders(NextResponse.next());
   }
 
-  // ── Allow public API routes ──
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  // ══════════════════════════════════════════════════════════════════════════
+  // LAYER 1: JWT verification FIRST (local, no network calls)
+  // Reject unauthenticated/bot requests before any Redis operation.
+  // ══════════════════════════════════════════════════════════════════════════
+  const needsAuth = !isPublicAPI && (isAPI || isProtectedPage);
+
+  if (needsAuth) {
+    const session = await verifySessionLocally(request);
+
+    if (!session) {
+      // No valid session → reject immediately. Zero Redis calls made.
+      if (isAPI) {
+        return NextResponse.json(
+          { success: false, error: "No autenticado" },
+          { status: 401, headers: getSecurityHeaders() }
+        );
+      }
+      const loginUrl = new URL("/login", request.url);
+      return NextResponse.redirect(loginUrl);
+    }
+
+    // Check admin role
+    if (ADMIN_PATHS.some((p) => pathname.startsWith(p)) && session.role !== "ADMIN") {
+      if (isAPI) {
+        return NextResponse.json(
+          { success: false, error: "No autorizado" },
+          { status: 403, headers: getSecurityHeaders() }
+        );
+      }
+      return NextResponse.redirect(new URL("/", request.url));
+    }
+
     return addSecurityHeaders(NextResponse.next());
   }
 
-  // ── Check authentication for protected routes ──
-  const accessToken = request.cookies.get("access-token")?.value;
-  const refreshToken = request.cookies.get("refresh-token")?.value;
-  const legacyToken = request.cookies.get("auth-token")?.value;
-
-  let session: any = null;
-
-  if (accessToken) {
-    session = await verifyAccessToken(accessToken);
-  }
-  if (!session && refreshToken) {
-    session = await verifyRefreshToken(refreshToken);
-  }
-  if (!session && legacyToken) {
-    session = await verifyAccessToken(legacyToken);
-  }
-
-  if (!session) {
-    if (isAPI) {
-      return NextResponse.json(
-        { success: false, error: "No autenticado" },
-        { status: 401, headers: getSecurityHeaders() }
-      );
-    }
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  // ── Check admin role for admin routes ──
-  if (ADMIN_PATHS.some((p) => pathname.startsWith(p)) && session.role !== "ADMIN") {
-    if (isAPI) {
-      return NextResponse.json(
-        { success: false, error: "No autorizado" },
-        { status: 403, headers: getSecurityHeaders() }
-      );
-    }
-    return NextResponse.redirect(new URL("/", request.url));
+  // ══════════════════════════════════════════════════════════════════════════
+  // LAYER 2: Public auth routes — apply anti-bot (Redis) protection
+  // Only reached for login/register/me/logout — all other paths returned above.
+  // ══════════════════════════════════════════════════════════════════════════
+  if (isAuthRoute) {
+    const blocked = await applyAntiBotProtection(request, pathname);
+    if (blocked) return blocked;
   }
 
   return addSecurityHeaders(NextResponse.next());
