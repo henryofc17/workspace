@@ -1279,25 +1279,17 @@ export default function AdminPage() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8 pb-12">
         {/* ═══ TAB NAVIGATION ═══ */}
-        <div className="relative flex bg-white/[0.03] backdrop-blur-xl p-1 rounded-2xl border border-white/[0.06]">
-          <motion.div
-            className="absolute top-1 bottom-1 rounded-xl bg-gradient-to-r from-red-500/20 to-orange-500/10 border border-red-500/20 shadow-lg shadow-red-500/5"
-            animate={{
-              left: `${(tabIndex / tabs.length) * 100}%`,
-              width: `${100 / tabs.length}%`,
-            }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          />
+        <div className="relative flex overflow-x-auto bg-white/[0.03] backdrop-blur-xl p-1 rounded-2xl border border-white/[0.06] scrollbar-none">
           {tabs.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors duration-200 ${
+              className={`relative z-10 flex-1 min-w-0 flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-medium transition-colors duration-200 whitespace-nowrap ${
                 tab === key ? "text-white" : "text-white/35 hover:text-white/60"
               }`}
             >
-              <Icon className="h-4 w-4" />
-              <span className="hidden sm:inline">{label}</span>
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="truncate">{label}</span>
             </button>
           ))}
         </div>
@@ -1698,29 +1690,29 @@ export default function AdminPage() {
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex flex-wrap gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                     <button
                       onClick={handleUploadCookies}
                       disabled={uploadingCookies || refreshing}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-red-500/10 hover:shadow-red-500/20 active:scale-[0.98]"
+                      className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white text-xs sm:text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-red-500/10 hover:shadow-red-500/20 active:scale-[0.98]"
                     >
-                      {uploadingCookies ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                      {uploadingCookies ? <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" /> : <Upload className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
                       Subir
                     </button>
                     <button
                       onClick={handleRefreshCookies}
                       disabled={refreshing || uploadingCookies}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-400 text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-500/10 active:scale-[0.98]"
+                      className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-400 text-xs sm:text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-500/10 active:scale-[0.98]"
                     >
-                      {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                      Refrescar Cookies
+                      {refreshing ? <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+                      Refrescar
                     </button>
                     <button
                       onClick={handleDetectCountries}
                       disabled={refreshing || uploadingCookies}
                       className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-sky-500/20 bg-sky-500/[0.05] text-sky-400 text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-sky-500/10 active:scale-[0.98]"
                     >
-                      {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+                      {refreshing ? <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" /> : <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
                       Sacar País
                     </button>
                     <button
@@ -2127,7 +2119,7 @@ export default function AdminPage() {
                         {/* Quick Credit Update */}
                         <div className="space-y-2">
                           <h4 className="text-white/50 text-xs font-medium uppercase tracking-wider">Actualizar Créditos</h4>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             <input type="number" placeholder="Cantidad (+/-)" value={sellerCreditAmount} onChange={(e) => setSellerCreditAmount(e.target.value)} className="premium-input h-9 px-3 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none focus:border-violet-500/40 transition-all" />
                             <input type="text" placeholder="Descripción" value={sellerCreditDesc} onChange={(e) => setSellerCreditDesc(e.target.value)} className="premium-input h-9 px-3 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none focus:border-violet-500/40 transition-all" />
                           </div>
@@ -2275,7 +2267,7 @@ export default function AdminPage() {
                       className="premium-input w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-amber-500/30 transition-all duration-300 resize-none"
                     />
                   </div>
-                  <div className="flex items-end gap-3">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2 sm:gap-3">
                     <div className="flex-1 space-y-1.5">
                       <label className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Tipo</label>
                       <select
@@ -2702,10 +2694,10 @@ export default function AdminPage() {
 
               {/* Modal Content */}
               <div className="flex-1 overflow-y-auto premium-scroll">
-                <div className="p-6 space-y-5">
+                <div className="p-4 sm:p-6 space-y-5">
                   {/* User Info Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 space-y-1.5">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 sm:p-3.5 space-y-1.5">
                       <div className="flex items-center gap-1.5">
                         <Coins className="h-3 w-3 text-amber-400/60" />
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Créditos</span>
@@ -2747,7 +2739,7 @@ export default function AdminPage() {
                       </div>
                     </div>
                     <div className="p-4">
-                      <div className="flex items-end gap-2">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
                         <div className="flex-1 space-y-1.5">
                           <label className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Cantidad</label>
                           <input
@@ -2801,7 +2793,7 @@ export default function AdminPage() {
                       {/* Change Password Form */}
                       <div className="relative pt-3 border-t border-white/[0.04]">
                         <p className="text-white/30 text-[10px] uppercase tracking-wider font-semibold mb-2">Cambiar contraseña</p>
-                        <div className="flex items-end gap-2">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
                           <div className="flex-1">
                             <input
                               type="text"

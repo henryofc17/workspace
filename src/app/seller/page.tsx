@@ -564,7 +564,7 @@ export default function SellerPage() {
                               {user.credits} créditos · {user.region || "Sin región"} · {user._count.transactions} transacciones
                             </p>
                           </div>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                             <button onClick={(e) => { e.stopPropagation(); handleDeleteUser(user.id, user.username); }} className="h-7 w-7 rounded-lg bg-white/[0.03] border border-white/[0.06] flex items-center justify-center text-white/30 hover:text-red-400 hover:border-red-500/20 hover:bg-red-500/5 transition-all">
                               <Trash2 className="h-3 w-3" />
                             </button>

@@ -91,7 +91,7 @@ function PremiumInput({
         <button
           type="button"
           onClick={onTogglePassword}
-          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+          className="absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 flex items-center justify-center text-gray-500 hover:text-gray-300 transition-colors"
         >
           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </button>
@@ -461,9 +461,9 @@ export default function LoginPage() {
                       <div id="cf-turnstile" className="flex justify-center [&>div]:rounded-lg" />
 
                       {/* Remember Me */}
-                      <label className="flex items-center gap-2.5 cursor-pointer group/select">
-                        <div className={`h-4 w-4 rounded border transition-all duration-200 flex items-center justify-center ${rememberMe ? "bg-[#E50914] border-[#E50914]" : "bg-white/[0.04] border-white/[0.1] group-hover/select:border-white/[0.2]"}`}>
-                          {rememberMe && <Check className="h-2.5 w-2.5 text-white" />}
+                      <label className="flex items-center gap-2.5 cursor-pointer group/select min-h-[44px]">
+                        <div className={`h-5 w-5 rounded border transition-all duration-200 flex items-center justify-center ${rememberMe ? "bg-[#E50914] border-[#E50914]" : "bg-white/[0.04] border-white/[0.1] group-hover/select:border-white/[0.2]"}`}>
+                          {rememberMe && <Check className="h-3 w-3 text-white" />}
                         </div>
                         <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="sr-only" />
                         <span className="text-gray-500 text-xs group-hover/select:text-gray-400 transition-colors">Recordarme</span>

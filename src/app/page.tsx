@@ -697,7 +697,7 @@ export default function Home() {
         initial={false}
         animate={{ x: drawerOpen ? 0 : -288 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="fixed top-0 left-0 h-full w-72 bg-[#0a0a10]/95 backdrop-blur-xl border-r border-white/[0.06] z-[70]"
+        className="fixed top-0 left-0 h-full w-72 sm:w-72 max-w-[85vw] bg-[#0a0a10]/95 backdrop-blur-xl border-r border-white/[0.06] z-[70]"
       >
         <div className="flex items-center justify-between p-4 border-b border-white/[0.06]">
           <span className="text-white/50 text-xs font-medium">Herramientas</span>
