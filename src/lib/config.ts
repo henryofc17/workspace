@@ -16,7 +16,7 @@ let migrationsChecked = false;
 /**
  * Read a numeric config value from the SiteConfig table.
  * Falls back to `defaultValue` if the key doesn't exist or table is missing.
- * Results are cached in-memory for 30 seconds.
+ * Results are cached in-memory for 120 seconds.
  */
 export async function getConfig(key: string, defaultValue: number): Promise<number> {
   const raw = await getConfigString(key, String(defaultValue));
@@ -27,7 +27,7 @@ export async function getConfig(key: string, defaultValue: number): Promise<numb
 /**
  * Read a string config value from the SiteConfig table.
  * Falls back to `defaultValue` if the key doesn't exist or table is missing.
- * Results are cached in-memory for 30 seconds.
+ * Results are cached in-memory for 120 seconds.
  */
 export async function getConfigString(key: string, defaultValue: string): Promise<string> {
   const now = Date.now();

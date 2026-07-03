@@ -301,7 +301,6 @@ export default function Home() {
         if (data.remainingCredits !== undefined) {
           setCredits(data.remainingCredits);
         }
-        refreshCredits();
         loadBalance();
         toast.success(data.message);
       } else {
@@ -312,7 +311,7 @@ export default function Home() {
     } finally {
       setSavingRegion(false);
     }
-  }, [refreshCredits, loadBalance]);
+  }, [loadBalance]);
 
   useEffect(() => {
     let cancelled = false;
@@ -377,7 +376,6 @@ export default function Home() {
         setTvResult({ success: true, message: data.message });
         setTvCode("");
         setCredits(data.remainingCredits);
-        refreshCredits();
         loadBalance();
         toast.success("TV activada correctamente");
       } else {
@@ -410,7 +408,6 @@ export default function Home() {
         setCheckerUsesToday(0);
         setCheckerLimitReached(false);
         setCredits(data.remainingCredits);
-        refreshCredits();
         loadBalance();
         toast.success(data.message);
       } else {
@@ -479,7 +476,6 @@ export default function Home() {
         setGeneratedLink(data.link);
         setGeneratedInfo({ countryName: data.countryName || null, plan: data.plan || null });
         setCredits(data.remainingCredits);
-        refreshCredits();
         loadBalance();
         toast.success("Token generado exitosamente");
       } else {
@@ -515,7 +511,6 @@ export default function Home() {
         setCopiedCookie(data.cookie);
         setCopiedCookieInfo({ countryName: data.countryName || null, plan: data.plan || null });
         setCredits(data.remainingCredits);
-        refreshCredits();
         loadBalance();
         toast.success("Cookie obtenida exitosamente");
       } else {
@@ -564,7 +559,6 @@ export default function Home() {
       if (data.success) {
         toast.success(data.message);
         setGiftKeyCode("");
-        refreshCredits();
         loadBalance();
       } else {
         toast.error(data.error);

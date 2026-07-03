@@ -711,132 +711,49 @@ export default function AdminPage() {
 
   // Refresh results state
   const [refreshResults, setRefreshResults] = useState<{ countries: { code: string; name: string; count: number }[] } | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // ── Background Worker State ──
-  interface BgWorkerState {
-    task: string;
-    status: "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
-    startedAt: number;
-    finishedAt: number | null;
-    total: number;
-    processed: number;
-    results: Record<string, number>;
-    message: string;
-    error: string | null;
-    cancelled?: boolean;
-  }
-  const [workerState, setWorkerState] = useState<BgWorkerState | null>(null);
-  const [cancelling, setCancelling] = useState(false);
-  const workerPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // ── Start Background Worker ──
-  const startWorker = useCallback(async (task: "REFRESH_COOKIES" | "DETECT_COUNTRIES") => {
-    const labels = { REFRESH_COOKIES: "Refrescar Cookies", DETECT_COUNTRIES: "Sacar País" };
-    if (!confirm(`¿Iniciar "${labels[task]}" en segundo plano? El proceso continuará aunque cierres el panel.`)) return;
+  // ── Refresh Cookies (micro-job: single invocation, processes 15 cookies) ──
+  const handleRefreshCookies = useCallback(async () => {
+    setRefreshing(true);
     try {
-      const res = await fetch("/api/admin/background-worker", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task }),
-      });
+      const res = await fetch("/api/admin/refresh-cookies", { method: "POST" });
       const data = await res.json();
       if (data.success) {
-        toast.success(`${labels[task]} iniciado en segundo plano`);
-        pollWorker();
+        const msg = data.remaining > 0
+          ? `Lote procesado. ${data.remaining} cookies restantes — clic de nuevo para continuar.`
+          : "Todas las cookies fueron refrescadas.";
+        toast.success(msg);
+        loadData();
       } else {
-        toast.error(data.error || "No se pudo iniciar la tarea");
+        toast.error(data.error || "Error al refrescar");
       }
     } catch {
-      toast.error("Error al iniciar tarea");
+      toast.error("Error de conexion");
+    } finally {
+      setRefreshing(false);
     }
-  }, []);
-
-  // ── Poll Worker Status (faster: 2s interval) ──
-  const pollWorker = useCallback(() => {
-    if (workerPollRef.current) clearInterval(workerPollRef.current);
-    const fetchState = async () => {
-      try {
-        const res = await fetch("/api/admin/background-worker");
-        const data = await res.json();
-        if (data.success && data.state) {
-          setWorkerState(data.state);
-          if (data.state.status !== "RUNNING") {
-            if (workerPollRef.current) clearInterval(workerPollRef.current);
-            workerPollRef.current = null;
-            setCancelling(false);
-            loadData();
-            if (data.state.status === "COMPLETED") {
-              toast.success(data.state.message);
-            } else if (data.state.status === "CANCELLED") {
-              toast.info(data.state.message);
-            } else if (data.state.status === "FAILED") {
-              toast.error(data.state.error || data.state.message);
-            }
-          }
-        } else if (data.success && !data.state) {
-          setWorkerState(null);
-          setCancelling(false);
-          if (workerPollRef.current) clearInterval(workerPollRef.current);
-          workerPollRef.current = null;
-        }
-      } catch {}
-    };
-    fetchState();
-    workerPollRef.current = setInterval(fetchState, 1500);
   }, [loadData]);
 
-  // ── Cancel Background Worker ──
-  const cancelWorker = useCallback(async () => {
-    if (!confirm("¿Cancelar la tarea en ejecución? Se detendrá después del lote actual.")) return;
-    setCancelling(true);
+  // ── Detect Countries (single invocation, no polling) ──
+  const handleDetectCountries = useCallback(async () => {
+    setRefreshing(true);
     try {
-      const res = await fetch("/api/admin/background-worker", { method: "DELETE" });
+      const res = await fetch("/api/admin/detect-countries", { method: "POST" });
       const data = await res.json();
       if (data.success) {
-        toast.info("Cancelando tarea...");
+        toast.success(data.message);
+        if (data.countries) setRefreshResults({ countries: data.countries });
+        loadData();
       } else {
-        toast.error(data.error || "No se pudo cancelar");
-        setCancelling(false);
+        toast.error(data.error || "Error al detectar países");
       }
     } catch {
-      toast.error("Error al cancelar");
-      setCancelling(false);
+      toast.error("Error de conexion");
+    } finally {
+      setRefreshing(false);
     }
-  }, []);
-
-  // ── Clean up polling on unmount ──
-  useEffect(() => {
-    return () => {
-      if (workerPollRef.current) clearInterval(workerPollRef.current);
-    };
-  }, []);
-
-  // ── Initial worker state check on mount ──
-  useEffect(() => {
-    const check = async () => {
-      try {
-        const res = await fetch("/api/admin/background-worker");
-        const data = await res.json();
-        if (data.success && data.state) {
-          setWorkerState(data.state);
-          if (data.state.status === "RUNNING") {
-            pollWorker();
-          }
-        }
-      } catch {}
-    };
-    check();
-  }, [pollWorker]);
-
-  // ── Refresh Cookies (background) ──
-  const handleRefreshCookies = useCallback(async () => {
-    startWorker("REFRESH_COOKIES");
-  }, [startWorker]);
-
-  // ── Detect Countries (background) ──
-  const handleDetectCountries = useCallback(async () => {
-    startWorker("DETECT_COUNTRIES");
-  }, [startWorker]);
+  }, [loadData]);
 
   // ── Clean Dead Cookies ──
   const handleCleanDead = useCallback(async () => {
@@ -1785,7 +1702,7 @@ export default function AdminPage() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={handleUploadCookies}
-                      disabled={uploadingCookies || (workerState?.status === "RUNNING")}
+                      disabled={uploadingCookies || refreshing}
                       className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-red-500/10 hover:shadow-red-500/20 active:scale-[0.98]"
                     >
                       {uploadingCookies ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
@@ -1793,18 +1710,18 @@ export default function AdminPage() {
                     </button>
                     <button
                       onClick={handleRefreshCookies}
-                      disabled={(workerState?.status === "RUNNING") || uploadingCookies}
+                      disabled={refreshing || uploadingCookies}
                       className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-400 text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-500/10 active:scale-[0.98]"
                     >
-                      {(workerState?.status === "RUNNING" && workerState?.task === "REFRESH_COOKIES") ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                      {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                       Refrescar Cookies
                     </button>
                     <button
                       onClick={handleDetectCountries}
-                      disabled={(workerState?.status === "RUNNING") || uploadingCookies}
+                      disabled={refreshing || uploadingCookies}
                       className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-sky-500/20 bg-sky-500/[0.05] text-sky-400 text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-sky-500/10 active:scale-[0.98]"
                     >
-                      {(workerState?.status === "RUNNING" && workerState?.task === "DETECT_COUNTRIES") ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+                      {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
                       Sacar País
                     </button>
                     <button
@@ -1844,134 +1761,7 @@ export default function AdminPage() {
                 </div>
               </PanelCard>
 
-              {/* ── Background Worker Status ── */}
-              <AnimatePresence>
-                {workerState && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -12 }}
-                    transition={{ duration: 0.3 }}
-                    className={`rounded-2xl border backdrop-blur-xl p-5 ${
-                      workerState.status === "RUNNING"
-                        ? "border-emerald-500/20 bg-emerald-500/[0.04]"
-                        : workerState.status === "COMPLETED"
-                        ? "border-blue-500/20 bg-blue-500/[0.04]"
-                        : workerState.status === "CANCELLED"
-                        ? "border-amber-500/20 bg-amber-500/[0.04]"
-                        : "border-red-500/20 bg-red-500/[0.04]"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${
-                          workerState.status === "RUNNING"
-                            ? "bg-emerald-500/15"
-                            : workerState.status === "COMPLETED"
-                            ? "bg-blue-500/15"
-                            : workerState.status === "CANCELLED"
-                            ? "bg-amber-500/15"
-                            : "bg-red-500/15"
-                        }`}>
-                          {workerState.status === "RUNNING" ? (
-                            <Loader2 className="h-4 w-4 text-emerald-400 animate-spin" />
-                          ) : workerState.status === "COMPLETED" ? (
-                            <RefreshCw className="h-4 w-4 text-blue-400" />
-                          ) : workerState.status === "CANCELLED" ? (
-                            <X className="h-4 w-4 text-amber-400" />
-                          ) : (
-                            <AlertTriangle className="h-4 w-4 text-red-400" />
-                          )}
-                        </div>
-                        <div>
-                          <p className={`text-sm font-semibold ${
-                            workerState.status === "RUNNING"
-                              ? "text-emerald-400"
-                              : workerState.status === "COMPLETED"
-                              ? "text-blue-400"
-                              : workerState.status === "CANCELLED"
-                              ? "text-amber-400"
-                              : "text-red-400"
-                          }`}>
-                            {workerState.task === "REFRESH_COOKIES" ? "Refrescar Cookies" : "Sacar País"}
-                          </p>
-                          <p className="text-[11px] text-white/30">
-                            {workerState.status === "RUNNING"
-                              ? cancelling ? "Cancelando..." : "Ejecutando en segundo plano..."
-                              : workerState.status === "COMPLETED"
-                              ? "Completado"
-                              : workerState.status === "CANCELLED"
-                              ? "Cancelado"
-                              : "Error"}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {workerState.status === "RUNNING" && (
-                          <button
-                            onClick={cancelWorker}
-                            disabled={cancelling}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] text-amber-400 text-[11px] font-semibold transition-all hover:bg-amber-500/10 disabled:opacity-40"
-                          >
-                            {cancelling ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-                            {cancelling ? "Cancelando..." : "Cancelar"}
-                          </button>
-                        )}
-                        {workerState.status !== "RUNNING" && (
-                          <button
-                            onClick={() => { setWorkerState(null); setCancelling(false); }}
-                            className="h-7 w-7 rounded-lg border border-white/[0.06] bg-white/[0.03] flex items-center justify-center text-white/30 hover:text-white/60 transition-colors"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {workerState.total > 0 && (
-                      <div className="mb-3">
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-[11px] text-white/40 font-medium">
-                            {workerState.processed} / {workerState.total}
-                          </span>
-                          <span className="text-[11px] font-bold tabular-nums text-white/50">
-                            {Math.round((workerState.processed / workerState.total) * 100)}%
-                          </span>
-                        </div>
-                        <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-                          <motion.div
-                            className={`h-full rounded-full ${
-                              workerState.status === "RUNNING"
-                                ? "bg-gradient-to-r from-emerald-500 to-cyan-400"
-                                : workerState.status === "COMPLETED"
-                                ? "bg-gradient-to-r from-blue-500 to-cyan-400"
-                                : workerState.status === "CANCELLED"
-                                ? "bg-gradient-to-r from-amber-500 to-yellow-400"
-                                : "bg-gradient-to-r from-red-500 to-orange-400"
-                            }`}
-                            initial={{ width: 0 }}
-                            animate={{ width: `${(workerState.processed / workerState.total) * 100}%` }}
-                            transition={{ duration: 0.5, ease: "easeOut" }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                    <div className="flex flex-wrap gap-3">
-                      {Object.entries(workerState.results).map(([key, val]) => (
-                        <div key={key} className="flex items-center gap-1.5 text-[11px]">
-                          <span className="text-white/25 capitalize">{key}:</span>
-                          <span className="text-white/60 font-bold tabular-nums">{val}</span>
-                        </div>
-                      ))}
-                    </div>
-                    {workerState.error && (
-                      <p className="text-red-400/60 text-[11px] mt-2">{workerState.error}</p>
-                    )}
-                    {workerState.message && !workerState.error && (
-                      <p className="text-white/20 text-[11px] mt-2">{workerState.message}</p>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {/* Background worker removed — use direct micro-job buttons above */}
 
               {/* Cookies List Card */}
               <PanelCard

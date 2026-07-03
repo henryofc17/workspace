@@ -33,7 +33,14 @@ export async function GET() {
       WHATSAPP_VISIBLE: config[10] === "true",
     };
 
-    return NextResponse.json({ success: true, config: configObj });
+    return NextResponse.json(
+      { success: true, config: configObj },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
+        },
+      }
+    );
   } catch {
     // Fallback defaults if DB is unreachable
     return NextResponse.json({
@@ -50,6 +57,10 @@ export async function GET() {
         REFERRED_CREDIT: 2,
         WHATSAPP_LINK: "",
         WHATSAPP_VISIBLE: false,
+      },
+    }, {
+      headers: {
+        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
       },
     });
   }
