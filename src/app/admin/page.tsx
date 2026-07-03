@@ -711,7 +711,6 @@ export default function AdminPage() {
 
   // Refresh results state
   const [refreshResults, setRefreshResults] = useState<{ countries: { code: string; name: string; count: number }[] } | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   // ── Refresh Cookies (micro-job: single invocation, processes 15 cookies) ──
   const handleRefreshCookies = useCallback(async () => {
