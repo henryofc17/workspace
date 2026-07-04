@@ -1042,9 +1042,6 @@ export default function Home() {
                           Tu Key es:{" "}
                           <span className="text-amber-300 font-mono font-bold text-xs select-all">{freeGeneratedKey}</span>
                         </p>
-                        <p className="text-white/25 text-[10px] mt-1 leading-relaxed">
-                          (Copiala, ve el anuncio en la otra pestaña y valdala aquí al regresar para ganar +1 Crédito)
-                        </p>
                       </div>
                       <button
                         onClick={() => { setFreeKeyState("idle"); setFreeKeyInput(""); setFreeGeneratedKey(""); }}
