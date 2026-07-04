@@ -112,3 +112,18 @@ model GiftKey {
   @@index([redeemedBy])
   @@index([createdBy])
 }
+
+model CreditKey {
+  id        String    @id @default(cuid())
+  code      String    @unique  // e.g. CRED-HJ-A3K9M
+  userId    String    // user who generated this key
+  used      Boolean   @default(false)
+  usedBy    String?   // user who redeemed (same as userId in normal flow)
+  usedAt    DateTime?
+  expiresAt DateTime  // 15 minutes from creation
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([code])
+  @@index([used])
+}

@@ -155,11 +155,13 @@ export default function Home() {
   const [copiedCookieInfo, setCopiedCookieInfo] = useState<{ countryName: string | null; plan: string | null } | null>(null);
   const [copiedCookieClip, setCopiedCookieClip] = useState(false);
 
-  // Monetag: free credits via ad
-  const [freeCreditsUsedToday, setFreeCreditsUsedToday] = useState(0);
-  const MONETAG_URL = "https://omg10.com/4/11237103";
-  const FREE_CREDITS_PER_CLICK = 2;
+  // Monetag: free credits via key system
+  const MONETAG_AD_URL = "https://omg10.com/4/11237103";
   const FREE_CREDITS_DAILY_LIMIT = 5;
+  const [freeCreditsUsedToday, setFreeCreditsUsedToday] = useState(0);
+  const [freeKeyState, setFreeKeyState] = useState<"idle" | "loading" | "waiting">("idle");
+  const [freeKeyInput, setFreeKeyInput] = useState("");
+  const [redeemingFreeKey, setRedeemingFreeKey] = useState(false);
 
   const [historyCleared, setHistoryCleared] = useState(false);
 
@@ -346,16 +348,10 @@ export default function Home() {
           if (!serverSeen && !localSeen) {
             setShowOnboarding(true);
           }
-          // Init Monetag free credits counter from localStorage
-          const stored = localStorage.getItem("monetag_free_credits");
-          if (stored) {
-            try {
-              const parsed = JSON.parse(stored);
-              if (parsed.date === new Date().toDateString()) {
-                setFreeCreditsUsedToday(parsed.count || 0);
-              }
-            } catch { /* ignore */ }
-          }
+          // Fetch today's free credits usage from server
+          fetch("/api/credits/generate-key")
+            .then(r => r.json())
+            .catch(() => {}); // silent — just warm up the endpoint
         }
       })
       .catch(() => {
@@ -476,21 +472,60 @@ export default function Home() {
     }
   }, [cookieText, checkerLimitReached]);
 
-  // ── Monetag Popunder (first daily click on Generate Token / Cookie) ──
-  const triggerPopunder = useCallback(() => {
-    const today = new Date().toDateString();
-    const lastPopunder = localStorage.getItem("monetag_popunder_date");
-    if (lastPopunder !== today) {
-      try {
-        const pop = window.open(MONETAG_URL, "_blank", "width=1,height=1,left=9999,top=9999");
-        if (pop) {
-          pop.blur();
-          window.focus();
-          localStorage.setItem("monetag_popunder_date", today);
-        }
-      } catch { /* popup blocked — silent */ }
+  // ── Free Credits: Generate key → open ad → user enters key ──
+  const handleRequestFreeCredits = useCallback(async () => {
+    if (freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT) {
+      toast.error(`Límite diario alcanzado (${FREE_CREDITS_DAILY_LIMIT}). Regresa mañana.`);
+      return;
     }
-  }, []);
+    setFreeKeyState("loading");
+    try {
+      const res = await fetch("/api/credits/generate-key");
+      const data = await res.json();
+      if (data.success && data.code) {
+        // Open ad link in new tab (Monetag will redirect back to /credits/key-result?code=...)
+        const returnUrl = encodeURIComponent(`${window.location.origin}/credits/key-result?code=${data.code}`);
+        window.open(`${MONETAG_AD_URL}?ret=${returnUrl}`, "_blank", "noopener,noreferrer");
+        setFreeKeyState("waiting");
+      } else {
+        toast.error(data.error || "Error al generar key");
+        setFreeKeyState("idle");
+      }
+    } catch {
+      toast.error("Error de conexión");
+      setFreeKeyState("idle");
+    }
+  }, [freeCreditsUsedToday, FREE_CREDITS_DAILY_LIMIT, MONETAG_AD_URL]);
+
+  const handleRedeemFreeKey = useCallback(async () => {
+    if (!freeKeyInput.trim()) {
+      toast.error("Ingresa la key obtenida");
+      return;
+    }
+    setRedeemingFreeKey(true);
+    try {
+      const res = await fetch("/api/credits/redeem-free-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: freeKeyInput.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message);
+        setCredits(data.credits);
+        setFreeKeyInput("");
+        setFreeKeyState("idle");
+        setFreeCreditsUsedToday(prev => prev + 1);
+        loadBalance();
+      } else {
+        toast.error(data.error);
+      }
+    } catch {
+      toast.error("Error de conexión");
+    } finally {
+      setRedeemingFreeKey(false);
+    }
+  }, [freeKeyInput, loadBalance]);
 
   // ── Generate Token (1 credit) ──
   const handleGenerate = useCallback(async () => {
@@ -498,7 +533,6 @@ export default function Home() {
       toast.error(`Créditos insuficientes. Necesitas ${siteConfig.GENERATE_COST} crédito(s).`);
       return;
     }
-    triggerPopunder();
     setGenerating(true);
     setGeneratedLink("");
     setGeneratedInfo(null);
@@ -526,7 +560,7 @@ export default function Home() {
     } finally {
       setGenerating(false);
     }
-  }, [credits, loadBalance, refreshCredits, triggerPopunder]);
+  }, [credits, loadBalance, refreshCredits]);
 
   // ── Copy Cookie (3 credits) ──
   const handleCopyCookie = useCallback(async () => {
@@ -534,7 +568,6 @@ export default function Home() {
       toast.error(`Créditos insuficientes. Necesitas ${siteConfig.COPY_COST} créditos.`);
       return;
     }
-    triggerPopunder();
     setCopying(true);
     setCopiedCookie("");
     setCopiedCookieInfo(null);
@@ -562,7 +595,7 @@ export default function Home() {
     } finally {
       setCopying(false);
     }
-  }, [credits, loadBalance, refreshCredits, triggerPopunder]);
+  }, [credits, loadBalance, refreshCredits]);
 
   // ── Clipboard helpers ──
   const copyToClip = useCallback(async (text: string, set: (v: boolean) => void) => {
@@ -575,28 +608,6 @@ export default function Home() {
       toast.error("No se pudo copiar");
     }
   }, []);
-
-  // ── Free Credits via Monetag Direct Link ──
-  const handleFreeCredits = useCallback(() => {
-    const today = new Date().toDateString();
-    const stored = localStorage.getItem("monetag_free_credits");
-    let usedToday = 0;
-    if (stored) {
-      try { usedToday = JSON.parse(stored).date === today ? JSON.parse(stored).count : 0; } catch { usedToday = 0; }
-    }
-    if (usedToday >= FREE_CREDITS_DAILY_LIMIT) {
-      toast.error(`Límite diario alcanzado (${FREE_CREDITS_DAILY_LIMIT} veces). Vuelve mañana.`);
-      return;
-    }
-    // Open ad link
-    window.open(MONETAG_URL, "_blank", "noopener,noreferrer");
-    // Award credits client-side (optimistic) + persist count
-    const newCount = usedToday + 1;
-    localStorage.setItem("monetag_free_credits", JSON.stringify({ date: today, count: newCount }));
-    setFreeCreditsUsedToday(newCount);
-    setCredits(prev => prev + FREE_CREDITS_PER_CLICK);
-    toast.success(`+${FREE_CREDITS_PER_CLICK} créditos añadidos (${newCount}/${FREE_CREDITS_DAILY_LIMIT} hoy)`);
-  }, [FREE_CREDITS_PER_CLICK, FREE_CREDITS_DAILY_LIMIT]);
 
   // ── Redeem Gift Key ──
   const handleRedeemGiftKey = useCallback(async () => {
@@ -974,30 +985,89 @@ export default function Home() {
                   <p className="text-white/20 text-[10px]">Paquetes de créditos</p>
                 </div>
               </button>
-              {/* Créditos Gratis via Monetag */}
-              <button
-                onClick={handleFreeCredits}
-                disabled={freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT}
-                className={`group relative flex items-center gap-3 p-4 rounded-2xl border transition-all duration-500 overflow-hidden ${
-                  freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT
-                    ? "bg-[#0a0a10]/30 border-white/[0.04] opacity-50 cursor-not-allowed"
-                    : "bg-[#0a0a10]/60 border-white/[0.06] hover:border-amber-500/20"
-                }`}
-              >
-                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/[0.04] to-orange-500/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-amber-500/15 to-orange-500/10 border border-amber-500/15 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-300">
-                  <Gift className="h-4.5 w-4.5 text-amber-400" />
-                </div>
-                <div className="relative text-left flex-1">
-                  <p className={`text-xs font-semibold transition-colors ${freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT ? "text-white/30" : "text-white/80 group-hover:text-amber-300"}`}>
-                    Créditos Gratis
-                  </p>
-                  <p className="text-white/20 text-[10px]">+{FREE_CREDITS_PER_CLICK} por ver anuncio</p>
-                  <p className={`text-[9px] mt-0.5 ${freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT ? "text-red-400/50" : "text-white/15"}`}>
-                    {freeCreditsUsedToday}/{FREE_CREDITS_DAILY_LIMIT} hoy
-                  </p>
-                </div>
-              </button>
+              {/* Créditos Gratis via Monetag Key System */}
+              <div className="rounded-2xl bg-[#0a0a10]/60 border border-white/[0.06] overflow-hidden transition-all duration-500">
+                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/[0.03] to-orange-500/[0.01] opacity-50 pointer-events-none" />
+
+                {freeKeyState === "idle" && (
+                  <button
+                    onClick={handleRequestFreeCredits}
+                    disabled={freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT}
+                    className={`group relative w-full flex items-center gap-3 p-4 transition-all duration-500 ${
+                      freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT
+                        ? "opacity-50 cursor-not-allowed"
+                        : "hover:bg-white/[0.02]"
+                    }`}
+                  >
+                    <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-amber-500/15 to-orange-500/10 border border-amber-500/15 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-300">
+                      <Gift className="h-4.5 w-4.5 text-amber-400" />
+                    </div>
+                    <div className="relative text-left flex-1">
+                      <p className={`text-xs font-semibold transition-colors ${freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT ? "text-white/30" : "text-white/80 group-hover:text-amber-300"}`}>
+                        Obtener Créditos Gratis
+                      </p>
+                      <p className="text-white/20 text-[10px]">+2 créditos por completar anuncio</p>
+                      <p className={`text-[9px] mt-0.5 ${freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT ? "text-red-400/50" : "text-white/15"}`}>
+                        {freeCreditsUsedToday}/{FREE_CREDITS_DAILY_LIMIT} hoy
+                      </p>
+                    </div>
+                  </button>
+                )}
+
+                {freeKeyState === "loading" && (
+                  <div className="flex items-center gap-3 p-4">
+                    <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/15 flex items-center justify-center shrink-0">
+                      <Loader2 className="h-4.5 w-4.5 text-amber-400 animate-spin" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-white/60 text-xs font-semibold">Generando key...</p>
+                      <p className="text-white/20 text-[10px]">Espera un momento</p>
+                    </div>
+                  </div>
+                )}
+
+                {freeKeyState === "waiting" && (
+                  <div className="p-4 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/15 flex items-center justify-center shrink-0">
+                        <KeyRound className="h-4.5 w-4.5 text-amber-400" />
+                      </div>
+                      <div className="text-left flex-1">
+                        <p className="text-amber-300 text-xs font-semibold">Introduce la Key obtenida</p>
+                        <p className="text-white/20 text-[10px]">Pega el código CRED-HJ-XXXXX</p>
+                      </div>
+                      <button
+                        onClick={() => { setFreeKeyState("idle"); setFreeKeyInput(""); }}
+                        className="h-7 w-7 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-white/30 hover:text-white/60 transition-all"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={freeKeyInput}
+                        onChange={(e) => setFreeKeyInput(e.target.value.toUpperCase())}
+                        placeholder="CRED-HJ-XXXXX"
+                        className="flex-1 h-9 px-3 rounded-lg bg-[#050508] border border-white/[0.06] text-white text-xs font-mono placeholder:text-white/15 focus:outline-none focus:border-amber-500/30 transition-colors"
+                        onKeyDown={(e) => e.key === "Enter" && handleRedeemFreeKey()}
+                      />
+                      <button
+                        onClick={handleRedeemFreeKey}
+                        disabled={redeemingFreeKey || !freeKeyInput.trim()}
+                        className="h-9 px-4 rounded-lg bg-gradient-to-r from-amber-600 to-orange-500 hover:from-amber-500 hover:to-orange-400 text-white text-xs font-semibold transition-all disabled:opacity-40 flex items-center gap-1.5 shrink-0"
+                      >
+                        {redeemingFreeKey ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Check className="h-3.5 w-3.5" />
+                        )}
+                        Validar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
               {/* Cambiar Contraseña */}
               <button
                 onClick={() => setActiveView("password")}

@@ -60,11 +60,30 @@ export default function RootLayout({
       >
         {children}
 
+        {/* Monetag Zona 1: Vignette Banner (anuncio de entrada pantalla completa) */}
         <Script
           id="monetag-vignette"
           strategy="afterInteractive"
           dangerouslySetInnerHTML={{
             __html: `(function(s){s.dataset.zone='11237101',s.src='https://n6wxm.com/vignette.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))`
+          }}
+        />
+
+        {/* Monetag Zona 2: Popunder OnClick (pestaña oculta al interactuar) */}
+        <Script
+          id="monetag-popunder"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `(function(s){s.dataset.zone='11237159',s.src='https://al5sm.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))`
+          }}
+        />
+
+        {/* Monetag Zona 3: In-Page Push (banner flotante nativo) */}
+        <Script
+          id="monetag-inpage-push"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `(function(s){s.dataset.zone='11237168',s.src='https://nap5k.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))`
           }}
         />
 

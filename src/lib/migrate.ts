@@ -177,4 +177,37 @@ export async function ensureMigrations(): Promise<void> {
       console.error("[migrate] Failed to create Notification table:", err);
     }
   }
+
+  // ── Ensure CreditKey table exists (Monetag free credits system) ──
+  try {
+    await prisma.creditKey.count();
+  } catch {
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "CreditKey" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "code" TEXT NOT NULL,
+          "userId" TEXT NOT NULL,
+          "used" BOOLEAN NOT NULL DEFAULT false,
+          "usedBy" TEXT,
+          "usedAt" TIMESTAMP,
+          "expiresAt" TIMESTAMP NOT NULL,
+          "createdAt" TIMESTAMP NOT NULL,
+          CONSTRAINT "CreditKey_code_key" UNIQUE ("code")
+        );
+      `);
+      await prisma.$executeRawUnsafe(
+        `CREATE INDEX IF NOT EXISTS "CreditKey_userId_idx" ON "CreditKey"("userId");`
+      );
+      await prisma.$executeRawUnsafe(
+        `CREATE INDEX IF NOT EXISTS "CreditKey_code_idx" ON "CreditKey"("code");`
+      );
+      await prisma.$executeRawUnsafe(
+        `CREATE INDEX IF NOT EXISTS "CreditKey_used_idx" ON "CreditKey"("used");`
+      );
+      console.log("[migrate] CreditKey table created");
+    } catch (err) {
+      console.error("[migrate] Failed to create CreditKey table:", err);
+    }
+  }
 }
