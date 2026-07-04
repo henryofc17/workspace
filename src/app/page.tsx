@@ -248,6 +248,9 @@ export default function Home() {
       const data = await res.json();
       if (data.success) {
         setCredits(data.credits ?? 0);
+        if (typeof data.freeKeysToday === "number") {
+          setFreeCreditsUsedToday(data.freeKeysToday);
+        }
         if (!skipTransactions && !historyCleared) {
           setTransactions(Array.isArray(data.transactions) ? data.transactions : []);
         }
@@ -350,10 +353,6 @@ export default function Home() {
           if (!serverSeen && !localSeen) {
             setShowOnboarding(true);
           }
-          // Fetch today's free credits usage from server
-          fetch("/api/credits/generate-key")
-            .then(r => r.json())
-            .catch(() => {}); // silent — just warm up the endpoint
         }
       })
       .catch(() => {
