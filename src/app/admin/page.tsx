@@ -1240,7 +1240,7 @@ export default function AdminPage() {
                     </Badge>
                   </div>
                   <p className="text-[10px] text-white/25 font-medium tracking-wider uppercase">
-                    Netflix Cookie Checker Pro
+                    Cookie Checker Pro
                   </p>
                 </div>
               </div>

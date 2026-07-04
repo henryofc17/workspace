@@ -651,7 +651,7 @@ export default function Home() {
             {/* Logo Image */}
             <img
               src="https://i.ibb.co/BKy3LKzL/AISelect-20260430-120048-Google.jpg"
-              alt="Netflix Checker Pro"
+              alt="CheckerPro"
               className="h-8 w-auto rounded-md object-contain"
             />
             <div className="hidden sm:block">
@@ -1449,14 +1449,14 @@ export default function Home() {
                   Verificar Cookie Individual
                 </CardTitle>
                 <CardDescription className="text-white/25 text-xs ml-[38px]">
-                  Pega tu cookie de Netflix para verificarla. {siteConfig.CHECKER_DAILY_LIMIT} verificaciones diarias — solo cookies válidas cuentan.
+                  Pega tu cookie para verificarla. {siteConfig.CHECKER_DAILY_LIMIT} verificaciones diarias — solo cookies válidas cuentan.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-5 pb-5">
                 <Textarea
                   value={cookieText}
                   onChange={(e) => setCookieText(e.target.value)}
-                  placeholder={"Pega tu cookie aquí...\n\nEjemplo: NetflixId=v1%3B...; SecureNetflixId=v2%3B...; nfvdid=..."}
+                  placeholder={"Pega tu cookie aquí...\n\nEjemplo: sessionId=v1%3B...; secureSession=v2%3B...; deviceId=..."}
                   className="bg-[#050508]/80 border-white/[0.06] text-white/80 text-xs font-mono placeholder:text-white/15 min-h-[120px] resize-y focus:border-sky-500/30 focus:ring-1 focus:ring-sky-500/10 rounded-xl transition-all duration-300"
                 />
                 <Button
@@ -1884,7 +1884,7 @@ export default function Home() {
                           </div>
                           <div className="flex-1">
                             <h4 className="text-emerald-400 font-semibold text-sm">TV Activada</h4>
-                            <p className="text-white/30 text-xs mt-1">Netflix en tu TV está listo. Disfruta.</p>
+                            <p className="text-white/30 text-xs mt-1">Tu TV está lista. Disfruta.</p>
                           </div>
                         </div>
                       </CardContent>
@@ -2093,7 +2093,7 @@ export default function Home() {
               </a>
             </div>
             <p className="text-white/10 text-[9px]">
-              Uso privado únicamente. No afiliado a Netflix, Inc.
+              Uso privado únicamente.
             </p>
           </div>
         </div>

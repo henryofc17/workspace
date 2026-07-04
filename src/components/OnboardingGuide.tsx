@@ -40,7 +40,7 @@ const OnboardingGuide = React.memo(function OnboardingGuide({ onComplete, siteCo
       icon: Sparkles,
       title: "Bienvenido a HFLIX",
       description:
-        "Te damos la bienvenida a HFLIX. Aqui puedes verificar, generar y administrar cookies de Netflix de forma rapida y segura. Exploremos juntos la plataforma.",
+        "Te damos la bienvenida a HFLIX. Aqui puedes verificar, generar y administrar cookies de streaming de forma rapida y segura. Exploremos juntos la plataforma.",
       color: "text-[#E50914]",
       bgColor: "from-[#E50914]/20 to-[#E50914]/5",
     },

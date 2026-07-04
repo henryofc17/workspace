@@ -383,7 +383,7 @@ export default function LoginPage() {
               <div className="relative rounded-2xl overflow-hidden shadow-2xl shadow-[#E50914]/20">
                 <Image
                   src="https://i.ibb.co/BKy3LKzL/AISelect-20260430-120048-Google.jpg"
-                  alt="Netflix Cookies Vip"
+                  alt="CheckerPro Vip"
                   width={200}
                   height={64}
                   className="h-16 w-auto object-contain"
@@ -398,7 +398,7 @@ export default function LoginPage() {
               transition={{ delay: 0.2 }}
               className="text-3xl font-extrabold text-white tracking-tight"
             >
-              Netflix Cookies
+              CheckerPro
               <span className="bg-gradient-to-r from-[#E50914] to-[#FF6B6B] bg-clip-text text-transparent"> Vip</span>
             </motion.h1>
             <motion.p
@@ -407,7 +407,7 @@ export default function LoginPage() {
               transition={{ delay: 0.3 }}
               className="text-gray-500 text-sm mt-2"
             >
-              Verifica, genera y administra cookies de Netflix
+              Verifica, genera y administra cookies de streaming
             </motion.p>
           </div>
 

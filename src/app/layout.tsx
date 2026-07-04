@@ -62,7 +62,7 @@ export default function RootLayout({
         <footer className="w-full border-t border-white/[0.04] bg-[#0a0a0a]/80 backdrop-blur-sm">
           <div className="max-w-3xl mx-auto px-4 py-4">
             <p className="text-white/15 text-[10px] leading-relaxed text-center">
-              Aviso Legal: Este sitio web no esta afiliado, asociado, respaldado ni conectado oficialmente de ninguna manera con Netflix, Disney, HBO ni ninguna de sus filiales o marcas registradas. Todas las marcas comerciales mencionadas pertenecen a sus respectivos propietarios.
+              Aviso Legal: Este sitio web no esta afiliado, asociado, respaldado ni conectado oficialmente de ninguna manera con ningun servicio de streaming ni ninguna de sus filiales o marcas registradas. Todas las marcas comerciales mencionadas pertenecen a sus respectivos propietarios.
             </p>
           </div>
         </footer>

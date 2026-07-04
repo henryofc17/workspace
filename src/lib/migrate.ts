@@ -164,7 +164,7 @@ export async function ensureMigrations(): Promise<void> {
       if (admin) {
         await prisma.notification.create({
           data: {
-            title: "¡Bienvenido a Netflix Cookies Vip!",
+            title: "¡Bienvenido a CheckerPro Vip!",
             message: "Explora la plataforma, verifica cookies gratis y genera tokens. Usa códigos de referido para ganar créditos extra. ¡Disfruta!",
             type: "welcome",
             active: true,
