@@ -155,16 +155,6 @@ export default function Home() {
   const [copiedCookieInfo, setCopiedCookieInfo] = useState<{ countryName: string | null; plan: string | null } | null>(null);
   const [copiedCookieClip, setCopiedCookieClip] = useState(false);
 
-  // Monetag: free credits via key system
-  const MONETAG_AD_URL = "https://omg10.com/4/11237103";
-  const FREE_CREDITS_DAILY_LIMIT = 10;
-  const [freeCreditsUsedToday, setFreeCreditsUsedToday] = useState(0);
-  const [freeKeyState, setFreeKeyState] = useState<"idle" | "loading" | "waiting">("idle");
-  const [freeKeyInput, setFreeKeyInput] = useState("");
-  const [freeGeneratedKey, setFreeGeneratedKey] = useState("");
-  const [freeKeyCopied, setFreeKeyCopied] = useState(false);
-  const [redeemingFreeKey, setRedeemingFreeKey] = useState(false);
-
   const [historyCleared, setHistoryCleared] = useState(false);
 
   // TV activation state
@@ -248,9 +238,6 @@ export default function Home() {
       const data = await res.json();
       if (data.success) {
         setCredits(data.credits ?? 0);
-        if (typeof data.freeKeysToday === "number") {
-          setFreeCreditsUsedToday(data.freeKeysToday);
-        }
         if (!skipTransactions && !historyCleared) {
           setTransactions(Array.isArray(data.transactions) ? data.transactions : []);
         }
@@ -473,63 +460,6 @@ export default function Home() {
     }
   }, [cookieText, checkerLimitReached]);
 
-  // ── Free Credits: Generate key → open ad → user enters key ──
-  const handleRequestFreeCredits = useCallback(async () => {
-    if (freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT) {
-      toast.error(`Has alcanzado el límite máximo de 10 créditos gratis por hoy. Regresa mañana.`);
-      return;
-    }
-    setFreeKeyState("loading");
-    try {
-      const res = await fetch("/api/credits/generate-key");
-      const data = await res.json();
-      if (data.success && data.code) {
-        setFreeGeneratedKey(data.code);
-        setFreeKeyInput(data.code);
-        // Open ad link in new tab
-        window.open(MONETAG_AD_URL, "_blank", "noopener,noreferrer");
-        setFreeKeyState("waiting");
-      } else {
-        toast.error(data.error || "Error al generar key");
-        setFreeKeyState("idle");
-      }
-    } catch {
-      toast.error("Error de conexión");
-      setFreeKeyState("idle");
-    }
-  }, [freeCreditsUsedToday, FREE_CREDITS_DAILY_LIMIT, MONETAG_AD_URL]);
-
-  const handleRedeemFreeKey = useCallback(async () => {
-    if (!freeKeyInput.trim()) {
-      toast.error("Ingresa la key obtenida");
-      return;
-    }
-    setRedeemingFreeKey(true);
-    try {
-      const res = await fetch("/api/credits/redeem-free-key", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: freeKeyInput.trim() }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(data.message);
-        setCredits(data.credits);
-        setFreeKeyInput("");
-        setFreeGeneratedKey("");
-        setFreeKeyState("idle");
-        setFreeCreditsUsedToday(prev => prev + 1);
-        loadBalance();
-      } else {
-        toast.error(data.error);
-      }
-    } catch {
-      toast.error("Error de conexión");
-    } finally {
-      setRedeemingFreeKey(false);
-    }
-  }, [freeKeyInput, loadBalance]);
-
   // ── Generate Token (1 credit) ──
   const handleGenerate = useCallback(async () => {
     if (credits < siteConfig.GENERATE_COST) {
@@ -726,7 +656,7 @@ export default function Home() {
             />
             <div className="hidden sm:block">
               <h1 className="text-base font-bold tracking-tight text-white/90">
-                Netflix Checker<span className="text-[#E50914] ml-1">Pro</span>
+                Checker<span className="text-[#E50914] ml-1">Pro</span>
               </h1>
               <p className="text-[10px] text-white/25 tracking-widest uppercase">Premium Panel</p>
             </div>
@@ -988,103 +918,6 @@ export default function Home() {
                   <p className="text-white/20 text-[10px]">Paquetes de créditos</p>
                 </div>
               </button>
-              {/* Créditos Gratis via Monetag Key System */}
-              <div className="rounded-2xl bg-[#0a0a10]/60 border border-white/[0.06] overflow-hidden transition-all duration-500">
-                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/[0.03] to-orange-500/[0.01] opacity-50 pointer-events-none" />
-
-                {freeKeyState === "idle" && (
-                  <button
-                    onClick={handleRequestFreeCredits}
-                    disabled={freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT}
-                    className={`group relative w-full flex items-center gap-3 p-4 transition-all duration-500 ${
-                      freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT
-                        ? "opacity-50 cursor-not-allowed"
-                        : "hover:bg-white/[0.02]"
-                    }`}
-                  >
-                    <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-amber-500/15 to-orange-500/10 border border-amber-500/15 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-300">
-                      <Gift className="h-4.5 w-4.5 text-amber-400" />
-                    </div>
-                    <div className="relative text-left flex-1">
-                      <p className={`text-xs font-semibold transition-colors ${freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT ? "text-white/30" : "text-white/80 group-hover:text-amber-300"}`}>
-                        Obtener Créditos Gratis
-                      </p>
-                      <p className="text-white/20 text-[10px]">+1 crédito por completar anuncio</p>
-                      <p className={`text-[9px] mt-0.5 ${freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT ? "text-red-400/50" : "text-white/15"}`}>
-                        {freeCreditsUsedToday}/{FREE_CREDITS_DAILY_LIMIT} hoy
-                      </p>
-                    </div>
-                  </button>
-                )}
-
-                {freeKeyState === "loading" && (
-                  <div className="flex items-center gap-3 p-4">
-                    <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/15 flex items-center justify-center shrink-0">
-                      <Loader2 className="h-4.5 w-4.5 text-amber-400 animate-spin" />
-                    </div>
-                    <div className="text-left">
-                      <p className="text-white/60 text-xs font-semibold">Generando key...</p>
-                      <p className="text-white/20 text-[10px]">Espera un momento</p>
-                    </div>
-                  </div>
-                )}
-
-                {freeKeyState === "waiting" && (
-                  <div className="p-4 space-y-3">
-                    {/* Key generada visible */}
-                    <div className="flex items-start gap-3">
-                      <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/15 flex items-center justify-center shrink-0 mt-0.5">
-                        <KeyRound className="h-4.5 w-4.5 text-amber-400" />
-                      </div>
-                      <div className="text-left flex-1 min-w-0">
-                        <p className="text-white/50 text-[11px] leading-relaxed">
-                          Tu Key es:{" "}
-                          <span className="text-amber-300 font-mono font-bold text-xs select-all">{freeGeneratedKey}</span>
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => { setFreeKeyState("idle"); setFreeKeyInput(""); setFreeGeneratedKey(""); }}
-                        className="h-7 w-7 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-white/30 hover:text-white/60 transition-all shrink-0"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-
-                    {/* Input pre-rellenado con la key + Validar */}
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={freeKeyInput}
-                        onChange={(e) => setFreeKeyInput(e.target.value.toUpperCase())}
-                        placeholder="CRED-HJ-XXXXX"
-                        className="flex-1 h-9 px-3 rounded-lg bg-[#050508] border border-white/[0.06] text-white text-xs font-mono placeholder:text-white/15 focus:outline-none focus:border-amber-500/30 transition-colors"
-                        onKeyDown={(e) => e.key === "Enter" && handleRedeemFreeKey()}
-                      />
-                      <button
-                        onClick={async () => {
-                          try { await navigator.clipboard.writeText(freeGeneratedKey); setFreeKeyCopied(true); setTimeout(() => setFreeKeyCopied(false), 1500); } catch {}
-                        }}
-                        className={`h-9 px-2.5 rounded-lg border transition-all flex items-center justify-center shrink-0 ${freeKeyCopied ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-white/[0.03] border-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.06]"}`}
-                        title="Copiar Key"
-                      >
-                        {freeKeyCopied ? <Check className="h-3.5 w-3.5" /> : <CopyIcon className="h-3.5 w-3.5" />}
-                      </button>
-                      <button
-                        onClick={handleRedeemFreeKey}
-                        disabled={redeemingFreeKey || !freeKeyInput.trim()}
-                        className="h-9 px-4 rounded-lg bg-gradient-to-r from-amber-600 to-orange-500 hover:from-amber-500 hover:to-orange-400 text-white text-xs font-semibold transition-all disabled:opacity-40 flex items-center gap-1.5 shrink-0"
-                      >
-                        {redeemingFreeKey ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Check className="h-3.5 w-3.5" />
-                        )}
-                        Validar
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
               {/* Cambiar Contraseña */}
               <button
                 onClick={() => setActiveView("password")}
@@ -1240,7 +1073,7 @@ export default function Home() {
                     <p className="text-white/30 text-[11px]">Texto para compartir:</p>
                     <button
                       onClick={async () => {
-                        const shareText = `¡Únete a Netflix Cookies Vip! Usa mi código ${referralCode} al registrarte y gana ${siteConfig.REFERRED_CREDIT} créditos gratis`;
+                        const shareText = `Únete a Cookies Vip! Usa mi código ${referralCode} al registrarte y gana ${siteConfig.REFERRED_CREDIT} créditos gratis`;
                         try {
                           await navigator.clipboard.writeText(shareText);
                           toast.success("Texto copiado");
@@ -1255,7 +1088,7 @@ export default function Home() {
                     </button>
                   </div>
                   <p className="text-white/50 text-xs">
-                    ¡Únete a Netflix Cookies Vip! Usa mi código <span className="text-amber-400 font-bold">{referralCode}</span> al registrarte y gana <span className="text-amber-400 font-bold">{siteConfig.REFERRED_CREDIT}</span> créditos gratis
+                    Únete a Cookies Vip! Usa mi código <span className="text-amber-400 font-bold">{referralCode}</span> al registrarte y gana <span className="text-amber-400 font-bold">{siteConfig.REFERRED_CREDIT}</span> créditos gratis
                   </p>
                 </div>
 
@@ -1755,7 +1588,7 @@ export default function Home() {
                   <div className="h-7 w-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
                     <Zap className="h-3.5 w-3.5" />
                   </div>
-                  Generar Token de Netflix
+                  Generar Token de Acceso
                 </CardTitle>
                 <CardDescription className="text-white/25 text-xs ml-[38px]">
                   Se usa una cookie del servidor para generar tu link de acceso. Cuesta <span className="text-white/60 font-semibold">{siteConfig.GENERATE_COST} crédito{siteConfig.GENERATE_COST !== 1 ? "s" : ""}</span>.
@@ -1822,7 +1655,7 @@ export default function Home() {
                   <div className="bg-[#050508]/60 rounded-xl p-3 border border-white/[0.04]">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1.5">
-                        <Zap className="h-3 w-3" /> Tu Link de Netflix
+                        <Zap className="h-3 w-3" /> Tu Link de Acceso
                       </span>
                       <div className="flex items-center gap-1">
                         <button
@@ -1859,7 +1692,7 @@ export default function Home() {
                   <div className="h-7 w-7 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
                     <RefreshCw className="h-3.5 w-3.5 text-violet-400" />
                   </div>
-                  Generar Cookie de Netflix
+                  Generar Cookie de Acceso
                 </CardTitle>
                 <CardDescription className="text-white/25 text-xs ml-[38px]">
                   Genera una cookie funcional del servidor. Cuesta <span className="text-white/60 font-semibold">{siteConfig.COPY_COST} crédito{siteConfig.COPY_COST !== 1 ? "s" : ""}</span>.
@@ -1952,7 +1785,7 @@ export default function Home() {
                   <div className="h-7 w-7 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
                     <MonitorPlay className="h-3.5 w-3.5 text-rose-400" />
                   </div>
-                  Activar Netflix en TV
+                  Activar en TV
                 </CardTitle>
                 <CardDescription className="text-white/25 text-xs ml-[38px]">
                   Ingresa el código de 8 dígitos que aparece en tu TV. Se usa una cookie del servidor. Cuesta <span className="text-white/60 font-semibold">{siteConfig.TV_ACTIVATE_COST} crédito{siteConfig.TV_ACTIVATE_COST !== 1 ? "s" : ""}</span>.
@@ -1965,7 +1798,7 @@ export default function Home() {
                     <Tv className="h-4 w-4 text-rose-400/70" />
                   </div>
                   <ol className="text-white/40 text-[11px] space-y-1 list-decimal list-inside">
-                    <li>Abre Netflix en tu Smart TV o consola</li>
+                    <li>Abre la plataforma en tu Smart TV o consola</li>
                     <li>Selecciona &quot;Iniciar sesión&quot; &rarr; &quot;Iniciar sesión en la web&quot;</li>
                     <li>Copia el código de 8 dígitos que aparece</li>
                     <li>Pégalo aquí y presiona Activar</li>
@@ -2237,7 +2070,7 @@ export default function Home() {
           <div className="flex flex-col items-center gap-4">
             <GradientDivider />
             <p className="text-white/20 text-[10px] tracking-wide">
-              Netflix Cookie Checker Pro — Desarrollado por <span className="text-white/40 font-semibold">HacheJota</span>
+              Cookie Checker Pro — Desarrollado por <span className="text-white/40 font-semibold">HacheJota</span>
             </p>
             <div className="flex items-center gap-2">
               <a

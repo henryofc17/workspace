@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
@@ -15,14 +14,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Netflix Cookie Checker Pro",
+  title: "Cookie Checker Pro",
   description:
-    "Verifica cookies de Netflix, genera NFTokens y extrae metadatos de cuenta.",
+    "Herramienta de verificacion de cookies y generacion de tokens de acceso.",
   keywords: [
-    "Netflix",
     "Cookie Checker",
     "NFToken",
-    "Netflix Account Checker",
+    "Account Checker",
   ],
 
   icons: {
@@ -32,18 +30,18 @@ export const metadata: Metadata = {
   },
 
   openGraph: {
-    title: "Netflix Cookie Checker Pro",
+    title: "Cookie Checker Pro",
     description:
-      "Verifica cookies de Netflix, genera NFTokens y extrae metadatos de cuenta.",
+      "Herramienta de verificacion de cookies y generacion de tokens de acceso.",
     images: ["/logo.svg"],
     type: "website",
   },
 
   twitter: {
     card: "summary_large_image",
-    title: "Netflix Cookie Checker Pro",
+    title: "Cookie Checker Pro",
     description:
-      "Verifica cookies de Netflix, genera NFTokens y extrae metadatos de cuenta.",
+      "Herramienta de verificacion de cookies y generacion de tokens de acceso.",
     images: ["/logo.svg"],
   },
 };
@@ -56,36 +54,18 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#141414] text-white`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#141414] text-white flex flex-col min-h-screen`}
       >
-        {children}
+        <div className="flex-1">{children}</div>
 
-        {/* Monetag Zona 1: Vignette Banner (anuncio de entrada pantalla completa) */}
-        <Script
-          id="monetag-vignette"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `(function(s){s.dataset.zone='11237101',s.src='https://n6wxm.com/vignette.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))`
-          }}
-        />
-
-        {/* Monetag Zona 2: Popunder OnClick (pestaña oculta al interactuar) */}
-        <Script
-          id="monetag-popunder"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `(function(s){s.dataset.zone='11237159',s.src='https://al5sm.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))`
-          }}
-        />
-
-        {/* Monetag Zona 3: In-Page Push (banner flotante nativo) */}
-        <Script
-          id="monetag-inpage-push"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `(function(s){s.dataset.zone='11237168',s.src='https://nap5k.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))`
-          }}
-        />
+        {/* Footer con aviso legal */}
+        <footer className="w-full border-t border-white/[0.04] bg-[#0a0a0a]/80 backdrop-blur-sm">
+          <div className="max-w-3xl mx-auto px-4 py-4">
+            <p className="text-white/15 text-[10px] leading-relaxed text-center">
+              Aviso Legal: Este sitio web no esta afiliado, asociado, respaldado ni conectado oficialmente de ninguna manera con Netflix, Disney, HBO ni ninguna de sus filiales o marcas registradas. Todas las marcas comerciales mencionadas pertenecen a sus respectivos propietarios.
+            </p>
+          </div>
+        </footer>
 
         <Toaster
           position="top-right"
