@@ -4,8 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { ensureMigrations } from "@/lib/migrate";
 import { checkRateLimit } from "@/lib/security";
 
-const FREE_CREDITS = 2;
-const DAILY_LIMIT = 5;
+const FREE_CREDITS = 1;
+const DAILY_LIMIT = 10;
 
 export async function POST(request: Request) {
   try {
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     if (todayCount >= DAILY_LIMIT) {
       return NextResponse.json({
         success: false,
-        error: `Has alcanzado el límite máximo de créditos gratis por hoy. Regresa mañana.`,
+        error: `Has alcanzado el límite máximo de 10 créditos gratis por hoy. Regresa mañana.`,
       }, { status: 429 });
     }
 

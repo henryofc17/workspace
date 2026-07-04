@@ -157,7 +157,7 @@ export default function Home() {
 
   // Monetag: free credits via key system
   const MONETAG_AD_URL = "https://omg10.com/4/11237103";
-  const FREE_CREDITS_DAILY_LIMIT = 5;
+  const FREE_CREDITS_DAILY_LIMIT = 10;
   const [freeCreditsUsedToday, setFreeCreditsUsedToday] = useState(0);
   const [freeKeyState, setFreeKeyState] = useState<"idle" | "loading" | "waiting">("idle");
   const [freeKeyInput, setFreeKeyInput] = useState("");
@@ -477,7 +477,7 @@ export default function Home() {
   // ── Free Credits: Generate key → open ad → user enters key ──
   const handleRequestFreeCredits = useCallback(async () => {
     if (freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT) {
-      toast.error(`Límite diario alcanzado (${FREE_CREDITS_DAILY_LIMIT}). Regresa mañana.`);
+      toast.error(`Has alcanzado el límite máximo de 10 créditos gratis por hoy. Regresa mañana.`);
       return;
     }
     setFreeKeyState("loading");
@@ -1010,7 +1010,7 @@ export default function Home() {
                       <p className={`text-xs font-semibold transition-colors ${freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT ? "text-white/30" : "text-white/80 group-hover:text-amber-300"}`}>
                         Obtener Créditos Gratis
                       </p>
-                      <p className="text-white/20 text-[10px]">+2 créditos por completar anuncio</p>
+                      <p className="text-white/20 text-[10px]">+1 crédito por completar anuncio</p>
                       <p className={`text-[9px] mt-0.5 ${freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT ? "text-red-400/50" : "text-white/15"}`}>
                         {freeCreditsUsedToday}/{FREE_CREDITS_DAILY_LIMIT} hoy
                       </p>
@@ -1043,7 +1043,7 @@ export default function Home() {
                           <span className="text-amber-300 font-mono font-bold text-xs select-all">{freeGeneratedKey}</span>
                         </p>
                         <p className="text-white/25 text-[10px] mt-1 leading-relaxed">
-                          Copiala, ve el anuncio en la otra pestaña y valdala aqui al regresar.
+                          (Copiala, ve el anuncio en la otra pestaña y valdala aquí al regresar para ganar +1 Crédito)
                         </p>
                       </div>
                       <button
