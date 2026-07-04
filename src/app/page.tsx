@@ -161,6 +161,8 @@ export default function Home() {
   const [freeCreditsUsedToday, setFreeCreditsUsedToday] = useState(0);
   const [freeKeyState, setFreeKeyState] = useState<"idle" | "loading" | "waiting">("idle");
   const [freeKeyInput, setFreeKeyInput] = useState("");
+  const [freeGeneratedKey, setFreeGeneratedKey] = useState("");
+  const [freeKeyCopied, setFreeKeyCopied] = useState(false);
   const [redeemingFreeKey, setRedeemingFreeKey] = useState(false);
 
   const [historyCleared, setHistoryCleared] = useState(false);
@@ -483,9 +485,10 @@ export default function Home() {
       const res = await fetch("/api/credits/generate-key");
       const data = await res.json();
       if (data.success && data.code) {
-        // Open ad link in new tab (Monetag will redirect back to /credits/key-result?code=...)
-        const returnUrl = encodeURIComponent(`${window.location.origin}/credits/key-result?code=${data.code}`);
-        window.open(`${MONETAG_AD_URL}?ret=${returnUrl}`, "_blank", "noopener,noreferrer");
+        setFreeGeneratedKey(data.code);
+        setFreeKeyInput(data.code);
+        // Open ad link in new tab
+        window.open(MONETAG_AD_URL, "_blank", "noopener,noreferrer");
         setFreeKeyState("waiting");
       } else {
         toast.error(data.error || "Error al generar key");
@@ -514,6 +517,7 @@ export default function Home() {
         toast.success(data.message);
         setCredits(data.credits);
         setFreeKeyInput("");
+        setFreeGeneratedKey("");
         setFreeKeyState("idle");
         setFreeCreditsUsedToday(prev => prev + 1);
         loadBalance();
@@ -1028,21 +1032,29 @@ export default function Home() {
 
                 {freeKeyState === "waiting" && (
                   <div className="p-4 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/15 flex items-center justify-center shrink-0">
+                    {/* Key generada visible */}
+                    <div className="flex items-start gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/15 flex items-center justify-center shrink-0 mt-0.5">
                         <KeyRound className="h-4.5 w-4.5 text-amber-400" />
                       </div>
-                      <div className="text-left flex-1">
-                        <p className="text-amber-300 text-xs font-semibold">Introduce la Key obtenida</p>
-                        <p className="text-white/20 text-[10px]">Pega el código CRED-HJ-XXXXX</p>
+                      <div className="text-left flex-1 min-w-0">
+                        <p className="text-white/50 text-[11px] leading-relaxed">
+                          Tu Key es:{" "}
+                          <span className="text-amber-300 font-mono font-bold text-xs select-all">{freeGeneratedKey}</span>
+                        </p>
+                        <p className="text-white/25 text-[10px] mt-1 leading-relaxed">
+                          Copiala, ve el anuncio en la otra pestaña y valdala aqui al regresar.
+                        </p>
                       </div>
                       <button
-                        onClick={() => { setFreeKeyState("idle"); setFreeKeyInput(""); }}
-                        className="h-7 w-7 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-white/30 hover:text-white/60 transition-all"
+                        onClick={() => { setFreeKeyState("idle"); setFreeKeyInput(""); setFreeGeneratedKey(""); }}
+                        className="h-7 w-7 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-white/30 hover:text-white/60 transition-all shrink-0"
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
+
+                    {/* Input pre-rellenado con la key + Validar */}
                     <div className="flex gap-2">
                       <input
                         type="text"
@@ -1052,6 +1064,15 @@ export default function Home() {
                         className="flex-1 h-9 px-3 rounded-lg bg-[#050508] border border-white/[0.06] text-white text-xs font-mono placeholder:text-white/15 focus:outline-none focus:border-amber-500/30 transition-colors"
                         onKeyDown={(e) => e.key === "Enter" && handleRedeemFreeKey()}
                       />
+                      <button
+                        onClick={async () => {
+                          try { await navigator.clipboard.writeText(freeGeneratedKey); setFreeKeyCopied(true); setTimeout(() => setFreeKeyCopied(false), 1500); } catch {}
+                        }}
+                        className={`h-9 px-2.5 rounded-lg border transition-all flex items-center justify-center shrink-0 ${freeKeyCopied ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-white/[0.03] border-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.06]"}`}
+                        title="Copiar Key"
+                      >
+                        {freeKeyCopied ? <Check className="h-3.5 w-3.5" /> : <CopyIcon className="h-3.5 w-3.5" />}
+                      </button>
                       <button
                         onClick={handleRedeemFreeKey}
                         disabled={redeemingFreeKey || !freeKeyInput.trim()}
