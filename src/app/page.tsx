@@ -155,6 +155,12 @@ export default function Home() {
   const [copiedCookieInfo, setCopiedCookieInfo] = useState<{ countryName: string | null; plan: string | null } | null>(null);
   const [copiedCookieClip, setCopiedCookieClip] = useState(false);
 
+  // Monetag: free credits via ad
+  const [freeCreditsUsedToday, setFreeCreditsUsedToday] = useState(0);
+  const MONETAG_URL = "https://omg10.com/4/11237103";
+  const FREE_CREDITS_PER_CLICK = 2;
+  const FREE_CREDITS_DAILY_LIMIT = 5;
+
   const [historyCleared, setHistoryCleared] = useState(false);
 
   // TV activation state
@@ -340,6 +346,16 @@ export default function Home() {
           if (!serverSeen && !localSeen) {
             setShowOnboarding(true);
           }
+          // Init Monetag free credits counter from localStorage
+          const stored = localStorage.getItem("monetag_free_credits");
+          if (stored) {
+            try {
+              const parsed = JSON.parse(stored);
+              if (parsed.date === new Date().toDateString()) {
+                setFreeCreditsUsedToday(parsed.count || 0);
+              }
+            } catch { /* ignore */ }
+          }
         }
       })
       .catch(() => {
@@ -460,12 +476,29 @@ export default function Home() {
     }
   }, [cookieText, checkerLimitReached]);
 
+  // ── Monetag Popunder (first daily click on Generate Token / Cookie) ──
+  const triggerPopunder = useCallback(() => {
+    const today = new Date().toDateString();
+    const lastPopunder = localStorage.getItem("monetag_popunder_date");
+    if (lastPopunder !== today) {
+      try {
+        const pop = window.open(MONETAG_URL, "_blank", "width=1,height=1,left=9999,top=9999");
+        if (pop) {
+          pop.blur();
+          window.focus();
+          localStorage.setItem("monetag_popunder_date", today);
+        }
+      } catch { /* popup blocked — silent */ }
+    }
+  }, []);
+
   // ── Generate Token (1 credit) ──
   const handleGenerate = useCallback(async () => {
     if (credits < siteConfig.GENERATE_COST) {
       toast.error(`Créditos insuficientes. Necesitas ${siteConfig.GENERATE_COST} crédito(s).`);
       return;
     }
+    triggerPopunder();
     setGenerating(true);
     setGeneratedLink("");
     setGeneratedInfo(null);
@@ -493,7 +526,7 @@ export default function Home() {
     } finally {
       setGenerating(false);
     }
-  }, [credits, loadBalance, refreshCredits]);
+  }, [credits, loadBalance, refreshCredits, triggerPopunder]);
 
   // ── Copy Cookie (3 credits) ──
   const handleCopyCookie = useCallback(async () => {
@@ -501,6 +534,7 @@ export default function Home() {
       toast.error(`Créditos insuficientes. Necesitas ${siteConfig.COPY_COST} créditos.`);
       return;
     }
+    triggerPopunder();
     setCopying(true);
     setCopiedCookie("");
     setCopiedCookieInfo(null);
@@ -528,7 +562,7 @@ export default function Home() {
     } finally {
       setCopying(false);
     }
-  }, [credits, loadBalance, refreshCredits]);
+  }, [credits, loadBalance, refreshCredits, triggerPopunder]);
 
   // ── Clipboard helpers ──
   const copyToClip = useCallback(async (text: string, set: (v: boolean) => void) => {
@@ -541,6 +575,28 @@ export default function Home() {
       toast.error("No se pudo copiar");
     }
   }, []);
+
+  // ── Free Credits via Monetag Direct Link ──
+  const handleFreeCredits = useCallback(() => {
+    const today = new Date().toDateString();
+    const stored = localStorage.getItem("monetag_free_credits");
+    let usedToday = 0;
+    if (stored) {
+      try { usedToday = JSON.parse(stored).date === today ? JSON.parse(stored).count : 0; } catch { usedToday = 0; }
+    }
+    if (usedToday >= FREE_CREDITS_DAILY_LIMIT) {
+      toast.error(`Límite diario alcanzado (${FREE_CREDITS_DAILY_LIMIT} veces). Vuelve mañana.`);
+      return;
+    }
+    // Open ad link
+    window.open(MONETAG_URL, "_blank", "noopener,noreferrer");
+    // Award credits client-side (optimistic) + persist count
+    const newCount = usedToday + 1;
+    localStorage.setItem("monetag_free_credits", JSON.stringify({ date: today, count: newCount }));
+    setFreeCreditsUsedToday(newCount);
+    setCredits(prev => prev + FREE_CREDITS_PER_CLICK);
+    toast.success(`+${FREE_CREDITS_PER_CLICK} créditos añadidos (${newCount}/${FREE_CREDITS_DAILY_LIMIT} hoy)`);
+  }, [FREE_CREDITS_PER_CLICK, FREE_CREDITS_DAILY_LIMIT]);
 
   // ── Redeem Gift Key ──
   const handleRedeemGiftKey = useCallback(async () => {
@@ -916,6 +972,30 @@ export default function Home() {
                 <div className="relative text-left">
                   <p className="text-white/80 text-xs font-semibold group-hover:text-emerald-300 transition-colors">Comprar</p>
                   <p className="text-white/20 text-[10px]">Paquetes de créditos</p>
+                </div>
+              </button>
+              {/* Créditos Gratis via Monetag */}
+              <button
+                onClick={handleFreeCredits}
+                disabled={freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT}
+                className={`group relative flex items-center gap-3 p-4 rounded-2xl border transition-all duration-500 overflow-hidden ${
+                  freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT
+                    ? "bg-[#0a0a10]/30 border-white/[0.04] opacity-50 cursor-not-allowed"
+                    : "bg-[#0a0a10]/60 border-white/[0.06] hover:border-amber-500/20"
+                }`}
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/[0.04] to-orange-500/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-amber-500/15 to-orange-500/10 border border-amber-500/15 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-300">
+                  <Gift className="h-4.5 w-4.5 text-amber-400" />
+                </div>
+                <div className="relative text-left flex-1">
+                  <p className={`text-xs font-semibold transition-colors ${freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT ? "text-white/30" : "text-white/80 group-hover:text-amber-300"}`}>
+                    Créditos Gratis
+                  </p>
+                  <p className="text-white/20 text-[10px]">+{FREE_CREDITS_PER_CLICK} por ver anuncio</p>
+                  <p className={`text-[9px] mt-0.5 ${freeCreditsUsedToday >= FREE_CREDITS_DAILY_LIMIT ? "text-red-400/50" : "text-white/15"}`}>
+                    {freeCreditsUsedToday}/{FREE_CREDITS_DAILY_LIMIT} hoy
+                  </p>
                 </div>
               </button>
               {/* Cambiar Contraseña */}
