@@ -18,12 +18,14 @@ export async function POST(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const onlyActive = searchParams.get("active") === "true";
 
-    // ── Micro-Job: take only the oldest BATCH_SIZE cookies ──
-    // Oldest first = least recently validated = highest priority
+    // ── Count TOTAL cookies first (for frontend progress) ──
     const where = onlyActive
       ? { status: "ACTIVE" }
       : {};
 
+    const total = await prisma.cookie.count({ where });
+
+    // ── Micro-Job: take only the oldest BATCH_SIZE cookies ──
     const cookies = await prisma.cookie.findMany({
       where,
       orderBy: { lastUsed: "asc" },
@@ -33,15 +35,15 @@ export async function POST(request: NextRequest) {
     if (cookies.length === 0) {
       return NextResponse.json({
         success: true,
+        done: true,
         message: "No hay cookies para validar",
         results: { checked: 0, alive: 0, dead: 0, skipped: 0, countriesFound: 0 },
         countries: [],
+        total: 0,
+        processed: 0,
         remaining: 0,
       });
     }
-
-    // Count total remaining for frontend progress
-    const remaining = await prisma.cookie.count({ where });
 
     const { checkCookie, getMetadata, extractCountryFromNetflixId } = await import("@/lib/netflix-checker");
     const { getCountryName } = await import("@/lib/countries");
@@ -70,14 +72,14 @@ export async function POST(request: NextRequest) {
               where: { id: cookie.id },
               data: {
                 status: "DEAD",
-                lastError: result.error || "Cookie inválida",
+                lastError: result.error || "Cookie invalida",
                 lastUsed: new Date(),
               },
             }).catch(() => {});
             return { status: "dead" as const };
           }
 
-          // Extract metadata in parallel with the country fallback
+          // Extract metadata + country in parallel
           const [metadata, fallbackCountry] = await Promise.all([
             getMetadata(dict).catch(() => ({} as NetflixMetadata)),
             Promise.resolve(extractCountryFromNetflixId(dict)),
@@ -142,19 +144,29 @@ export async function POST(request: NextRequest) {
     }
 
     const countries = Object.values(countriesList).sort((a, b) => b.count - a.count);
+    const remaining = total - cookies.length;
+    const done = remaining <= 0;
 
     return NextResponse.json({
       success: true,
-      message: `Lote: ${alive} vivas, ${dead} muertas, ${skipped} saltadas${remaining > cookies.length ? ` — quedan ${remaining - cookies.length} cookies` : ""}`,
+      done,
+      message: done
+        ? `Listo: ${alive} vivas, ${dead} muertas, ${skipped} saltadas`
+        : `Lote: +${alive} vivas, +${dead} muertas, +${skipped} saltadas`,
       results: {
         checked: cookies.length,
         alive,
         dead,
         skipped,
         countriesFound: countries.length,
+        totalAlive: alive,
+        totalDead: dead,
+        totalSkipped: skipped,
       },
       countries,
-      remaining: remaining - cookies.length,
+      total,
+      processed: cookies.length,
+      remaining,
     });
   } catch (err: any) {
     if (err.message === "UNAUTHORIZED") {

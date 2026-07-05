@@ -403,7 +403,9 @@ export default function AdminPage() {
   // Upload
   const [uploadingCookies, setUploadingCookies] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [detectingCountries, setDetectingCountries] = useState(false);
+  // Full refresh progress state
+  const [refreshProgress, setRefreshProgress] = useState<{ total: number; processed: number; alive: number; dead: number; skipped: number } | null>(null);
+  const refreshAbortRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [deletingAllCookies, setDeletingAllCookies] = useState(false);
@@ -712,47 +714,88 @@ export default function AdminPage() {
   // Refresh results state
   const [refreshResults, setRefreshResults] = useState<{ countries: { code: string; name: string; count: number }[] } | null>(null);
 
-  // ── Refresh Cookies (micro-job: single invocation, processes 15 cookies) ──
-  const handleRefreshCookies = useCallback(async () => {
+  // ── Full Refresh: verify ALL cookies + detect country, with live progress ──
+  const handleFullRefresh = useCallback(async () => {
     setRefreshing(true);
+    refreshAbortRef.current = false;
+    setRefreshProgress(null);
+    let totalProcessed = 0;
+    let totalAlive = 0;
+    let totalDead = 0;
+    let totalSkipped = 0;
+    let totalCookies = 0;
+    const allCountries: Record<string, { code: string; name: string; count: number }> = {};
+
     try {
-      const res = await fetch("/api/admin/refresh-cookies", { method: "POST" });
-      const data = await res.json();
-      if (data.success) {
-        const msg = data.remaining > 0
-          ? `Lote procesado. ${data.remaining} cookies restantes — clic de nuevo para continuar.`
-          : "Todas las cookies fueron refrescadas.";
-        toast.success(msg);
+      // First call — get the total count
+      const firstRes = await fetch("/api/admin/refresh-cookies", { method: "POST" });
+      const firstData = await firstRes.json();
+      if (!firstData.success) {
+        toast.error(firstData.error || "Error al refrescar");
+        return;
+      }
+      totalCookies = firstData.total || 0;
+      totalProcessed += firstData.processed || 0;
+      totalAlive += firstData.results?.alive || 0;
+      totalDead += firstData.results?.dead || 0;
+      totalSkipped += firstData.results?.skipped || 0;
+      if (firstData.countries) {
+        for (const c of firstData.countries) {
+          if (allCountries[c.code]) allCountries[c.code].count += c.count;
+          else allCountries[c.code] = { ...c };
+        }
+      }
+      setRefreshProgress({ total: totalCookies, processed: totalProcessed, alive: totalAlive, dead: totalDead, skipped: totalSkipped });
+      loadData();
+
+      if (firstData.done) {
+        toast.success(firstData.message);
+        setRefreshResults({ countries: Object.values(allCountries).sort((a, b) => b.count - a.count) });
+        return;
+      }
+
+      // Poll until done
+      while (!refreshAbortRef.current) {
+        await new Promise(r => setTimeout(r, 800));
+        if (refreshAbortRef.current) break;
+
+        const res = await fetch("/api/admin/refresh-cookies", { method: "POST" });
+        const data = await res.json();
+        if (!data.success) {
+          toast.error(data.error || "Error en lote");
+          break;
+        }
+        totalProcessed += data.processed || 0;
+        totalAlive += data.results?.alive || 0;
+        totalDead += data.results?.dead || 0;
+        totalSkipped += data.results?.skipped || 0;
+        if (data.countries) {
+          for (const c of data.countries) {
+            if (allCountries[c.code]) allCountries[c.code].count += c.count;
+            else allCountries[c.code] = { ...c };
+          }
+        }
+        setRefreshProgress({ total: totalCookies, processed: totalProcessed, alive: totalAlive, dead: totalDead, skipped: totalSkipped });
         loadData();
-      } else {
-        toast.error(data.error || "Error al refrescar");
+
+        if (data.done) {
+          toast.success(data.message);
+          setRefreshResults({ countries: Object.values(allCountries).sort((a, b) => b.count - a.count) });
+          break;
+        }
       }
     } catch {
       toast.error("Error de conexion");
     } finally {
       setRefreshing(false);
+      setRefreshProgress(null);
+      refreshAbortRef.current = false;
     }
   }, [loadData]);
 
-  // ── Detect Countries (single invocation, no polling) ──
-  const handleDetectCountries = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      const res = await fetch("/api/admin/detect-countries", { method: "POST" });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(data.message);
-        if (data.countries) setRefreshResults({ countries: data.countries });
-        loadData();
-      } else {
-        toast.error(data.error || "Error al detectar países");
-      }
-    } catch {
-      toast.error("Error de conexion");
-    } finally {
-      setRefreshing(false);
-    }
-  }, [loadData]);
+  const handleStopRefresh = useCallback(() => {
+    refreshAbortRef.current = true;
+  }, []);
 
   // ── Clean Dead Cookies ──
   const handleCleanDead = useCallback(async () => {
@@ -1700,20 +1743,12 @@ export default function AdminPage() {
                       Subir
                     </button>
                     <button
-                      onClick={handleRefreshCookies}
-                      disabled={refreshing || uploadingCookies}
-                      className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-400 text-xs sm:text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-500/10 active:scale-[0.98]"
+                      onClick={refreshing ? handleStopRefresh : handleFullRefresh}
+                      disabled={uploadingCookies}
+                      className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-400 text-xs sm:text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-500/10 active:scale-[0.98] min-w-[130px]"
                     >
-                      {refreshing ? <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-                      Refrescar
-                    </button>
-                    <button
-                      onClick={handleDetectCountries}
-                      disabled={refreshing || uploadingCookies}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-sky-500/20 bg-sky-500/[0.05] text-sky-400 text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-sky-500/10 active:scale-[0.98]"
-                    >
-                      {refreshing ? <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" /> : <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-                      Sacar País
+                      {refreshing ? <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+                      {refreshing ? "Detener" : "Refrescar Todo"}
                     </button>
                     <button
                       onClick={handleCleanDead}
@@ -1752,7 +1787,34 @@ export default function AdminPage() {
                 </div>
               </PanelCard>
 
-              {/* Background worker removed — use direct micro-job buttons above */}
+              {/* Refresh Progress Bar */}
+              {refreshing && refreshProgress && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  className="mt-3 rounded-xl border border-emerald-500/15 bg-emerald-500/[0.03] p-3 space-y-2"
+                >
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-white/50 font-medium">Verificando cookies...</span>
+                    <span className="text-emerald-400 font-bold tabular-nums">
+                      {refreshProgress.processed}/{refreshProgress.total} ({refreshProgress.total > 0 ? Math.round((refreshProgress.processed / refreshProgress.total) * 100) : 0}%)
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-white/[0.04] rounded-full overflow-hidden">
+                    <motion.div
+                      className="h-full bg-gradient-to-r from-emerald-500 to-sky-500 rounded-full"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${refreshProgress.total > 0 ? (refreshProgress.processed / refreshProgress.total) * 100 : 0}%` }}
+                      transition={{ duration: 0.5, ease: "easeOut" }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-4 text-[10px] text-white/30">
+                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{refreshProgress.alive} vivas</span>
+                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-red-400" />{refreshProgress.dead} muertas</span>
+                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />{refreshProgress.skipped} saltadas</span>
+                  </div>
+                </motion.div>
+              )}
 
               {/* Cookies List Card */}
               <PanelCard
