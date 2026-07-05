@@ -726,15 +726,19 @@ export default function AdminPage() {
     let totalCookies = 0;
     const allCountries: Record<string, { code: string; name: string; count: number }> = {};
 
+    // Snapshot timestamp: only process cookies with lastUsed < this time
+    const beforeTs = new Date().toISOString();
+
     try {
-      // First call — get the total count
-      const firstRes = await fetch("/api/admin/refresh-cookies", { method: "POST" });
+      // First call — get the total count (no `before` filter, gives grand total)
+      const firstRes = await fetch(`/api/admin/refresh-cookies?before=${encodeURIComponent(beforeTs)}`, { method: "POST" });
       const firstData = await firstRes.json();
       if (!firstData.success) {
         toast.error(firstData.error || "Error al refrescar");
         return;
       }
-      totalCookies = firstData.total || 0;
+      // Use grandTotal from first call (count of all cookies before this session)
+      totalCookies = firstData.grandTotal || firstData.total || 0;
       totalProcessed += firstData.processed || 0;
       totalAlive += firstData.results?.alive || 0;
       totalDead += firstData.results?.dead || 0;
@@ -754,12 +758,12 @@ export default function AdminPage() {
         return;
       }
 
-      // Poll until done
+      // Poll until done — always pass same `before` so scope shrinks each batch
       while (!refreshAbortRef.current) {
         await new Promise(r => setTimeout(r, 800));
         if (refreshAbortRef.current) break;
 
-        const res = await fetch("/api/admin/refresh-cookies", { method: "POST" });
+        const res = await fetch(`/api/admin/refresh-cookies?before=${encodeURIComponent(beforeTs)}`, { method: "POST" });
         const data = await res.json();
         if (!data.success) {
           toast.error(data.error || "Error en lote");

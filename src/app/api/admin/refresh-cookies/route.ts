@@ -17,17 +17,31 @@ export async function POST(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const onlyActive = searchParams.get("active") === "true";
+    const beforeParam = searchParams.get("before");
 
-    // ── Count TOTAL cookies first (for frontend progress) ──
-    const where = onlyActive
-      ? { status: "ACTIVE" }
-      : {};
+    // ── Build base where clause ──
+    const baseWhere: any = onlyActive ? { status: "ACTIVE" } : {};
 
-    const total = await prisma.cookie.count({ where });
+    // ── If `before` is provided, only process cookies not yet refreshed in this session ──
+    // A cookie counts as "already refreshed" if its lastUsed >= before timestamp
+    // This ensures progress is tracked correctly across multiple micro-job calls
+    let sessionWhere = { ...baseWhere };
+    if (beforeParam) {
+      const beforeDate = new Date(beforeParam);
+      if (!isNaN(beforeDate.getTime())) {
+        sessionWhere = { ...baseWhere, lastUsed: { lt: beforeDate } };
+      }
+    }
+
+    // Count total cookies in this session scope (for progress)
+    const total = await prisma.cookie.count({ where: sessionWhere });
+
+    // If no `before` param, this is the first call — also count the grand total
+    const grandTotal = beforeParam ? null : total;
 
     // ── Micro-Job: take only the oldest BATCH_SIZE cookies ──
     const cookies = await prisma.cookie.findMany({
-      where,
+      where: sessionWhere,
       orderBy: { lastUsed: "asc" },
       take: BATCH_SIZE,
     });
@@ -42,6 +56,7 @@ export async function POST(request: NextRequest) {
         total: 0,
         processed: 0,
         remaining: 0,
+        grandTotal: grandTotal || 0,
       });
     }
 
@@ -159,14 +174,12 @@ export async function POST(request: NextRequest) {
         dead,
         skipped,
         countriesFound: countries.length,
-        totalAlive: alive,
-        totalDead: dead,
-        totalSkipped: skipped,
       },
       countries,
       total,
       processed: cookies.length,
       remaining,
+      grandTotal: grandTotal || undefined,
     });
   } catch (err: any) {
     if (err.message === "UNAUTHORIZED") {
