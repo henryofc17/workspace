@@ -20,11 +20,10 @@ export async function GET(request: NextRequest) {
       });
       const seenIds = new Set<string>();
       let duplicateCount = 0;
-      const nfIdRegex = /NetflixId=([^;\s]+)/;
 
       for (const cookie of allCookies) {
-        const match = cookie.rawCookie.match(nfIdRegex);
-        const netflixId = match ? match[1].trim() : null;
+        const dict = extractCookiesFromText(cookie.rawCookie);
+        const netflixId = dict?.["NetflixId"]?.trim();
         if (!netflixId) continue;
         if (seenIds.has(netflixId)) {
           duplicateCount++;
@@ -196,7 +195,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (type === "duplicates") {
-      // Optimized: only load id + rawCookie, process in memory-efficient way
+      // Use extractCookiesFromText for reliable parsing (JSON, Netscape, semicolon formats)
       const allCookies = await prisma.cookie.findMany({
         orderBy: { createdAt: "asc" },
         select: { id: true, rawCookie: true },
@@ -204,12 +203,9 @@ export async function DELETE(request: NextRequest) {
       const seenIds = new Map<string, string>();
       const duplicateIds: string[] = [];
 
-      // Fast NetflixId extraction via regex (avoids full parse)
-      const nfIdRegex = /NetflixId=([^;\s]+)/;
-
       for (const cookie of allCookies) {
-        const match = cookie.rawCookie.match(nfIdRegex);
-        const netflixId = match ? match[1].trim() : null;
+        const dict = extractCookiesFromText(cookie.rawCookie);
+        const netflixId = dict?.["NetflixId"]?.trim();
         if (!netflixId) continue;
         if (seenIds.has(netflixId)) {
           duplicateIds.push(cookie.id);

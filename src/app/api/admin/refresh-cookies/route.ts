@@ -39,6 +39,22 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // ── 1.5. Fresh-session reset ──
+    // If all cookies were recently validated (within 30 min), reset lastUsed
+    // so clicking "Validar" always does a complete pass from scratch.
+    const sessionWindow = new Date(Date.now() - 30 * 60 * 1000);
+    const uncheckedBefore = await prisma.cookie.count({
+      where: {
+        OR: [
+          { lastUsed: null },
+          { lastUsed: { lt: sessionWindow } },
+        ],
+      },
+    });
+    if (uncheckedBefore === 0) {
+      await prisma.cookie.updateMany({ data: { lastUsed: null } });
+    }
+
     // ── 2. Take the cookies with OLDEST lastUsed (least recently validated) ──
     const cookies = await prisma.cookie.findMany({
       orderBy: { lastUsed: "asc" },
@@ -154,7 +170,6 @@ export async function POST(request: NextRequest) {
     const countries = Object.values(countriesList).sort((a, b) => b.count - a.count);
 
     // ── 5. Count how many cookies still need processing in this session ──
-    const sessionWindow = new Date(Date.now() - 30 * 60 * 1000);
     const remainingCount = await prisma.cookie.count({
       where: {
         OR: [

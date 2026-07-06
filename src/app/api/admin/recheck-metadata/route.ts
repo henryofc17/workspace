@@ -39,6 +39,29 @@ export async function POST() {
       });
     }
 
+    // ── 1.5. Fresh-session reset ──
+    // If all metadata-needing cookies were recently checked, reset their lastUsed
+    // so clicking "Recheck" always does a complete pass from scratch.
+    const sessionWindow = new Date(Date.now() - 30 * 60 * 1000);
+    const uncheckedBefore = await prisma.cookie.count({
+      where: {
+        status: "ACTIVE",
+        AND: [
+          { OR: [{ country: null }, { plan: null }] },
+          { OR: [{ lastUsed: null }, { lastUsed: { lt: sessionWindow } }] },
+        ],
+      },
+    });
+    if (uncheckedBefore === 0) {
+      await prisma.cookie.updateMany({
+        where: {
+          status: "ACTIVE",
+          OR: [{ country: null }, { plan: null }],
+        },
+        data: { lastUsed: null },
+      });
+    }
+
     // ── 2. Take oldest ACTIVE cookies missing country or plan ──
     const cookies = await prisma.cookie.findMany({
       where: {
@@ -53,7 +76,14 @@ export async function POST() {
     const results = await Promise.all(
       cookies.map(async (cookie) => {
         const dict = extractCookiesFromText(cookie.rawCookie);
-        if (!dict) return { status: "skipped" as const };
+        if (!dict) {
+          // Can't parse — update lastUsed to avoid re-picking
+          await prisma.cookie.update({
+            where: { id: cookie.id },
+            data: { lastUsed: new Date() },
+          }).catch(() => {});
+          return { status: "skipped" as const };
+        }
 
         try {
           const meta = await getMetadata(dict, deadline.signal);
@@ -119,11 +149,16 @@ export async function POST() {
 
     const countries = Object.values(countriesList).sort((a, b) => b.count - a.count);
 
-    // ── 5. Count remaining ──
+    // ── 5. Count remaining using lastUsed-based progress ──
+    // This ensures the recheck does ONE full pass and stops, even if some
+    // cookies couldn't get metadata from Netflix.
     const remainingCount = await prisma.cookie.count({
       where: {
         status: "ACTIVE",
-        OR: [{ country: null }, { plan: null }],
+        AND: [
+          { OR: [{ country: null }, { plan: null }] },
+          { OR: [{ lastUsed: null }, { lastUsed: { lt: sessionWindow } }] },
+        ],
       },
     });
     const processedCount = needMetadataCount - remainingCount;
