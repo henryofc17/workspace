@@ -714,21 +714,19 @@ export default function AdminPage() {
   // Refresh results state
   const [refreshResults, setRefreshResults] = useState<{ countries: { code: string; name: string; count: number }[] } | null>(null);
 
-  // ── Full Refresh: verify ALL cookies using fullCheck (same as user checker) ──
+  // ── Validate ALL cookies using fullCheck (same as user checker), with live progress ──
   const handleFullRefresh = useCallback(async () => {
     setRefreshing(true);
     refreshAbortRef.current = false;
     setRefreshProgress(null);
     setRefreshResults(null);
-    let totalProcessed = 0;
     let totalAlive = 0;
     let totalDead = 0;
     let totalSkipped = 0;
-    let totalCookies = 0;
     const allCountries: Record<string, { code: string; name: string; count: number }> = {};
 
     try {
-      // ── First call: NO before filter → endpoint returns grandTotal = ALL cookies ──
+      // ── First call ──
       const firstRes = await fetch("/api/admin/refresh-cookies", { method: "POST" });
       const firstData = await firstRes.json();
       if (!firstData.success) {
@@ -736,77 +734,47 @@ export default function AdminPage() {
         return;
       }
 
-      // Lock the real total (no filter = count of every cookie in DB)
-      totalCookies = firstData.grandTotal ?? 0;
+      const totalCookies = firstData.total ?? 0;
       if (totalCookies === 0) {
         toast.success("No hay cookies para validar");
         return;
       }
 
-      totalProcessed += firstData.processed ?? 0;
       totalAlive += firstData.results?.alive ?? 0;
       totalDead += firstData.results?.dead ?? 0;
       totalSkipped += firstData.results?.skipped ?? 0;
-      if (firstData.countries) {
-        for (const c of firstData.countries) {
-          allCountries[c.code] = allCountries[c.code]
-            ? { ...allCountries[c.code], count: allCountries[c.code].count + c.count }
-            : { ...c };
-        }
-      }
-      setRefreshProgress({ total: totalCookies, processed: totalProcessed, alive: totalAlive, dead: totalDead, skipped: totalSkipped });
+      accumulateCountries(allCountries, firstData.countries);
+      setRefreshProgress({ total: totalCookies, processed: firstData.processed ?? 0, alive: totalAlive, dead: totalDead, skipped: totalSkipped });
 
       if (firstData.done) {
-        toast.success(firstData.message);
-        if (Object.keys(allCountries).length > 0) {
-          setRefreshResults({ countries: Object.values(allCountries).sort((a, b) => b.count - a.count) });
-        }
-        loadData();
+        finishValidation(totalAlive, totalDead, totalSkipped, allCountries);
         return;
       }
 
-      // ── Snapshot timestamp AFTER first batch ──
-      // First batch already updated those cookies' lastUsed to now()
-      // All subsequent calls use this timestamp to skip already-processed cookies
-      const beforeTs = new Date().toISOString();
-
       // ── Poll until done ──
       while (!refreshAbortRef.current) {
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 1200));
         if (refreshAbortRef.current) break;
 
-        const res = await fetch(`/api/admin/refresh-cookies?before=${encodeURIComponent(beforeTs)}`, { method: "POST" });
+        const res = await fetch("/api/admin/refresh-cookies", { method: "POST" });
         const data = await res.json();
         if (!data.success) {
           toast.error(data.error || "Error en lote");
           break;
         }
 
-        totalProcessed += data.processed ?? 0;
         totalAlive += data.results?.alive ?? 0;
         totalDead += data.results?.dead ?? 0;
         totalSkipped += data.results?.skipped ?? 0;
-        if (data.countries) {
-          for (const c of data.countries) {
-            allCountries[c.code] = allCountries[c.code]
-              ? { ...allCountries[c.code], count: allCountries[c.code].count + c.count }
-              : { ...c };
-          }
-        }
-
-        const displayProcessed = Math.min(totalProcessed, totalCookies);
-        setRefreshProgress({ total: totalCookies, processed: displayProcessed, alive: totalAlive, dead: totalDead, skipped: totalSkipped });
+        accumulateCountries(allCountries, data.countries);
+        setRefreshProgress({ total: totalCookies, processed: data.processed ?? 0, alive: totalAlive, dead: totalDead, skipped: totalSkipped });
 
         if (data.done) {
-          toast.success(data.message);
-          if (Object.keys(allCountries).length > 0) {
-            setRefreshResults({ countries: Object.values(allCountries).sort((a, b) => b.count - a.count) });
-          }
+          finishValidation(totalAlive, totalDead, totalSkipped, allCountries);
           break;
         }
       }
 
-      // Reload data once at the end
       loadData();
     } catch {
       toast.error("Error de conexion");
@@ -814,6 +782,21 @@ export default function AdminPage() {
       setRefreshing(false);
       setRefreshProgress(null);
       refreshAbortRef.current = false;
+    }
+
+    function accumulateCountries(map: Record<string, { code: string; name: string; count: number }>, list?: { code: string; name: string; count: number }[]) {
+      if (!list) return;
+      for (const c of list) {
+        map[c.code] = map[c.code]
+          ? { ...map[c.code], count: map[c.code].count + c.count }
+          : { ...c };
+      }
+    }
+
+    function finishValidation(alive: number, dead: number, skipped: number, countries: Record<string, { code: string; name: string; count: number }>) {
+      const sorted = Object.values(countries).sort((a, b) => b.count - a.count);
+      if (sorted.length > 0) setRefreshResults({ countries: sorted });
+      loadData();
     }
   }, [loadData]);
 

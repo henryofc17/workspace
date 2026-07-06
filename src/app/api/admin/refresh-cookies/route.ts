@@ -8,51 +8,35 @@ import { getCountryName } from "@/lib/countries";
 // No maxDuration — Vercel Free default (10s) applies.
 // Micro-Job: each call processes a small batch. Frontend polls until done.
 
-/** Cookies per batch — fullCheck does 2 HTTP requests each, keep it small */
 const BATCH_SIZE = 5;
 
 export async function POST(request: NextRequest) {
   try {
     await requireAdmin();
 
-    const { searchParams } = new URL(request.url);
-    const beforeParam = searchParams.get("before");
+    // ── 1. Count ALL cookies (this is the fixed total for progress) ──
+    const allTotal = await prisma.cookie.count({});
 
-    // ── Session scope: only cookies with lastUsed < before ──
-    let sessionWhere: any = {};
-    if (beforeParam) {
-      const beforeDate = new Date(beforeParam);
-      if (!isNaN(beforeDate.getTime())) {
-        sessionWhere = { lastUsed: { lt: beforeDate } };
-      }
-    }
-
-    // Count cookies still in scope
-    const total = await prisma.cookie.count({ where: sessionWhere });
-    const grandTotal = beforeParam ? null : total;
-
-    if (total === 0) {
+    if (allTotal === 0) {
       return NextResponse.json({
         success: true,
         done: true,
         message: "No hay cookies para validar",
-        results: { checked: 0, alive: 0, dead: 0, skipped: 0, countriesFound: 0 },
+        results: { checked: 0, alive: 0, dead: 0, skipped: 0 },
         countries: [],
         total: 0,
         processed: 0,
         remaining: 0,
-        grandTotal: grandTotal || 0,
       });
     }
 
-    // ── Take oldest BATCH_SIZE cookies ──
+    // ── 2. Take the 5 cookies with OLDEST lastUsed (least recently validated) ──
     const cookies = await prisma.cookie.findMany({
-      where: sessionWhere,
       orderBy: { lastUsed: "asc" },
       take: BATCH_SIZE,
     });
 
-    // ── Validate each cookie using fullCheck (same as /api/check-cookie) ──
+    // ── 3. Validate each cookie using fullCheck (same as user checker) ──
     const results = await Promise.all(
       cookies.map(async (cookie) => {
         try {
@@ -63,8 +47,7 @@ export async function POST(request: NextRequest) {
             const isTransient = errorStr.includes("TIMEOUT") || errorStr.includes("CONNECTION_ERROR");
 
             if (isTransient) {
-              // Network issue — mark as attempted so it doesn't loop forever
-              // but DON'T mark as DEAD
+              // Network issue — update lastUsed to avoid re-picking, but don't kill
               await prisma.cookie.update({
                 where: { id: cookie.id },
                 data: { lastUsed: new Date() },
@@ -72,7 +55,7 @@ export async function POST(request: NextRequest) {
               return { status: "skipped" as const };
             }
 
-            // Real validation failure — cookie is dead
+            // Real validation failure
             await prisma.cookie.update({
               where: { id: cookie.id },
               data: {
@@ -84,7 +67,7 @@ export async function POST(request: NextRequest) {
             return { status: "dead" as const };
           }
 
-          // VALID cookie — extract country & plan from metadata
+          // VALID — extract country & plan
           const meta = (result.metadata || {}) as NetflixMetadata;
           const dict = extractCookiesFromText(cookie.rawCookie);
           const fallbackCountry = dict ? extractCountryFromNetflixId(dict) : null;
@@ -106,7 +89,6 @@ export async function POST(request: NextRequest) {
 
           return { status: "alive" as const, country, countryName };
         } catch {
-          // Unexpected error — mark attempted to prevent infinite loop
           await prisma.cookie.update({
             where: { id: cookie.id },
             data: { lastUsed: new Date() },
@@ -116,7 +98,7 @@ export async function POST(request: NextRequest) {
       })
     );
 
-    // ── Aggregate ──
+    // ── 4. Aggregate ──
     let alive = 0;
     let dead = 0;
     let skipped = 0;
@@ -140,8 +122,15 @@ export async function POST(request: NextRequest) {
     }
 
     const countries = Object.values(countriesList).sort((a, b) => b.count - a.count);
-    const remaining = total - cookies.length;
-    const done = remaining <= 0;
+
+    // ── 5. Count how many cookies still have old lastUsed (not yet processed in this session) ──
+    // Window: 30 minutes — a full validation of 500 cookies takes ~20 min, so 30 min is safe
+    const sessionWindow = new Date(Date.now() - 30 * 60 * 1000);
+    const remainingCount = await prisma.cookie.count({
+      where: { lastUsed: { lt: sessionWindow } },
+    });
+    const processedCount = allTotal - remainingCount;
+    const done = remainingCount === 0;
 
     return NextResponse.json({
       success: true,
@@ -151,10 +140,9 @@ export async function POST(request: NextRequest) {
         : `Lote: +${alive} vivas, +${dead} muertas, +${skipped} saltadas`,
       results: { checked: cookies.length, alive, dead, skipped, countriesFound: countries.length },
       countries,
-      total,
-      processed: cookies.length,
-      remaining,
-      grandTotal: grandTotal || undefined,
+      total: allTotal,
+      processed: processedCount,
+      remaining: remainingCount,
     });
   } catch (err: any) {
     if (err.message === "UNAUTHORIZED") {
