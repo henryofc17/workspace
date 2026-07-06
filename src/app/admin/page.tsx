@@ -1752,7 +1752,7 @@ export default function AdminPage() {
                       className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-400 text-xs sm:text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-500/10 active:scale-[0.98] min-w-[130px]"
                     >
                       {refreshing ? <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-                      {refreshing ? "Detener" : "Refrescar Todo"}
+                      {refreshing ? "Detener" : "Validar Cookies"}
                     </button>
                     <button
                       onClick={handleCleanDead}
@@ -1799,7 +1799,7 @@ export default function AdminPage() {
                   className="mt-3 rounded-xl border border-emerald-500/15 bg-emerald-500/[0.03] p-3 space-y-2"
                 >
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-white/50 font-medium">Verificando cookies...</span>
+                    <span className="text-white/50 font-medium">Validando cookies...</span>
                     <span className="text-emerald-400 font-bold tabular-nums">
                       {refreshProgress.processed}/{refreshProgress.total} ({refreshProgress.total > 0 ? Math.round((refreshProgress.processed / refreshProgress.total) * 100) : 0}%)
                     </span>
@@ -2006,7 +2006,7 @@ export default function AdminPage() {
                       if (regions.length === 0) {
                         return (
                           <div className="px-4 py-6 text-center">
-                            <p className="text-white/20 text-xs">No se han detectado regiones aún. Presiona "Refrescar Cookies" para detectar las regiones automáticamente.</p>
+                            <p className="text-white/20 text-xs">No se han detectado regiones aún. Presiona "Validar Cookies" para detectar las regiones automáticamente.</p>
                           </div>
                         );
                       }

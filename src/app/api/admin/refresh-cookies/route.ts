@@ -1,42 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { extractCookiesFromText } from "@/lib/netflix-checker";
+import { fullCheck, extractCountryFromNetflixId } from "@/lib/netflix-checker";
 import type { NetflixMetadata } from "@/lib/netflix-checker";
+import { getCountryName } from "@/lib/countries";
 
 // No maxDuration — Vercel Free default (10s) applies.
 // This is a Micro-Job: each call processes only a small batch.
 // Call it repeatedly from the frontend until all cookies are validated.
 
 /** Cookies processed per micro-job invocation */
-const BATCH_SIZE = 15;
+const BATCH_SIZE = 10;
 
 export async function POST(request: NextRequest) {
   try {
     await requireAdmin();
 
     const { searchParams } = new URL(request.url);
-    const onlyActive = searchParams.get("active") === "true";
     const beforeParam = searchParams.get("before");
 
-    // ── Build base where clause ──
-    const baseWhere: any = onlyActive ? { status: "ACTIVE" } : {};
-
-    // ── If `before` is provided, only process cookies not yet refreshed in this session ──
-    // A cookie counts as "already refreshed" if its lastUsed >= before timestamp
-    // This ensures progress is tracked correctly across multiple micro-job calls
-    let sessionWhere = { ...baseWhere };
+    // ── Build session where clause ──
+    let sessionWhere: any = {};
     if (beforeParam) {
       const beforeDate = new Date(beforeParam);
       if (!isNaN(beforeDate.getTime())) {
-        sessionWhere = { ...baseWhere, lastUsed: { lt: beforeDate } };
+        sessionWhere = { lastUsed: { lt: beforeDate } };
       }
     }
 
-    // Count total cookies in this session scope (for progress)
+    // Count total cookies in scope
     const total = await prisma.cookie.count({ where: sessionWhere });
-
-    // If no `before` param, this is the first call — also count the grand total
     const grandTotal = beforeParam ? null : total;
 
     // ── Micro-Job: take only the oldest BATCH_SIZE cookies ──
@@ -60,54 +53,53 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const { checkCookie, getMetadata, extractCountryFromNetflixId } = await import("@/lib/netflix-checker");
-    const { getCountryName } = await import("@/lib/countries");
-
-    // ── Process all cookies in parallel with Promise.all ──
+    // ── Process each cookie using fullCheck (same logic as user validation) ──
     const results = await Promise.all(
       cookies.map(async (cookie) => {
-        const dict = extractCookiesFromText(cookie.rawCookie);
-
-        if (!dict) {
-          await prisma.cookie.update({
-            where: { id: cookie.id },
-            data: { status: "DEAD", lastError: "No se pudo parsear" },
-          }).catch(() => {});
-          return { status: "dead" as const };
-        }
-
         try {
-          const result = await checkCookie(dict);
+          // fullCheck = checkCookie (NFToken GraphQL) + getMetadata (membership page)
+          // Same exact flow as /api/check-cookie used by regular users
+          const result = await fullCheck(cookie.rawCookie);
 
           if (!result.success) {
-            if (result.isTransient) {
+            // Mark as DEAD only if it's a real validation failure (not timeout/connection)
+            const errorStr = result.error || "";
+            const isTransient = errorStr.includes("TIMEOUT") || errorStr.includes("CONNECTION_ERROR");
+
+            if (isTransient) {
+              // Network issue — skip, don't kill the cookie
               return { status: "skipped" as const };
             }
+
             await prisma.cookie.update({
               where: { id: cookie.id },
               data: {
                 status: "DEAD",
-                lastError: result.error || "Cookie invalida",
+                lastError: errorStr,
                 lastUsed: new Date(),
               },
             }).catch(() => {});
             return { status: "dead" as const };
           }
 
-          // Extract metadata + country in parallel
-          const [metadata, fallbackCountry] = await Promise.all([
-            getMetadata(dict).catch(() => ({} as NetflixMetadata)),
-            Promise.resolve(extractCountryFromNetflixId(dict)),
-          ]);
+          // Cookie is VALID — extract metadata
+          const meta = (result.metadata || {}) as NetflixMetadata;
+          const fallbackCountry = extractCountryFromNetflixId(
+            // Re-extract dict for country fallback
+            (() => {
+              const pairs = cookie.rawCookie.split(";").map(p => p.trim()).filter(Boolean);
+              const d: Record<string, string> = {};
+              for (const pair of pairs) {
+                const eq = pair.indexOf("=");
+                if (eq > 0) d[pair.substring(0, eq).trim()] = pair.substring(eq + 1).trim();
+              }
+              return d;
+            })()
+          );
 
-          const meta = metadata as NetflixMetadata;
-          let country = meta.country || fallbackCountry || null;
-          let plan = meta.plan || null;
-          let countryName: string | undefined;
-
-          if (country) {
-            countryName = meta.countryName || getCountryName(country);
-          }
+          const country = meta.country || fallbackCountry || null;
+          const plan = meta.plan || null;
+          const countryName = country ? (meta.countryName || getCountryName(country)) : undefined;
 
           await prisma.cookie.update({
             where: { id: cookie.id },
@@ -125,7 +117,7 @@ export async function POST(request: NextRequest) {
             countryName,
           };
         } catch {
-          // Transient network error — don't mark as DEAD
+          // Unexpected error — don't mark as DEAD
           return { status: "skipped" as const };
         }
       })
