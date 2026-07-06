@@ -58,7 +58,6 @@ interface AdminStats {
   totalCookies: number;
   activeCookies: number;
   deadCookies: number;
-  pendingCookies: number;
   totalTransactions: number;
   allCookiesDead: boolean;
 }
@@ -88,7 +87,7 @@ interface UserDetail extends UserRecord {
 
 interface CookieRecord {
   id: string;
-  // rawCookie intentionally excluded — sensitive data, not sent by API
+  rawCookie: string;
   status: string;
   usedCount: number;
   lastUsed: string | null;
@@ -387,7 +386,6 @@ export default function AdminPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [cookies, setCookies] = useState<CookieRecord[]>([]);
-  const [cookieStats, setCookieStats] = useState<{ total: number; active: number; dead: number; pending: number } | null>(null);
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
 
   // Create user form
@@ -405,9 +403,7 @@ export default function AdminPage() {
   // Upload
   const [uploadingCookies, setUploadingCookies] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  // Full refresh progress state
-  const [refreshProgress, setRefreshProgress] = useState<{ total: number; processed: number; alive: number; dead: number; skipped: number } | null>(null);
-  const refreshAbortRef = useRef(false);
+  const [detectingCountries, setDetectingCountries] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [deletingAllCookies, setDeletingAllCookies] = useState(false);
@@ -416,12 +412,6 @@ export default function AdminPage() {
   const [duplicateCount, setDuplicateCount] = useState<number | null>(null);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const [deletingDuplicates, setDeletingDuplicates] = useState(false);
-
-  // Recheck metadata
-  const [rechecking, setRechecking] = useState(false);
-  const recheckAbortRef = useRef(false);
-  const [recheckProgress, setRecheckProgress] = useState<{ total: number; processed: number; updated: number; skipped: number } | null>(null);
-  const [noMetaCount, setNoMetaCount] = useState<number | null>(null);
 
   // Config state
   const [siteConfig, setSiteConfig] = useState<Record<string, string | number>>({});
@@ -518,14 +508,7 @@ export default function AdminPage() {
         setTransactions(statsRes.recentTransactions || []);
       }
       if (usersRes.success) setUsers(usersRes.users);
-      if (cookiesRes.success) {
-        setCookies([...cookiesRes.cookies].reverse());
-        setCookieStats(cookiesRes.stats || null);
-      }
-      // Also check how many cookies need metadata
-      fetch("/api/admin/cookies?count=nometa").then(r => r.json()).then(d => {
-        if (d.success) setNoMetaCount(d.noMetaCount);
-      }).catch(() => {});
+      if (cookiesRes.success) setCookies(cookiesRes.cookies);
     } catch {}
     setLoading(false);
   }, []);
@@ -729,101 +712,131 @@ export default function AdminPage() {
   // Refresh results state
   const [refreshResults, setRefreshResults] = useState<{ countries: { code: string; name: string; count: number }[] } | null>(null);
 
-  // ── Validate ALL cookies using fullCheck (same as user checker), with live progress ──
-  const handleFullRefresh = useCallback(async () => {
-    setRefreshing(true);
-    refreshAbortRef.current = false;
-    setRefreshProgress(null);
-    setRefreshResults(null);
-    let totalAlive = 0;
-    let totalDead = 0;
-    let totalSkipped = 0;
-    const allCountries: Record<string, { code: string; name: string; count: number }> = {};
+  // ── Background Worker State ──
+  interface BgWorkerState {
+    task: string;
+    status: "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
+    startedAt: number;
+    finishedAt: number | null;
+    total: number;
+    processed: number;
+    results: Record<string, number>;
+    message: string;
+    error: string | null;
+    cancelled?: boolean;
+  }
+  const [workerState, setWorkerState] = useState<BgWorkerState | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const workerPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ── Start Background Worker ──
+  const startWorker = useCallback(async (task: "REFRESH_COOKIES" | "DETECT_COUNTRIES") => {
+    const labels = { REFRESH_COOKIES: "Refrescar Cookies", DETECT_COUNTRIES: "Sacar País" };
+    if (!confirm(`¿Iniciar "${labels[task]}" en segundo plano? El proceso continuará aunque cierres el panel.`)) return;
     try {
-      // ── First call ──
-      const firstRes = await fetch("/api/admin/refresh-cookies", { method: "POST" });
-      const firstData = await firstRes.json();
-      if (!firstData.success) {
-        toast.error(firstData.error || "Error al validar");
-        return;
+      const res = await fetch("/api/admin/background-worker", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`${labels[task]} iniciado en segundo plano`);
+        pollWorker();
+      } else {
+        toast.error(data.error || "No se pudo iniciar la tarea");
       }
-
-      const totalCookies = firstData.total ?? 0;
-      if (totalCookies === 0) {
-        toast.success("No hay cookies para validar");
-        return;
-      }
-
-      totalAlive += firstData.results?.alive ?? 0;
-      totalDead += firstData.results?.dead ?? 0;
-      totalSkipped += firstData.results?.skipped ?? 0;
-      accumulateCountries(allCountries, firstData.countries);
-      setRefreshProgress({ total: totalCookies, processed: firstData.processed ?? 0, alive: totalAlive, dead: totalDead, skipped: totalSkipped });
-
-      if (firstData.done) {
-        toast.success(firstData.message);
-        finishValidation(totalAlive, totalDead, totalSkipped, allCountries);
-        loadData();
-        return;
-      }
-
-      // ── Poll until done ──
-      while (!refreshAbortRef.current) {
-        await new Promise(r => setTimeout(r, 1200));
-        if (refreshAbortRef.current) break;
-
-        const res = await fetch("/api/admin/refresh-cookies", { method: "POST" });
-        const data = await res.json();
-        if (!data.success) {
-          toast.error(data.error || "Error en lote");
-          break;
-        }
-
-        totalAlive += data.results?.alive ?? 0;
-        totalDead += data.results?.dead ?? 0;
-        totalSkipped += data.results?.skipped ?? 0;
-        accumulateCountries(allCountries, data.countries);
-        setRefreshProgress({ total: totalCookies, processed: data.processed ?? 0, alive: totalAlive, dead: totalDead, skipped: totalSkipped });
-
-        if (data.done) {
-          toast.success(data.message);
-          finishValidation(totalAlive, totalDead, totalSkipped, allCountries);
-          break;
-        }
-      }
-
-      loadData();
-      // Refresh noMetaCount after validation
-      fetch("/api/admin/cookies?count=nometa").then(r => r.json()).then(d => {
-        if (d.success) setNoMetaCount(d.noMetaCount);
-      }).catch(() => {});
     } catch {
-      toast.error("Error de conexion");
-    } finally {
-      setRefreshing(false);
-      setRefreshProgress(null);
-      refreshAbortRef.current = false;
+      toast.error("Error al iniciar tarea");
     }
+  }, []);
 
-    function accumulateCountries(map: Record<string, { code: string; name: string; count: number }>, list?: { code: string; name: string; count: number }[]) {
-      if (!list) return;
-      for (const c of list) {
-        map[c.code] = map[c.code]
-          ? { ...map[c.code], count: map[c.code].count + c.count }
-          : { ...c };
-      }
-    }
-
-    function finishValidation(alive: number, dead: number, skipped: number, countries: Record<string, { code: string; name: string; count: number }>) {
-      const sorted = Object.values(countries).sort((a, b) => b.count - a.count);
-      if (sorted.length > 0) setRefreshResults({ countries: sorted });
-    }
+  // ── Poll Worker Status (faster: 2s interval) ──
+  const pollWorker = useCallback(() => {
+    if (workerPollRef.current) clearInterval(workerPollRef.current);
+    const fetchState = async () => {
+      try {
+        const res = await fetch("/api/admin/background-worker");
+        const data = await res.json();
+        if (data.success && data.state) {
+          setWorkerState(data.state);
+          if (data.state.status !== "RUNNING") {
+            if (workerPollRef.current) clearInterval(workerPollRef.current);
+            workerPollRef.current = null;
+            setCancelling(false);
+            loadData();
+            if (data.state.status === "COMPLETED") {
+              toast.success(data.state.message);
+            } else if (data.state.status === "CANCELLED") {
+              toast.info(data.state.message);
+            } else if (data.state.status === "FAILED") {
+              toast.error(data.state.error || data.state.message);
+            }
+          }
+        } else if (data.success && !data.state) {
+          setWorkerState(null);
+          setCancelling(false);
+          if (workerPollRef.current) clearInterval(workerPollRef.current);
+          workerPollRef.current = null;
+        }
+      } catch {}
+    };
+    fetchState();
+    workerPollRef.current = setInterval(fetchState, 1500);
   }, [loadData]);
 
-  const handleStopRefresh = useCallback(() => {
-    refreshAbortRef.current = true;
+  // ── Cancel Background Worker ──
+  const cancelWorker = useCallback(async () => {
+    if (!confirm("¿Cancelar la tarea en ejecución? Se detendrá después del lote actual.")) return;
+    setCancelling(true);
+    try {
+      const res = await fetch("/api/admin/background-worker", { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        toast.info("Cancelando tarea...");
+      } else {
+        toast.error(data.error || "No se pudo cancelar");
+        setCancelling(false);
+      }
+    } catch {
+      toast.error("Error al cancelar");
+      setCancelling(false);
+    }
   }, []);
+
+  // ── Clean up polling on unmount ──
+  useEffect(() => {
+    return () => {
+      if (workerPollRef.current) clearInterval(workerPollRef.current);
+    };
+  }, []);
+
+  // ── Initial worker state check on mount ──
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const res = await fetch("/api/admin/background-worker");
+        const data = await res.json();
+        if (data.success && data.state) {
+          setWorkerState(data.state);
+          if (data.state.status === "RUNNING") {
+            pollWorker();
+          }
+        }
+      } catch {}
+    };
+    check();
+  }, [pollWorker]);
+
+  // ── Refresh Cookies (background) ──
+  const handleRefreshCookies = useCallback(async () => {
+    startWorker("REFRESH_COOKIES");
+  }, [startWorker]);
+
+  // ── Detect Countries (background) ──
+  const handleDetectCountries = useCallback(async () => {
+    startWorker("DETECT_COUNTRIES");
+  }, [startWorker]);
 
   // ── Clean Dead Cookies ──
   const handleCleanDead = useCallback(async () => {
@@ -867,17 +880,26 @@ export default function AdminPage() {
     setCheckingDuplicates(true);
     setDuplicateCount(null);
     try {
-      const res = await fetch("/api/admin/cookies?count=duplicates");
-      const data = await res.json();
-      if (data.success) {
-        setDuplicateCount(data.duplicateCount);
-        if (data.duplicateCount === 0) {
-          toast.success("No se encontraron cookies duplicadas");
+      const cookiesRes = await fetch("/api/admin/cookies").then((r) => r.json());
+      if (!cookiesRes.success) { toast.error("Error al obtener cookies"); return; }
+
+      const seenIds = new Map<string, number>();
+      let dupes = 0;
+      for (const cookie of cookiesRes.cookies) {
+        const match = cookie.rawCookie.match(/NetflixId=([^;]+)/);
+        if (!match) continue;
+        const netflixId = match[1];
+        if (seenIds.has(netflixId)) {
+          dupes++;
         } else {
-          toast.info(`${data.duplicateCount} cookies duplicadas encontradas`);
+          seenIds.set(netflixId, 1);
         }
+      }
+      setDuplicateCount(dupes);
+      if (dupes === 0) {
+        toast.success("No hay cookies duplicadas");
       } else {
-        toast.error(data.error || "Error al buscar duplicados");
+        toast.info(`Se encontraron ${dupes} cookies duplicadas`);
       }
     } catch {
       toast.error("Error al buscar duplicados");
@@ -888,7 +910,7 @@ export default function AdminPage() {
 
   // ── Delete Duplicates ──
   const handleDeleteDuplicates = useCallback(async () => {
-    if (!confirm("¿Eliminar cookies duplicadas? Se mantendrá la más antigua de cada grupo.")) return;
+    if (!confirm(`¿Eliminar ${duplicateCount} cookies duplicadas? Se mantendrá la más antigua de cada grupo.`)) return;
     setDeletingDuplicates(true);
     try {
       const res = await fetch("/api/admin/cookies?type=duplicates", { method: "DELETE" });
@@ -905,104 +927,7 @@ export default function AdminPage() {
     } finally {
       setDeletingDuplicates(false);
     }
-  }, [loadData]);
-
-  // ── Recheck Metadata (fetch country/plan for ACTIVE cookies missing them) ──
-  const handleRecheckMetadata = useCallback(async () => {
-    setRechecking(true);
-    recheckAbortRef.current = false;
-    setRecheckProgress(null);
-    let totalUpdated = 0;
-    let totalSkipped = 0;
-    const allCountries: Record<string, { code: string; name: string; count: number }> = {};
-
-    try {
-      // First call
-      const firstRes = await fetch("/api/admin/recheck-metadata", { method: "POST" });
-      const firstData = await firstRes.json();
-      if (!firstData.success) {
-        toast.error(firstData.error || "Error al recheckear");
-        return;
-      }
-
-      const totalCookies = firstData.total ?? 0;
-      if (totalCookies === 0) {
-        toast.success("Todas las cookies activas ya tienen país y plan");
-        return;
-      }
-
-      totalUpdated += firstData.results?.updated ?? 0;
-      totalSkipped += firstData.results?.skipped ?? 0;
-      if (firstData.countries) {
-        for (const c of firstData.countries) {
-          allCountries[c.code] = allCountries[c.code]
-            ? { ...allCountries[c.code], count: allCountries[c.code].count + c.count }
-            : { ...c };
-        }
-      }
-      setRecheckProgress({ total: totalCookies, processed: firstData.processed ?? 0, updated: totalUpdated, skipped: totalSkipped });
-
-      if (firstData.done) {
-        toast.success(firstData.message);
-        setNoMetaCount(0);
-        loadData();
-        return;
-      }
-
-      // Poll until done
-      while (!recheckAbortRef.current) {
-        await new Promise(r => setTimeout(r, 1200));
-        if (recheckAbortRef.current) break;
-
-        const res = await fetch("/api/admin/recheck-metadata", { method: "POST" });
-        const data = await res.json();
-        if (!data.success) {
-          toast.error(data.error || "Error en lote");
-          break;
-        }
-
-        totalUpdated += data.results?.updated ?? 0;
-        totalSkipped += data.results?.skipped ?? 0;
-        if (data.countries) {
-          for (const c of data.countries) {
-            allCountries[c.code] = allCountries[c.code]
-              ? { ...allCountries[c.code], count: allCountries[c.code].count + c.count }
-              : { ...c };
-          }
-        }
-        setRecheckProgress({ total: totalCookies, processed: data.processed ?? 0, updated: totalUpdated, skipped: totalSkipped });
-
-        if (data.done) {
-          toast.success(data.message);
-          setNoMetaCount(0);
-          break;
-        }
-      }
-
-      loadData();
-    } catch {
-      toast.error("Error de conexión");
-    } finally {
-      setRechecking(false);
-      setRecheckProgress(null);
-      recheckAbortRef.current = false;
-    }
-  }, [loadData]);
-
-  const handleStopRecheck = useCallback(() => {
-    recheckAbortRef.current = true;
-  }, []);
-
-  // ── Check how many cookies need metadata ──
-  const handleCheckNoMeta = useCallback(async () => {
-    try {
-      const res = await fetch("/api/admin/cookies?count=nometa");
-      const data = await res.json();
-      if (data.success) {
-        setNoMetaCount(data.noMetaCount);
-      }
-    } catch {}
-  }, []);
+  }, [duplicateCount, loadData]);
 
   // ── Logout ──
   const handleLogout = useCallback(async () => {
@@ -1416,7 +1341,7 @@ export default function AdminPage() {
                     </Badge>
                   </div>
                   <p className="text-[10px] text-white/25 font-medium tracking-wider uppercase">
-                    Cookie Checker Pro
+                    Netflix Cookie Checker Pro
                   </p>
                 </div>
               </div>
@@ -1455,17 +1380,25 @@ export default function AdminPage() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8 pb-12">
         {/* ═══ TAB NAVIGATION ═══ */}
-        <div className="relative flex overflow-x-auto bg-white/[0.03] backdrop-blur-xl p-1 rounded-2xl border border-white/[0.06] scrollbar-none">
+        <div className="relative flex bg-white/[0.03] backdrop-blur-xl p-1 rounded-2xl border border-white/[0.06]">
+          <motion.div
+            className="absolute top-1 bottom-1 rounded-xl bg-gradient-to-r from-red-500/20 to-orange-500/10 border border-red-500/20 shadow-lg shadow-red-500/5"
+            animate={{
+              left: `${(tabIndex / tabs.length) * 100}%`,
+              width: `${100 / tabs.length}%`,
+            }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          />
           {tabs.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`relative z-10 flex-1 min-w-0 flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-medium transition-colors duration-200 whitespace-nowrap ${
+              className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors duration-200 ${
                 tab === key ? "text-white" : "text-white/35 hover:text-white/60"
               }`}
             >
-              <Icon className="h-4 w-4 shrink-0" />
-              <span className="truncate">{label}</span>
+              <Icon className="h-4 w-4" />
+              <span className="hidden sm:inline">{label}</span>
             </button>
           ))}
         </div>
@@ -1485,8 +1418,8 @@ export default function AdminPage() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 <StatCard icon={Users} label="Usuarios" value={stats?.totalUsers || 0} color="blue" delay={0} />
                 <StatCard icon={Cookie} label="Cookies Activas" value={stats?.activeCookies || 0} color="green" delay={0.05} />
-                <StatCard icon={Clock} label="Pendientes" value={stats?.pendingCookies || 0} color="yellow" delay={0.1} />
-                <StatCard icon={X} label="Cookies Muertas" value={stats?.deadCookies || 0} color="red" delay={0.15} />
+                <StatCard icon={X} label="Cookies Muertas" value={stats?.deadCookies || 0} color="red" delay={0.1} />
+                <StatCard icon={TrendingUp} label="Transacciones" value={stats?.totalTransactions || 0} color="yellow" delay={0.15} />
               </div>
 
               {/* Dead Cookies Alert */}
@@ -1866,22 +1799,30 @@ export default function AdminPage() {
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       onClick={handleUploadCookies}
-                      disabled={uploadingCookies || refreshing}
-                      className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white text-xs sm:text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-red-500/10 hover:shadow-red-500/20 active:scale-[0.98]"
+                      disabled={uploadingCookies || (workerState?.status === "RUNNING")}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-red-500/10 hover:shadow-red-500/20 active:scale-[0.98]"
                     >
-                      {uploadingCookies ? <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" /> : <Upload className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+                      {uploadingCookies ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                       Subir
                     </button>
                     <button
-                      onClick={refreshing ? handleStopRefresh : handleFullRefresh}
-                      disabled={uploadingCookies}
-                      className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-400 text-xs sm:text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-500/10 active:scale-[0.98] min-w-[130px]"
+                      onClick={handleRefreshCookies}
+                      disabled={(workerState?.status === "RUNNING") || uploadingCookies}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-400 text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-500/10 active:scale-[0.98]"
                     >
-                      {refreshing ? <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-                      {refreshing ? "Detener" : "Validar Cookies"}
+                      {(workerState?.status === "RUNNING" && workerState?.task === "REFRESH_COOKIES") ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                      Refrescar Cookies
+                    </button>
+                    <button
+                      onClick={handleDetectCountries}
+                      disabled={(workerState?.status === "RUNNING") || uploadingCookies}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-sky-500/20 bg-sky-500/[0.05] text-sky-400 text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-sky-500/10 active:scale-[0.98]"
+                    >
+                      {(workerState?.status === "RUNNING" && workerState?.task === "DETECT_COUNTRIES") ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+                      Sacar País
                     </button>
                     <button
                       onClick={handleCleanDead}
@@ -1909,14 +1850,6 @@ export default function AdminPage() {
                       </button>
                     )}
                     <button
-                      onClick={rechecking ? handleStopRecheck : handleRecheckMetadata}
-                      disabled={refreshing || uploadingCookies || rechecking}
-                      className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 rounded-xl border border-sky-500/20 bg-sky-500/[0.05] text-sky-400 text-xs sm:text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-sky-500/10 active:scale-[0.98] min-w-[130px]"
-                    >
-                      {rechecking ? <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-                      {rechecking ? "Detener" : noMetaCount !== null && noMetaCount > 0 ? `Recheck (${noMetaCount})` : "Recheck Metadata"}
-                    </button>
-                    <button
                       onClick={handleDeleteAllCookies}
                       disabled={deletingAllCookies || refreshing || uploadingCookies}
                       className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-700 to-red-900 hover:from-red-600 hover:to-red-800 text-white text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-red-700/15 hover:shadow-red-600/25 active:scale-[0.98] border border-red-500/20"
@@ -1928,82 +1861,150 @@ export default function AdminPage() {
                 </div>
               </PanelCard>
 
-              {/* Refresh Progress Bar */}
-              {refreshing && refreshProgress && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  className="mt-3 rounded-xl border border-emerald-500/15 bg-emerald-500/[0.03] p-3 space-y-2"
-                >
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-white/50 font-medium">Validando cookies...</span>
-                    <span className="text-emerald-400 font-bold tabular-nums">
-                      {Math.min(refreshProgress.processed, refreshProgress.total)}/{refreshProgress.total} ({refreshProgress.total > 0 ? Math.round((Math.min(refreshProgress.processed, refreshProgress.total) / refreshProgress.total) * 100) : 0}%)
-                    </span>
-                  </div>
-                  <div className="w-full h-2 bg-white/[0.04] rounded-full overflow-hidden">
-                    <motion.div
-                      className="h-full bg-gradient-to-r from-emerald-500 to-sky-500 rounded-full"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${refreshProgress.total > 0 ? (Math.min(refreshProgress.processed, refreshProgress.total) / refreshProgress.total) * 100 : 0}%` }}
-                      transition={{ duration: 0.5, ease: "easeOut" }}
-                    />
-                  </div>
-                  <div className="flex items-center gap-4 text-[10px] text-white/30">
-                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{refreshProgress.alive} vivas</span>
-                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-red-400" />{refreshProgress.dead} muertas</span>
-                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />{refreshProgress.skipped} saltadas</span>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Recheck Metadata Progress Bar */}
-              {rechecking && recheckProgress && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  className="mt-3 rounded-xl border border-sky-500/15 bg-sky-500/[0.03] p-3 space-y-2"
-                >
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-white/50 font-medium">Obteniendo metadata...</span>
-                    <span className="text-sky-400 font-bold tabular-nums">
-                      {Math.min(recheckProgress.processed, recheckProgress.total)}/{recheckProgress.total} ({recheckProgress.total > 0 ? Math.round((Math.min(recheckProgress.processed, recheckProgress.total) / recheckProgress.total) * 100) : 0}%)
-                    </span>
-                  </div>
-                  <div className="w-full h-2 bg-white/[0.04] rounded-full overflow-hidden">
-                    <motion.div
-                      className="h-full bg-gradient-to-r from-sky-500 to-violet-500 rounded-full"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${recheckProgress.total > 0 ? (Math.min(recheckProgress.processed, recheckProgress.total) / recheckProgress.total) * 100 : 0}%` }}
-                      transition={{ duration: 0.5, ease: "easeOut" }}
-                    />
-                  </div>
-                  <div className="flex items-center gap-4 text-[10px] text-white/30">
-                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-sky-400" />{recheckProgress.updated} actualizadas</span>
-                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />{recheckProgress.skipped} sin cambios</span>
-                  </div>
-                </motion.div>
-              )}
+              {/* ── Background Worker Status ── */}
+              <AnimatePresence>
+                {workerState && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -12 }}
+                    transition={{ duration: 0.3 }}
+                    className={`rounded-2xl border backdrop-blur-xl p-5 ${
+                      workerState.status === "RUNNING"
+                        ? "border-emerald-500/20 bg-emerald-500/[0.04]"
+                        : workerState.status === "COMPLETED"
+                        ? "border-blue-500/20 bg-blue-500/[0.04]"
+                        : workerState.status === "CANCELLED"
+                        ? "border-amber-500/20 bg-amber-500/[0.04]"
+                        : "border-red-500/20 bg-red-500/[0.04]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${
+                          workerState.status === "RUNNING"
+                            ? "bg-emerald-500/15"
+                            : workerState.status === "COMPLETED"
+                            ? "bg-blue-500/15"
+                            : workerState.status === "CANCELLED"
+                            ? "bg-amber-500/15"
+                            : "bg-red-500/15"
+                        }`}>
+                          {workerState.status === "RUNNING" ? (
+                            <Loader2 className="h-4 w-4 text-emerald-400 animate-spin" />
+                          ) : workerState.status === "COMPLETED" ? (
+                            <RefreshCw className="h-4 w-4 text-blue-400" />
+                          ) : workerState.status === "CANCELLED" ? (
+                            <X className="h-4 w-4 text-amber-400" />
+                          ) : (
+                            <AlertTriangle className="h-4 w-4 text-red-400" />
+                          )}
+                        </div>
+                        <div>
+                          <p className={`text-sm font-semibold ${
+                            workerState.status === "RUNNING"
+                              ? "text-emerald-400"
+                              : workerState.status === "COMPLETED"
+                              ? "text-blue-400"
+                              : workerState.status === "CANCELLED"
+                              ? "text-amber-400"
+                              : "text-red-400"
+                          }`}>
+                            {workerState.task === "REFRESH_COOKIES" ? "Refrescar Cookies" : "Sacar País"}
+                          </p>
+                          <p className="text-[11px] text-white/30">
+                            {workerState.status === "RUNNING"
+                              ? cancelling ? "Cancelando..." : "Ejecutando en segundo plano..."
+                              : workerState.status === "COMPLETED"
+                              ? "Completado"
+                              : workerState.status === "CANCELLED"
+                              ? "Cancelado"
+                              : "Error"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {workerState.status === "RUNNING" && (
+                          <button
+                            onClick={cancelWorker}
+                            disabled={cancelling}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] text-amber-400 text-[11px] font-semibold transition-all hover:bg-amber-500/10 disabled:opacity-40"
+                          >
+                            {cancelling ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                            {cancelling ? "Cancelando..." : "Cancelar"}
+                          </button>
+                        )}
+                        {workerState.status !== "RUNNING" && (
+                          <button
+                            onClick={() => { setWorkerState(null); setCancelling(false); }}
+                            className="h-7 w-7 rounded-lg border border-white/[0.06] bg-white/[0.03] flex items-center justify-center text-white/30 hover:text-white/60 transition-colors"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {workerState.total > 0 && (
+                      <div className="mb-3">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[11px] text-white/40 font-medium">
+                            {workerState.processed} / {workerState.total}
+                          </span>
+                          <span className="text-[11px] font-bold tabular-nums text-white/50">
+                            {Math.round((workerState.processed / workerState.total) * 100)}%
+                          </span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                          <motion.div
+                            className={`h-full rounded-full ${
+                              workerState.status === "RUNNING"
+                                ? "bg-gradient-to-r from-emerald-500 to-cyan-400"
+                                : workerState.status === "COMPLETED"
+                                ? "bg-gradient-to-r from-blue-500 to-cyan-400"
+                                : workerState.status === "CANCELLED"
+                                ? "bg-gradient-to-r from-amber-500 to-yellow-400"
+                                : "bg-gradient-to-r from-red-500 to-orange-400"
+                            }`}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${(workerState.processed / workerState.total) * 100}%` }}
+                            transition={{ duration: 0.5, ease: "easeOut" }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-3">
+                      {Object.entries(workerState.results).map(([key, val]) => (
+                        <div key={key} className="flex items-center gap-1.5 text-[11px]">
+                          <span className="text-white/25 capitalize">{key}:</span>
+                          <span className="text-white/60 font-bold tabular-nums">{val}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {workerState.error && (
+                      <p className="text-red-400/60 text-[11px] mt-2">{workerState.error}</p>
+                    )}
+                    {workerState.message && !workerState.error && (
+                      <p className="text-white/20 text-[11px] mt-2">{workerState.message}</p>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Cookies List Card */}
               <PanelCard
                 icon={Cookie}
                 iconColor="from-orange-500/20 to-amber-500/10"
                 title="Cookies"
-                subtitle={cookieStats ? `${cookieStats.total} total` : `${cookies.length} en lista`}
+                subtitle={`${cookies.length} total`}
                 headerExtra={
                   <div className="flex items-center gap-2">
                     <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 text-[10px] font-bold px-2 py-0 h-5 flex items-center gap-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 pulse-dot" />
-                      {cookieStats?.active ?? stats?.activeCookies ?? 0} activas
-                    </Badge>
-                    <Badge className="bg-amber-500/10 text-amber-400 border border-amber-500/15 text-[10px] font-bold px-2 py-0 h-5 flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                      {cookieStats?.pending ?? stats?.pendingCookies ?? 0} pendientes
+                      {stats?.activeCookies} activas
                     </Badge>
                     <Badge className="bg-red-500/10 text-red-400 border border-red-500/15 text-[10px] font-bold px-2 py-0 h-5 flex items-center gap-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
-                      {cookieStats?.dead ?? stats?.deadCookies ?? 0} muertas
+                      {stats?.deadCookies} muertas
                     </Badge>
                   </div>
                 }
@@ -2021,17 +2022,13 @@ export default function AdminPage() {
                           className={`p-3.5 rounded-xl transition-all duration-200 hover:bg-opacity-80 ${
                             c.status === "ACTIVE"
                               ? "bg-emerald-500/[0.03] border border-emerald-500/10 hover:bg-emerald-500/[0.05]"
-                              : c.status === "PENDING"
-                              ? "bg-amber-500/[0.03] border border-amber-500/10 hover:bg-amber-500/[0.05]"
                               : "bg-red-500/[0.03] border border-red-500/10 hover:bg-red-500/[0.05]"
                           }`}
                         >
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
                               <Badge className={`text-[9px] font-bold px-2 py-0.5 h-5 border-0 flex items-center gap-1.5 ${
-                                c.status === "ACTIVE" ? "bg-emerald-500/15 text-emerald-400" 
-                                : c.status === "PENDING" ? "bg-amber-500/15 text-amber-400"
-                                : "bg-red-500/15 text-red-400"
+                                c.status === "ACTIVE" ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
                               }`}>
                                 {c.status === "ACTIVE" ? (
                                   <>
@@ -2040,11 +2037,6 @@ export default function AdminPage() {
                                       <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
                                     </span>
                                     ACTIVA
-                                  </>
-                                ) : c.status === "PENDING" ? (
-                                  <>
-                                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                                    PENDIENTE
                                   </>
                                 ) : (
                                   <>
@@ -2063,7 +2055,7 @@ export default function AdminPage() {
                             </span>
                           </div>
                           <p className="text-white/15 text-[10px] font-mono truncate leading-relaxed">
-                            ID: {c.id.substring(0, 12)}…
+                            {c.rawCookie.substring(0, 100)}...
                           </p>
                           <div className="flex items-center gap-3 mt-2 flex-wrap">
                             {c.lastError && (
@@ -2184,7 +2176,7 @@ export default function AdminPage() {
                       if (regions.length === 0) {
                         return (
                           <div className="px-4 py-6 text-center">
-                            <p className="text-white/20 text-xs">No se han detectado regiones aún. Presiona "Validar Cookies" para detectar las regiones automáticamente.</p>
+                            <p className="text-white/20 text-xs">No se han detectado regiones aún. Presiona "Refrescar Cookies" para detectar las regiones automáticamente.</p>
                           </div>
                         );
                       }
@@ -2363,7 +2355,7 @@ export default function AdminPage() {
                         {/* Quick Credit Update */}
                         <div className="space-y-2">
                           <h4 className="text-white/50 text-xs font-medium uppercase tracking-wider">Actualizar Créditos</h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="grid grid-cols-2 gap-2">
                             <input type="number" placeholder="Cantidad (+/-)" value={sellerCreditAmount} onChange={(e) => setSellerCreditAmount(e.target.value)} className="premium-input h-9 px-3 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none focus:border-violet-500/40 transition-all" />
                             <input type="text" placeholder="Descripción" value={sellerCreditDesc} onChange={(e) => setSellerCreditDesc(e.target.value)} className="premium-input h-9 px-3 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none focus:border-violet-500/40 transition-all" />
                           </div>
@@ -2511,7 +2503,7 @@ export default function AdminPage() {
                       className="premium-input w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-amber-500/30 transition-all duration-300 resize-none"
                     />
                   </div>
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2 sm:gap-3">
+                  <div className="flex items-end gap-3">
                     <div className="flex-1 space-y-1.5">
                       <label className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Tipo</label>
                       <select
@@ -2938,10 +2930,10 @@ export default function AdminPage() {
 
               {/* Modal Content */}
               <div className="flex-1 overflow-y-auto premium-scroll">
-                <div className="p-4 sm:p-6 space-y-5">
+                <div className="p-6 space-y-5">
                   {/* User Info Grid */}
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 sm:p-3.5 space-y-1.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 space-y-1.5">
                       <div className="flex items-center gap-1.5">
                         <Coins className="h-3 w-3 text-amber-400/60" />
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Créditos</span>
@@ -2983,7 +2975,7 @@ export default function AdminPage() {
                       </div>
                     </div>
                     <div className="p-4">
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
+                      <div className="flex items-end gap-2">
                         <div className="flex-1 space-y-1.5">
                           <label className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Cantidad</label>
                           <input
@@ -3037,7 +3029,7 @@ export default function AdminPage() {
                       {/* Change Password Form */}
                       <div className="relative pt-3 border-t border-white/[0.04]">
                         <p className="text-white/30 text-[10px] uppercase tracking-wider font-semibold mb-2">Cambiar contraseña</p>
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
+                        <div className="flex items-end gap-2">
                           <div className="flex-1">
                             <input
                               type="text"

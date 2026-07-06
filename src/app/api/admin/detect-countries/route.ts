@@ -102,6 +102,6 @@ export async function POST() {
     if (err.message === "FORBIDDEN") {
       return NextResponse.json({ success: false, error: "Acceso denegado" }, { status: 403 });
     }
-    return NextResponse.json({ success: false, error: "Error del servidor" }, { status: 500 });
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
