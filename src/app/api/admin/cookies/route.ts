@@ -8,8 +8,16 @@ export async function GET() {
   try {
     await requireAdmin();
 
+    // Count stats from ALL cookies (no limit)
+    const [total, active, dead] = await Promise.all([
+      prisma.cookie.count(),
+      prisma.cookie.count({ where: { status: "ACTIVE" } }),
+      prisma.cookie.count({ where: { status: "DEAD" } }),
+    ]);
+
+    // List: show most recent 500, but stats are always accurate
     const cookies = await prisma.cookie.findMany({
-      orderBy: { createdAt: "desc" },
+      orderBy: { lastUsed: "asc" }, // oldest first — admin sees what needs attention
       take: 500,
       select: {
         id: true,
@@ -20,14 +28,14 @@ export async function GET() {
         lastUsed: true,
         lastError: true,
         createdAt: true,
-        // rawCookie intentionally excluded — sensitive data
       },
     });
 
-    const active = cookies.filter((c) => c.status === "ACTIVE").length;
-    const dead = cookies.filter((c) => c.status === "DEAD").length;
-
-    return NextResponse.json({ success: true, cookies, stats: { total: cookies.length, active, dead } });
+    return NextResponse.json({
+      success: true,
+      cookies,
+      stats: { total, active, dead },
+    });
   } catch (err: any) {
     if (err.message === "UNAUTHORIZED") {
       return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 });
@@ -105,7 +113,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (unique.length === 0) {
-      return NextResponse.json({ success: false, error: "No se encontraron cookies válidas con NetflixId" }, { status: 400 });
+      return NextResponse.json({ success: false, error: "No se encontraron cookies validas" }, { status: 400 });
     }
 
     const created = await prisma.cookie.createMany({
@@ -173,13 +181,13 @@ export async function DELETE(request: NextRequest) {
     const cookieId = searchParams.get("id");
     if (cookieId) {
       if (!/^[\w-]+$/.test(cookieId)) {
-        return NextResponse.json({ success: false, error: "ID inválido" }, { status: 400 });
+        return NextResponse.json({ success: false, error: "ID invalido" }, { status: 400 });
       }
       await prisma.cookie.delete({ where: { id: cookieId } });
       return NextResponse.json({ success: true });
     }
 
-    return NextResponse.json({ success: false, error: "Parámetro 'type' o 'id' requerido" }, { status: 400 });
+    return NextResponse.json({ success: false, error: "Parametro 'type' o 'id' requerido" }, { status: 400 });
   } catch (err: any) {
     if (err.message === "UNAUTHORIZED") {
       return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 });

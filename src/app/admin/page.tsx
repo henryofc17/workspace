@@ -386,6 +386,7 @@ export default function AdminPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [cookies, setCookies] = useState<CookieRecord[]>([]);
+  const [cookieStats, setCookieStats] = useState<{ total: number; active: number; dead: number } | null>(null);
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
 
   // Create user form
@@ -510,7 +511,10 @@ export default function AdminPage() {
         setTransactions(statsRes.recentTransactions || []);
       }
       if (usersRes.success) setUsers(usersRes.users);
-      if (cookiesRes.success) setCookies(cookiesRes.cookies);
+      if (cookiesRes.success) {
+        setCookies([...cookiesRes.cookies].reverse());
+        setCookieStats(cookiesRes.stats || null);
+      }
     } catch {}
     setLoading(false);
   }, []);
@@ -747,7 +751,9 @@ export default function AdminPage() {
       setRefreshProgress({ total: totalCookies, processed: firstData.processed ?? 0, alive: totalAlive, dead: totalDead, skipped: totalSkipped });
 
       if (firstData.done) {
+        toast.success(firstData.message);
         finishValidation(totalAlive, totalDead, totalSkipped, allCountries);
+        loadData();
         return;
       }
 
@@ -770,6 +776,7 @@ export default function AdminPage() {
         setRefreshProgress({ total: totalCookies, processed: data.processed ?? 0, alive: totalAlive, dead: totalDead, skipped: totalSkipped });
 
         if (data.done) {
+          toast.success(data.message);
           finishValidation(totalAlive, totalDead, totalSkipped, allCountries);
           break;
         }
@@ -796,7 +803,6 @@ export default function AdminPage() {
     function finishValidation(alive: number, dead: number, skipped: number, countries: Record<string, { code: string; name: string; count: number }>) {
       const sorted = Object.values(countries).sort((a, b) => b.count - a.count);
       if (sorted.length > 0) setRefreshResults({ countries: sorted });
-      loadData();
     }
   }, [loadData]);
 
@@ -1828,16 +1834,16 @@ export default function AdminPage() {
                 icon={Cookie}
                 iconColor="from-orange-500/20 to-amber-500/10"
                 title="Cookies"
-                subtitle={`${cookies.length} total`}
+                subtitle={cookieStats ? `${cookieStats.total} total` : `${cookies.length} en lista`}
                 headerExtra={
                   <div className="flex items-center gap-2">
                     <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 text-[10px] font-bold px-2 py-0 h-5 flex items-center gap-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 pulse-dot" />
-                      {stats?.activeCookies} activas
+                      {cookieStats?.active ?? stats?.activeCookies ?? 0} activas
                     </Badge>
                     <Badge className="bg-red-500/10 text-red-400 border border-red-500/15 text-[10px] font-bold px-2 py-0 h-5 flex items-center gap-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
-                      {stats?.deadCookies} muertas
+                      {cookieStats?.dead ?? stats?.deadCookies ?? 0} muertas
                     </Badge>
                   </div>
                 }
