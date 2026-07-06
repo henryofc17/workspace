@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import {
-  checkCookie,
-  extractCookiesFromText,
-} from "@/lib/netflix-checker";
 import { getConfig } from "@/lib/config";
-import { pickCookie } from "@/lib/cookie-picker";
+import { pickAndValidateCookie } from "@/lib/cookie-picker";
 import { getCountryName } from "@/lib/countries";
 
 export async function POST(request: Request) {
@@ -45,75 +41,29 @@ export async function POST(request: Request) {
       );
     }
 
-    // ── Pick random cookie with region filtering (no fallback) ──
-    const picked = await pickCookie(user.region);
+    // ── Pick + validate cookie individually (retries automatically on dead cookies) ──
+    const picked = await pickAndValidateCookie(user.region);
 
     if (!picked.success) {
+      // Check if there are truly no active cookies left
+      const [activeCount, totalCount] = await Promise.all([
+        prisma.cookie.count({ where: { status: "ACTIVE" } }),
+        prisma.cookie.count(),
+      ]);
+      const noMoreCookies = totalCount > 0 && activeCount === 0;
+
       return NextResponse.json(
-        { success: false, error: picked.error, noCookies: picked.noCookies },
+        {
+          success: false,
+          error: picked.error,
+          noCookies: picked.noCookies,
+          noMoreCookies,
+        },
         { status: 503 }
       );
     }
 
     const cookie = picked.cookie;
-
-    // Parsear cookie
-    const cookieDict = extractCookiesFromText(cookie.rawCookie);
-
-    if (!cookieDict) {
-      await prisma.cookie.update({
-        where: { id: cookie.id },
-        data: {
-          status: "DEAD",
-          lastError: "No se pudo parsear la cookie",
-          lastUsed: new Date(),
-        },
-      });
-
-      return NextResponse.json({
-        success: false,
-        error: "Cookie dañada, intenta de nuevo",
-        retry: true,
-      });
-    }
-
-    // Revisar cookie
-    const result = await checkCookie(cookieDict);
-
-    // PARSEO DEL ERROR ESPECÍFICO
-    if (!result.success) {
-      const errorMsg = result.error || "";
-
-      const isNetflixAccessError = errorMsg.includes(
-        "DetailedAccessDeniedException"
-      ) && errorMsg.includes("createAutoLoginToken");
-
-      await prisma.cookie.update({
-        where: { id: cookie.id },
-        data: {
-          status: "DEAD",
-          lastError: errorMsg,
-          lastUsed: new Date(),
-        },
-      });
-
-      const [activeCount, totalCount] = await Promise.all([
-        prisma.cookie.count({ where: { status: "ACTIVE" } }),
-        prisma.cookie.count(),
-      ]);
-
-      const noMoreCookies =
-        totalCount > 0 && activeCount === 0;
-
-      return NextResponse.json({
-        success: false,
-        error: isNetflixAccessError
-          ? "intenta de nuevo"
-          : errorMsg,
-        cookieDead: true,
-        noMoreCookies,
-      });
-    }
 
     // Éxito — atomic credit deduction using transaction with balance check
     try {
@@ -139,8 +89,8 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         success: true,
-        token: result.token,
-        link: result.link,
+        token: cookie.tokenResult.token,
+        link: cookie.tokenResult.link,
         remainingCredits: updatedUser.credits,
         country: cookie.country || null,
         countryName: cookie.country ? getCountryName(cookie.country) : null,

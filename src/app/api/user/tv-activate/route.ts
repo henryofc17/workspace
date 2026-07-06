@@ -3,7 +3,8 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { validateBody, tvActivateSchema } from "@/lib/validators";
 import { getConfig } from "@/lib/config";
-import { pickCookie } from "@/lib/cookie-picker";
+import { pickAndValidateCookie } from "@/lib/cookie-picker";
+import { buildCookieString } from "@/lib/netflix-checker";
 
 const DESKTOP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
@@ -48,8 +49,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Pick random cookie with region filtering (no fallback) ──
-    const picked = await pickCookie(user.region);
+    // ── Pick + validate cookie individually (pre-validated via checkCookie) ──
+    const picked = await pickAndValidateCookie(user.region);
 
     if (!picked.success) {
       return NextResponse.json(
@@ -60,21 +61,10 @@ export async function POST(request: NextRequest) {
 
     const cookie = picked.cookie;
 
-    const { extractCookiesFromText, buildCookieString } = await import("@/lib/netflix-checker");
-
-    const cookieDict = extractCookiesFromText(cookie.rawCookie);
-
-    if (!cookieDict || !cookieDict["NetflixId"] || !cookieDict["SecureNetflixId"]) {
-      await prisma.cookie.update({
-        where: { id: cookie.id },
-        data: { status: "DEAD", lastError: "No se pudo parsear la cookie", lastUsed: new Date() },
-      });
-      return NextResponse.json({ success: false, error: "Cookie dañada, intenta de nuevo", retry: true });
-    }
+    // Cookie is already parsed and validated — use cookieDict directly
+    const rawCookie = buildCookieString(cookie.cookieDict, false);
 
     // ── Step 1: GET /tv8 ──
-    const rawCookie = buildCookieString(cookieDict, false);
-
     let tv8Response: Response;
     try {
       tv8Response = await fetch("https://www.netflix.com/tv8", {
@@ -92,6 +82,7 @@ export async function POST(request: NextRequest) {
     }
 
     if ([301, 302, 303, 307].includes(tv8Response.status)) {
+      // Cookie was validated moments ago but died between check and TV flow
       await prisma.cookie.update({
         where: { id: cookie.id },
         data: { status: "DEAD", lastError: "Cookie expirada (redirect en /tv8)", lastUsed: new Date() },

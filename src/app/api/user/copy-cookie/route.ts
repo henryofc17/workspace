@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import {
-  checkCookie,
-  extractCookiesFromText,
-} from "@/lib/netflix-checker";
 import { getConfig } from "@/lib/config";
-import { pickCookie } from "@/lib/cookie-picker";
+import { pickAndValidateCookie } from "@/lib/cookie-picker";
 import { getCountryName } from "@/lib/countries";
 
 export async function POST(request: Request) {
@@ -43,64 +39,28 @@ export async function POST(request: Request) {
       );
     }
 
-    // ── Pick random cookie with region filtering (no fallback) ──
-    const picked = await pickCookie(user.region);
+    // ── Pick + validate cookie individually (retries automatically on dead cookies) ──
+    const picked = await pickAndValidateCookie(user.region);
 
     if (!picked.success) {
+      const [activeCount, totalCount] = await Promise.all([
+        prisma.cookie.count({ where: { status: "ACTIVE" } }),
+        prisma.cookie.count(),
+      ]);
+      const noMoreCookies = totalCount > 0 && activeCount === 0;
+
       return NextResponse.json(
-        { success: false, error: picked.error, noCookies: picked.noCookies },
+        {
+          success: false,
+          error: "Intenta de nuevo",
+          noCookies: picked.noCookies,
+          noMoreCookies,
+        },
         { status: 503 }
       );
     }
 
     const cookie = picked.cookie;
-
-    const cookieDict = extractCookiesFromText(cookie.rawCookie);
-
-    if (!cookieDict) {
-      await prisma.cookie.update({
-        where: { id: cookie.id },
-        data: {
-          status: "DEAD",
-          lastError: "No se pudo parsear la cookie",
-          lastUsed: new Date(),
-        },
-      });
-
-      return NextResponse.json({
-        success: false,
-        error: "Cookie dañada, intenta de nuevo",
-        retry: true,
-      });
-    }
-
-    const result = await checkCookie(cookieDict);
-
-    if (!result.success) {
-      await prisma.cookie.update({
-        where: { id: cookie.id },
-        data: {
-          status: "DEAD",
-          lastError: result.error,
-          lastUsed: new Date(),
-        },
-      });
-
-      const [activeCount, totalCount] = await Promise.all([
-        prisma.cookie.count({ where: { status: "ACTIVE" } }),
-        prisma.cookie.count(),
-      ]);
-
-      const noMoreCookies =
-        totalCount > 0 && activeCount === 0;
-
-      return NextResponse.json({
-        success: false,
-        error: "Intentar de nuevo",
-        cookieDead: true,
-        noMoreCookies,
-      });
-    }
 
     // Atomic credit deduction
     try {
