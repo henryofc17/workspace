@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { fullCheck, extractCountryFromNetflixId } from "@/lib/netflix-checker";
+import { fullCheck, extractCookiesFromText, extractCountryFromNetflixId } from "@/lib/netflix-checker";
 import type { NetflixMetadata } from "@/lib/netflix-checker";
 import { getCountryName } from "@/lib/countries";
 
 // No maxDuration — Vercel Free default (10s) applies.
-// This is a Micro-Job: each call processes only a small batch.
-// Call it repeatedly from the frontend until all cookies are validated.
+// Micro-Job: each call processes a small batch. Frontend polls until done.
 
-/** Cookies processed per micro-job invocation */
-const BATCH_SIZE = 10;
+/** Cookies per batch — fullCheck does 2 HTTP requests each, keep it small */
+const BATCH_SIZE = 5;
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,7 +18,7 @@ export async function POST(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const beforeParam = searchParams.get("before");
 
-    // ── Build session where clause ──
+    // ── Session scope: only cookies with lastUsed < before ──
     let sessionWhere: any = {};
     if (beforeParam) {
       const beforeDate = new Date(beforeParam);
@@ -28,18 +27,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Count total cookies in scope
+    // Count cookies still in scope
     const total = await prisma.cookie.count({ where: sessionWhere });
     const grandTotal = beforeParam ? null : total;
 
-    // ── Micro-Job: take only the oldest BATCH_SIZE cookies ──
-    const cookies = await prisma.cookie.findMany({
-      where: sessionWhere,
-      orderBy: { lastUsed: "asc" },
-      take: BATCH_SIZE,
-    });
-
-    if (cookies.length === 0) {
+    if (total === 0) {
       return NextResponse.json({
         success: true,
         done: true,
@@ -53,24 +45,34 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ── Process each cookie using fullCheck (same logic as user validation) ──
+    // ── Take oldest BATCH_SIZE cookies ──
+    const cookies = await prisma.cookie.findMany({
+      where: sessionWhere,
+      orderBy: { lastUsed: "asc" },
+      take: BATCH_SIZE,
+    });
+
+    // ── Validate each cookie using fullCheck (same as /api/check-cookie) ──
     const results = await Promise.all(
       cookies.map(async (cookie) => {
         try {
-          // fullCheck = checkCookie (NFToken GraphQL) + getMetadata (membership page)
-          // Same exact flow as /api/check-cookie used by regular users
           const result = await fullCheck(cookie.rawCookie);
 
           if (!result.success) {
-            // Mark as DEAD only if it's a real validation failure (not timeout/connection)
             const errorStr = result.error || "";
             const isTransient = errorStr.includes("TIMEOUT") || errorStr.includes("CONNECTION_ERROR");
 
             if (isTransient) {
-              // Network issue — skip, don't kill the cookie
+              // Network issue — mark as attempted so it doesn't loop forever
+              // but DON'T mark as DEAD
+              await prisma.cookie.update({
+                where: { id: cookie.id },
+                data: { lastUsed: new Date() },
+              }).catch(() => {});
               return { status: "skipped" as const };
             }
 
+            // Real validation failure — cookie is dead
             await prisma.cookie.update({
               where: { id: cookie.id },
               data: {
@@ -82,20 +84,10 @@ export async function POST(request: NextRequest) {
             return { status: "dead" as const };
           }
 
-          // Cookie is VALID — extract metadata
+          // VALID cookie — extract country & plan from metadata
           const meta = (result.metadata || {}) as NetflixMetadata;
-          const fallbackCountry = extractCountryFromNetflixId(
-            // Re-extract dict for country fallback
-            (() => {
-              const pairs = cookie.rawCookie.split(";").map(p => p.trim()).filter(Boolean);
-              const d: Record<string, string> = {};
-              for (const pair of pairs) {
-                const eq = pair.indexOf("=");
-                if (eq > 0) d[pair.substring(0, eq).trim()] = pair.substring(eq + 1).trim();
-              }
-              return d;
-            })()
-          );
+          const dict = extractCookiesFromText(cookie.rawCookie);
+          const fallbackCountry = dict ? extractCountryFromNetflixId(dict) : null;
 
           const country = meta.country || fallbackCountry || null;
           const plan = meta.plan || null;
@@ -106,24 +98,25 @@ export async function POST(request: NextRequest) {
             data: {
               status: "ACTIVE",
               lastUsed: new Date(),
+              lastError: null,
               ...(country && { country }),
               ...(plan && { plan }),
             },
           }).catch(() => {});
 
-          return {
-            status: "alive" as const,
-            country,
-            countryName,
-          };
+          return { status: "alive" as const, country, countryName };
         } catch {
-          // Unexpected error — don't mark as DEAD
+          // Unexpected error — mark attempted to prevent infinite loop
+          await prisma.cookie.update({
+            where: { id: cookie.id },
+            data: { lastUsed: new Date() },
+          }).catch(() => {});
           return { status: "skipped" as const };
         }
       })
     );
 
-    // ── Aggregate results ──
+    // ── Aggregate ──
     let alive = 0;
     let dead = 0;
     let skipped = 0;
@@ -136,11 +129,7 @@ export async function POST(request: NextRequest) {
           if (countriesList[r.country]) {
             countriesList[r.country].count++;
           } else {
-            countriesList[r.country] = {
-              code: r.country,
-              name: r.countryName || r.country,
-              count: 1,
-            };
+            countriesList[r.country] = { code: r.country, name: r.countryName || r.country, count: 1 };
           }
         }
       } else if (r.status === "dead") {
@@ -158,15 +147,9 @@ export async function POST(request: NextRequest) {
       success: true,
       done,
       message: done
-        ? `Listo: ${alive} vivas, ${dead} muertas, ${skipped} saltadas`
+        ? `Validacion completa: ${alive} vivas, ${dead} muertas, ${skipped} saltadas`
         : `Lote: +${alive} vivas, +${dead} muertas, +${skipped} saltadas`,
-      results: {
-        checked: cookies.length,
-        alive,
-        dead,
-        skipped,
-        countriesFound: countries.length,
-      },
+      results: { checked: cookies.length, alive, dead, skipped, countriesFound: countries.length },
       countries,
       total,
       processed: cookies.length,
