@@ -1,16 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { fullCheck, extractCookiesFromText, extractCountryFromNetflixId } from "@/lib/netflix-checker";
+import { checkCookie, getMetadata, extractCookiesFromText, extractCountryFromNetflixId } from "@/lib/netflix-checker";
 import type { NetflixMetadata } from "@/lib/netflix-checker";
 import { getCountryName } from "@/lib/countries";
 
 // No maxDuration — Vercel Free default (10s) applies.
 // Micro-Job: each call processes a small batch. Frontend polls until done.
+// BATCH_SIZE=2: each cookie does 2 HTTP requests (GraphQL + membership page).
+// 2 cookies × 2 requests = 4 concurrent requests, fits within 10s Vercel timeout.
+const BATCH_SIZE = 2;
 
-const BATCH_SIZE = 5;
+// Global deadline: abort all HTTP at 8.5s to leave time for DB writes
+const GLOBAL_DEADLINE_MS = 8500;
 
 export async function POST(request: NextRequest) {
+  // Global deadline controller — kills all HTTP at 8.5s
+  const deadline = new AbortController();
+  const deadlineTimer = setTimeout(() => deadline.abort(), GLOBAL_DEADLINE_MS);
+
   try {
     await requireAdmin();
 
@@ -18,6 +26,7 @@ export async function POST(request: NextRequest) {
     const allTotal = await prisma.cookie.count({});
 
     if (allTotal === 0) {
+      clearTimeout(deadlineTimer);
       return NextResponse.json({
         success: true,
         done: true,
@@ -30,24 +39,34 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ── 2. Take the 5 cookies with OLDEST lastUsed (least recently validated) ──
+    // ── 2. Take the cookies with OLDEST lastUsed (least recently validated) ──
     const cookies = await prisma.cookie.findMany({
       orderBy: { lastUsed: "asc" },
       take: BATCH_SIZE,
     });
 
-    // ── 3. Validate each cookie using fullCheck (same as user checker) ──
+    // ── 3. Validate each cookie: checkCookie (NFToken) + getMetadata (country/plan) ──
     const results = await Promise.all(
       cookies.map(async (cookie) => {
-        try {
-          const result = await fullCheck(cookie.rawCookie);
+        const dict = extractCookiesFromText(cookie.rawCookie);
+        if (!dict) {
+          // Can't even parse cookies — mark as dead
+          await prisma.cookie.update({
+            where: { id: cookie.id },
+            data: { status: "DEAD", lastError: "No se pudo parsear la cookie", lastUsed: new Date() },
+          }).catch(() => {});
+          return { status: "dead" as const };
+        }
 
-          if (!result.success) {
-            const errorStr = result.error || "";
+        try {
+          // ── Step 1: Validate via NFToken (GraphQL) ──
+          const tokenResult = await checkCookie(dict, deadline.signal);
+
+          if (!tokenResult.success) {
+            const errorStr = tokenResult.error || "";
             const isTransient = errorStr.includes("TIMEOUT") || errorStr.includes("CONNECTION_ERROR");
 
             if (isTransient) {
-              // Network issue — update lastUsed to avoid re-picking, but don't kill
               await prisma.cookie.update({
                 where: { id: cookie.id },
                 data: { lastUsed: new Date() },
@@ -55,23 +74,24 @@ export async function POST(request: NextRequest) {
               return { status: "skipped" as const };
             }
 
-            // Real validation failure
+            // Real validation failure → DEAD
             await prisma.cookie.update({
               where: { id: cookie.id },
-              data: {
-                status: "DEAD",
-                lastError: errorStr,
-                lastUsed: new Date(),
-              },
+              data: { status: "DEAD", lastError: errorStr, lastUsed: new Date() },
             }).catch(() => {});
             return { status: "dead" as const };
           }
 
-          // VALID — extract country & plan
-          const meta = (result.metadata || {}) as NetflixMetadata;
-          const dict = extractCookiesFromText(cookie.rawCookie);
-          const fallbackCountry = dict ? extractCountryFromNetflixId(dict) : null;
+          // ── Step 2: Fetch metadata (country, plan) from membership page ──
+          let meta: NetflixMetadata = {};
+          try {
+            meta = await getMetadata(dict, deadline.signal);
+          } catch {
+            // Metadata fetch failed — cookie is alive but we'll use fallback
+          }
 
+          // ── Step 3: Extract country & plan ──
+          const fallbackCountry = extractCountryFromNetflixId(dict);
           const country = meta.country || fallbackCountry || null;
           const plan = meta.plan || null;
           const countryName = country ? (meta.countryName || getCountryName(country)) : undefined;
@@ -88,7 +108,15 @@ export async function POST(request: NextRequest) {
           }).catch(() => {});
 
           return { status: "alive" as const, country, countryName };
-        } catch {
+        } catch (err: any) {
+          if (err.name === "AbortError" || deadline.signal.aborted) {
+            // Deadline hit — don't kill the cookie, just skip this round
+            await prisma.cookie.update({
+              where: { id: cookie.id },
+              data: { lastUsed: new Date() },
+            }).catch(() => {});
+            return { status: "skipped" as const };
+          }
           await prisma.cookie.update({
             where: { id: cookie.id },
             data: { lastUsed: new Date() },
@@ -97,6 +125,8 @@ export async function POST(request: NextRequest) {
         }
       })
     );
+
+    clearTimeout(deadlineTimer);
 
     // ── 4. Aggregate ──
     let alive = 0;
@@ -124,8 +154,6 @@ export async function POST(request: NextRequest) {
     const countries = Object.values(countriesList).sort((a, b) => b.count - a.count);
 
     // ── 5. Count how many cookies still need processing in this session ──
-    // Include cookies with NULL lastUsed (never validated) AND cookies with old lastUsed.
-    // Prisma { lt: date } does NOT match null values, so we need an explicit OR.
     const sessionWindow = new Date(Date.now() - 30 * 60 * 1000);
     const remainingCount = await prisma.cookie.count({
       where: {
@@ -135,7 +163,6 @@ export async function POST(request: NextRequest) {
         ],
       },
     });
-    // processedCount = cookies that were updated in this session (lastUsed >= sessionWindow)
     const processedCount = allTotal - remainingCount;
     const done = remainingCount === 0;
 
@@ -152,6 +179,7 @@ export async function POST(request: NextRequest) {
       remaining: remainingCount,
     });
   } catch (err: any) {
+    clearTimeout(deadlineTimer);
     if (err.message === "UNAUTHORIZED") {
       return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 });
     }

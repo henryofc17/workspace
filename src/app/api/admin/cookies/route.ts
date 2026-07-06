@@ -4,9 +4,49 @@ import { prisma } from "@/lib/prisma";
 import { extractCookiesFromText } from "@/lib/netflix-checker";
 
 // GET /api/admin/cookies — list all cookies with status
-export async function GET() {
+//   ?count=duplicates  →  count duplicate NetflixIds
+//   ?count=nometa     →  count ACTIVE cookies missing country or plan
+export async function GET(request: NextRequest) {
   try {
     await requireAdmin();
+
+    const { searchParams } = new URL(request.url);
+    const countType = searchParams.get("count");
+
+    // ── Count duplicates ──
+    if (countType === "duplicates") {
+      const allCookies = await prisma.cookie.findMany({
+        select: { id: true, rawCookie: true },
+      });
+      const seenIds = new Set<string>();
+      let duplicateCount = 0;
+      const nfIdRegex = /NetflixId=([^;\s]+)/;
+
+      for (const cookie of allCookies) {
+        const match = cookie.rawCookie.match(nfIdRegex);
+        const netflixId = match ? match[1].trim() : null;
+        if (!netflixId) continue;
+        if (seenIds.has(netflixId)) {
+          duplicateCount++;
+        } else {
+          seenIds.add(netflixId);
+        }
+      }
+      return NextResponse.json({ success: true, duplicateCount });
+    }
+
+    // ── Count cookies without metadata ──
+    if (countType === "nometa") {
+      const count = await prisma.cookie.count({
+        where: {
+          status: "ACTIVE",
+          OR: [{ country: null }, { plan: null }],
+        },
+      });
+      return NextResponse.json({ success: true, noMetaCount: count });
+    }
+
+    // ── Default: list cookies with stats ──
 
     // Count stats from ALL cookies (no limit)
     const [total, active, dead, pending] = await Promise.all([
@@ -156,13 +196,20 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (type === "duplicates") {
-      const allCookies = await prisma.cookie.findMany({ orderBy: { createdAt: "asc" } });
+      // Optimized: only load id + rawCookie, process in memory-efficient way
+      const allCookies = await prisma.cookie.findMany({
+        orderBy: { createdAt: "asc" },
+        select: { id: true, rawCookie: true },
+      });
       const seenIds = new Map<string, string>();
       const duplicateIds: string[] = [];
 
+      // Fast NetflixId extraction via regex (avoids full parse)
+      const nfIdRegex = /NetflixId=([^;\s]+)/;
+
       for (const cookie of allCookies) {
-        const dict = extractCookiesFromText(cookie.rawCookie);
-        const netflixId = dict?.["NetflixId"];
+        const match = cookie.rawCookie.match(nfIdRegex);
+        const netflixId = match ? match[1].trim() : null;
         if (!netflixId) continue;
         if (seenIds.has(netflixId)) {
           duplicateIds.push(cookie.id);
@@ -175,8 +222,14 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json({ success: true, deleted: 0, message: "No se encontraron duplicados" });
       }
 
-      const deleted = await prisma.cookie.deleteMany({ where: { id: { in: duplicateIds } } });
-      return NextResponse.json({ success: true, deleted: deleted.count, message: `${deleted.count} cookies duplicadas eliminadas` });
+      // Delete in chunks of 100 to avoid Prisma query limits
+      let totalDeleted = 0;
+      for (let i = 0; i < duplicateIds.length; i += 100) {
+        const chunk = duplicateIds.slice(i, i + 100);
+        const result = await prisma.cookie.deleteMany({ where: { id: { in: chunk } } });
+        totalDeleted += result.count;
+      }
+      return NextResponse.json({ success: true, deleted: totalDeleted, message: `${totalDeleted} cookies duplicadas eliminadas` });
     }
 
     const cookieId = searchParams.get("id");

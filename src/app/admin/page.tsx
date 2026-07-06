@@ -417,6 +417,12 @@ export default function AdminPage() {
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const [deletingDuplicates, setDeletingDuplicates] = useState(false);
 
+  // Recheck metadata
+  const [rechecking, setRechecking] = useState(false);
+  const recheckAbortRef = useRef(false);
+  const [recheckProgress, setRecheckProgress] = useState<{ total: number; processed: number; updated: number; skipped: number } | null>(null);
+  const [noMetaCount, setNoMetaCount] = useState<number | null>(null);
+
   // Config state
   const [siteConfig, setSiteConfig] = useState<Record<string, string | number>>({});
   const [loadingConfig, setLoadingConfig] = useState(false);
@@ -516,6 +522,10 @@ export default function AdminPage() {
         setCookies([...cookiesRes.cookies].reverse());
         setCookieStats(cookiesRes.stats || null);
       }
+      // Also check how many cookies need metadata
+      fetch("/api/admin/cookies?count=nometa").then(r => r.json()).then(d => {
+        if (d.success) setNoMetaCount(d.noMetaCount);
+      }).catch(() => {});
     } catch {}
     setLoading(false);
   }, []);
@@ -784,6 +794,10 @@ export default function AdminPage() {
       }
 
       loadData();
+      // Refresh noMetaCount after validation
+      fetch("/api/admin/cookies?count=nometa").then(r => r.json()).then(d => {
+        if (d.success) setNoMetaCount(d.noMetaCount);
+      }).catch(() => {});
     } catch {
       toast.error("Error de conexion");
     } finally {
@@ -853,12 +867,20 @@ export default function AdminPage() {
     setCheckingDuplicates(true);
     setDuplicateCount(null);
     try {
-      // Duplicate detection requires rawCookie which is excluded from
-      // the API response for security. The server-side DELETE endpoint
-      // handles detection + deletion atomically. Just inform the user.
-      toast.info("Haz clic en \"Eliminar Duplicados\" para detectar y eliminar duplicados automaticamente");
+      const res = await fetch("/api/admin/cookies?count=duplicates");
+      const data = await res.json();
+      if (data.success) {
+        setDuplicateCount(data.duplicateCount);
+        if (data.duplicateCount === 0) {
+          toast.success("No se encontraron cookies duplicadas");
+        } else {
+          toast.info(`${data.duplicateCount} cookies duplicadas encontradas`);
+        }
+      } else {
+        toast.error(data.error || "Error al buscar duplicados");
+      }
     } catch {
-      toast.error("Error al verificar duplicados");
+      toast.error("Error al buscar duplicados");
     } finally {
       setCheckingDuplicates(false);
     }
@@ -884,6 +906,103 @@ export default function AdminPage() {
       setDeletingDuplicates(false);
     }
   }, [loadData]);
+
+  // ── Recheck Metadata (fetch country/plan for ACTIVE cookies missing them) ──
+  const handleRecheckMetadata = useCallback(async () => {
+    setRechecking(true);
+    recheckAbortRef.current = false;
+    setRecheckProgress(null);
+    let totalUpdated = 0;
+    let totalSkipped = 0;
+    const allCountries: Record<string, { code: string; name: string; count: number }> = {};
+
+    try {
+      // First call
+      const firstRes = await fetch("/api/admin/recheck-metadata", { method: "POST" });
+      const firstData = await firstRes.json();
+      if (!firstData.success) {
+        toast.error(firstData.error || "Error al recheckear");
+        return;
+      }
+
+      const totalCookies = firstData.total ?? 0;
+      if (totalCookies === 0) {
+        toast.success("Todas las cookies activas ya tienen país y plan");
+        return;
+      }
+
+      totalUpdated += firstData.results?.updated ?? 0;
+      totalSkipped += firstData.results?.skipped ?? 0;
+      if (firstData.countries) {
+        for (const c of firstData.countries) {
+          allCountries[c.code] = allCountries[c.code]
+            ? { ...allCountries[c.code], count: allCountries[c.code].count + c.count }
+            : { ...c };
+        }
+      }
+      setRecheckProgress({ total: totalCookies, processed: firstData.processed ?? 0, updated: totalUpdated, skipped: totalSkipped });
+
+      if (firstData.done) {
+        toast.success(firstData.message);
+        setNoMetaCount(0);
+        loadData();
+        return;
+      }
+
+      // Poll until done
+      while (!recheckAbortRef.current) {
+        await new Promise(r => setTimeout(r, 1200));
+        if (recheckAbortRef.current) break;
+
+        const res = await fetch("/api/admin/recheck-metadata", { method: "POST" });
+        const data = await res.json();
+        if (!data.success) {
+          toast.error(data.error || "Error en lote");
+          break;
+        }
+
+        totalUpdated += data.results?.updated ?? 0;
+        totalSkipped += data.results?.skipped ?? 0;
+        if (data.countries) {
+          for (const c of data.countries) {
+            allCountries[c.code] = allCountries[c.code]
+              ? { ...allCountries[c.code], count: allCountries[c.code].count + c.count }
+              : { ...c };
+          }
+        }
+        setRecheckProgress({ total: totalCookies, processed: data.processed ?? 0, updated: totalUpdated, skipped: totalSkipped });
+
+        if (data.done) {
+          toast.success(data.message);
+          setNoMetaCount(0);
+          break;
+        }
+      }
+
+      loadData();
+    } catch {
+      toast.error("Error de conexión");
+    } finally {
+      setRechecking(false);
+      setRecheckProgress(null);
+      recheckAbortRef.current = false;
+    }
+  }, [loadData]);
+
+  const handleStopRecheck = useCallback(() => {
+    recheckAbortRef.current = true;
+  }, []);
+
+  // ── Check how many cookies need metadata ──
+  const handleCheckNoMeta = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/cookies?count=nometa");
+      const data = await res.json();
+      if (data.success) {
+        setNoMetaCount(data.noMetaCount);
+      }
+    } catch {}
+  }, []);
 
   // ── Logout ──
   const handleLogout = useCallback(async () => {
@@ -1790,6 +1909,14 @@ export default function AdminPage() {
                       </button>
                     )}
                     <button
+                      onClick={rechecking ? handleStopRecheck : handleRecheckMetadata}
+                      disabled={refreshing || uploadingCookies || rechecking}
+                      className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 rounded-xl border border-sky-500/20 bg-sky-500/[0.05] text-sky-400 text-xs sm:text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-sky-500/10 active:scale-[0.98] min-w-[130px]"
+                    >
+                      {rechecking ? <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+                      {rechecking ? "Detener" : noMetaCount !== null && noMetaCount > 0 ? `Recheck (${noMetaCount})` : "Recheck Metadata"}
+                    </button>
+                    <button
                       onClick={handleDeleteAllCookies}
                       disabled={deletingAllCookies || refreshing || uploadingCookies}
                       className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-700 to-red-900 hover:from-red-600 hover:to-red-800 text-white text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-red-700/15 hover:shadow-red-600/25 active:scale-[0.98] border border-red-500/20"
@@ -1826,6 +1953,34 @@ export default function AdminPage() {
                     <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{refreshProgress.alive} vivas</span>
                     <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-red-400" />{refreshProgress.dead} muertas</span>
                     <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />{refreshProgress.skipped} saltadas</span>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Recheck Metadata Progress Bar */}
+              {rechecking && recheckProgress && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  className="mt-3 rounded-xl border border-sky-500/15 bg-sky-500/[0.03] p-3 space-y-2"
+                >
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-white/50 font-medium">Obteniendo metadata...</span>
+                    <span className="text-sky-400 font-bold tabular-nums">
+                      {Math.min(recheckProgress.processed, recheckProgress.total)}/{recheckProgress.total} ({recheckProgress.total > 0 ? Math.round((Math.min(recheckProgress.processed, recheckProgress.total) / recheckProgress.total) * 100) : 0}%)
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-white/[0.04] rounded-full overflow-hidden">
+                    <motion.div
+                      className="h-full bg-gradient-to-r from-sky-500 to-violet-500 rounded-full"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${recheckProgress.total > 0 ? (Math.min(recheckProgress.processed, recheckProgress.total) / recheckProgress.total) * 100 : 0}%` }}
+                      transition={{ duration: 0.5, ease: "easeOut" }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-4 text-[10px] text-white/30">
+                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-sky-400" />{recheckProgress.updated} actualizadas</span>
+                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />{recheckProgress.skipped} sin cambios</span>
                   </div>
                 </motion.div>
               )}
