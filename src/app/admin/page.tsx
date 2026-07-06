@@ -727,20 +727,22 @@ export default function AdminPage() {
     let totalCookies = 0;
     const allCountries: Record<string, { code: string; name: string; count: number }> = {};
 
-    // Snapshot: only process cookies with lastUsed before this moment
-    const beforeTs = new Date().toISOString();
-
     try {
-      // ── First call: get the real total ──
-      const firstRes = await fetch(`/api/admin/refresh-cookies?before=${encodeURIComponent(beforeTs)}`, { method: "POST" });
+      // ── First call: NO before filter → endpoint returns grandTotal = ALL cookies ──
+      const firstRes = await fetch("/api/admin/refresh-cookies", { method: "POST" });
       const firstData = await firstRes.json();
       if (!firstData.success) {
         toast.error(firstData.error || "Error al validar");
         return;
       }
 
-      // Lock the total from the first response (grandTotal = count of ALL cookies at session start)
-      totalCookies = firstData.grandTotal ?? firstData.total ?? 0;
+      // Lock the real total (no filter = count of every cookie in DB)
+      totalCookies = firstData.grandTotal ?? 0;
+      if (totalCookies === 0) {
+        toast.success("No hay cookies para validar");
+        return;
+      }
+
       totalProcessed += firstData.processed ?? 0;
       totalAlive += firstData.results?.alive ?? 0;
       totalDead += firstData.results?.dead ?? 0;
@@ -763,6 +765,11 @@ export default function AdminPage() {
         return;
       }
 
+      // ── Snapshot timestamp AFTER first batch ──
+      // First batch already updated those cookies' lastUsed to now()
+      // All subsequent calls use this timestamp to skip already-processed cookies
+      const beforeTs = new Date().toISOString();
+
       // ── Poll until done ──
       while (!refreshAbortRef.current) {
         await new Promise(r => setTimeout(r, 1000));
@@ -775,8 +782,7 @@ export default function AdminPage() {
           break;
         }
 
-        const batchProcessed = data.processed ?? 0;
-        totalProcessed += batchProcessed;
+        totalProcessed += data.processed ?? 0;
         totalAlive += data.results?.alive ?? 0;
         totalDead += data.results?.dead ?? 0;
         totalSkipped += data.results?.skipped ?? 0;
@@ -788,7 +794,6 @@ export default function AdminPage() {
           }
         }
 
-        // Cap processed at total (safety)
         const displayProcessed = Math.min(totalProcessed, totalCookies);
         setRefreshProgress({ total: totalCookies, processed: displayProcessed, alive: totalAlive, dead: totalDead, skipped: totalSkipped });
 
