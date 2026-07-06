@@ -12,11 +12,12 @@ export async function GET() {
       select: { credits: true },
     });
 
-    const [totalUsers, totalCookies, activeCookies, deadCookies, totalTransactions] = await Promise.all([
+    const [totalUsers, totalCookies, activeCookies, deadCookies, pendingCookies, totalTransactions] = await Promise.all([
       prisma.user.count({ where: { role: "USER" } }),
       prisma.cookie.count(),
       prisma.cookie.count({ where: { status: "ACTIVE" } }),
       prisma.cookie.count({ where: { status: "DEAD" } }),
+      prisma.cookie.count({ where: { status: "PENDING" } }),
       prisma.transaction.count(),
     ]);
 
@@ -35,9 +36,10 @@ export async function GET() {
         totalCookies,
         activeCookies,
         deadCookies,
+        pendingCookies,
         totalTransactions,
         adminCredits: adminUser?.credits || 0,
-        allCookiesDead: totalCookies > 0 && activeCookies === 0,
+        allCookiesDead: totalCookies > 0 && activeCookies === 0 && pendingCookies === 0,
       },
       recentTransactions,
     });

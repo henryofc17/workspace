@@ -26,7 +26,7 @@ export async function POST(request: Request) {
         details: { retryAfter: rateCheck.retryAfter },
       });
       return NextResponse.json(
-        { success: false, error: `Demasiados cambios de contraseña. Espera ${rateCheck.retryAfter || 120} minutos.` },
+        { success: false, error: `Demasiados cambios de contraseña. Espera ${rateCheck.retryAfter || 120} segundos.` },
         { status: 429 }
       );
     }

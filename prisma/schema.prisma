@@ -61,7 +61,7 @@ model Notification {
 model Cookie {
   id        String   @id @default(cuid())
   rawCookie String
-  status    String   @default("ACTIVE") // ACTIVE or DEAD
+  status    String   @default("ACTIVE") // ACTIVE, DEAD, or PENDING
   usedCount Int      @default(0)
   lastUsed  DateTime?
   lastError String?

@@ -9,10 +9,11 @@ export async function GET() {
     await requireAdmin();
 
     // Count stats from ALL cookies (no limit)
-    const [total, active, dead] = await Promise.all([
+    const [total, active, dead, pending] = await Promise.all([
       prisma.cookie.count(),
       prisma.cookie.count({ where: { status: "ACTIVE" } }),
       prisma.cookie.count({ where: { status: "DEAD" } }),
+      prisma.cookie.count({ where: { status: "PENDING" } }),
     ]);
 
     // List: show most recent 500, but stats are always accurate
@@ -34,7 +35,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       cookies,
-      stats: { total, active, dead },
+      stats: { total, active, dead, pending },
     });
   } catch (err: any) {
     if (err.message === "UNAUTHORIZED") {
@@ -117,7 +118,7 @@ export async function POST(request: NextRequest) {
     }
 
     const created = await prisma.cookie.createMany({
-      data: unique.map((raw) => ({ rawCookie: raw, status: "ACTIVE" })),
+      data: unique.map((raw) => ({ rawCookie: raw, status: "PENDING" })),
     });
 
     return NextResponse.json({

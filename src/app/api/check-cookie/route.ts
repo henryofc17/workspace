@@ -135,6 +135,7 @@ export async function GET() {
     const RESET_COST = await getConfig("CHECKER_RESET_COST", 2);
 
     return NextResponse.json({
+      success: true,
       usesToday,
       dailyLimit: DAILY_LIMIT,
       remainingToday: DAILY_LIMIT - usesToday,

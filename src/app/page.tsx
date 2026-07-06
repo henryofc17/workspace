@@ -380,9 +380,7 @@ export default function Home() {
         toast.success("TV activada correctamente");
       } else {
         setTvResult({ success: false, message: data.error || "Error al activar TV" });
-        if (data.retry || data.noCookies) {
-          toast.error(data.error || "Error con la cookie, intenta de nuevo");
-        }
+        toast.error(data.error || "Error al activar TV");
         refreshCredits();
       }
     } catch {

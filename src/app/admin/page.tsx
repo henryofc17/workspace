@@ -58,6 +58,7 @@ interface AdminStats {
   totalCookies: number;
   activeCookies: number;
   deadCookies: number;
+  pendingCookies: number;
   totalTransactions: number;
   allCookiesDead: boolean;
 }
@@ -386,7 +387,7 @@ export default function AdminPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [cookies, setCookies] = useState<CookieRecord[]>([]);
-  const [cookieStats, setCookieStats] = useState<{ total: number; active: number; dead: number } | null>(null);
+  const [cookieStats, setCookieStats] = useState<{ total: number; active: number; dead: number; pending: number } | null>(null);
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
 
   // Create user form
@@ -1365,8 +1366,8 @@ export default function AdminPage() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 <StatCard icon={Users} label="Usuarios" value={stats?.totalUsers || 0} color="blue" delay={0} />
                 <StatCard icon={Cookie} label="Cookies Activas" value={stats?.activeCookies || 0} color="green" delay={0.05} />
-                <StatCard icon={X} label="Cookies Muertas" value={stats?.deadCookies || 0} color="red" delay={0.1} />
-                <StatCard icon={TrendingUp} label="Transacciones" value={stats?.totalTransactions || 0} color="yellow" delay={0.15} />
+                <StatCard icon={Clock} label="Pendientes" value={stats?.pendingCookies || 0} color="yellow" delay={0.1} />
+                <StatCard icon={X} label="Cookies Muertas" value={stats?.deadCookies || 0} color="red" delay={0.15} />
               </div>
 
               {/* Dead Cookies Alert */}
@@ -1810,14 +1811,14 @@ export default function AdminPage() {
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="text-white/50 font-medium">Validando cookies...</span>
                     <span className="text-emerald-400 font-bold tabular-nums">
-                      {refreshProgress.processed}/{refreshProgress.total} ({refreshProgress.total > 0 ? Math.round((refreshProgress.processed / refreshProgress.total) * 100) : 0}%)
+                      {Math.min(refreshProgress.processed, refreshProgress.total)}/{refreshProgress.total} ({refreshProgress.total > 0 ? Math.round((Math.min(refreshProgress.processed, refreshProgress.total) / refreshProgress.total) * 100) : 0}%)
                     </span>
                   </div>
                   <div className="w-full h-2 bg-white/[0.04] rounded-full overflow-hidden">
                     <motion.div
                       className="h-full bg-gradient-to-r from-emerald-500 to-sky-500 rounded-full"
                       initial={{ width: 0 }}
-                      animate={{ width: `${refreshProgress.total > 0 ? (refreshProgress.processed / refreshProgress.total) * 100 : 0}%` }}
+                      animate={{ width: `${refreshProgress.total > 0 ? (Math.min(refreshProgress.processed, refreshProgress.total) / refreshProgress.total) * 100 : 0}%` }}
                       transition={{ duration: 0.5, ease: "easeOut" }}
                     />
                   </div>
@@ -1841,6 +1842,10 @@ export default function AdminPage() {
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 pulse-dot" />
                       {cookieStats?.active ?? stats?.activeCookies ?? 0} activas
                     </Badge>
+                    <Badge className="bg-amber-500/10 text-amber-400 border border-amber-500/15 text-[10px] font-bold px-2 py-0 h-5 flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                      {cookieStats?.pending ?? stats?.pendingCookies ?? 0} pendientes
+                    </Badge>
                     <Badge className="bg-red-500/10 text-red-400 border border-red-500/15 text-[10px] font-bold px-2 py-0 h-5 flex items-center gap-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
                       {cookieStats?.dead ?? stats?.deadCookies ?? 0} muertas
@@ -1861,13 +1866,17 @@ export default function AdminPage() {
                           className={`p-3.5 rounded-xl transition-all duration-200 hover:bg-opacity-80 ${
                             c.status === "ACTIVE"
                               ? "bg-emerald-500/[0.03] border border-emerald-500/10 hover:bg-emerald-500/[0.05]"
+                              : c.status === "PENDING"
+                              ? "bg-amber-500/[0.03] border border-amber-500/10 hover:bg-amber-500/[0.05]"
                               : "bg-red-500/[0.03] border border-red-500/10 hover:bg-red-500/[0.05]"
                           }`}
                         >
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
                               <Badge className={`text-[9px] font-bold px-2 py-0.5 h-5 border-0 flex items-center gap-1.5 ${
-                                c.status === "ACTIVE" ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
+                                c.status === "ACTIVE" ? "bg-emerald-500/15 text-emerald-400" 
+                                : c.status === "PENDING" ? "bg-amber-500/15 text-amber-400"
+                                : "bg-red-500/15 text-red-400"
                               }`}>
                                 {c.status === "ACTIVE" ? (
                                   <>
@@ -1876,6 +1885,11 @@ export default function AdminPage() {
                                       <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
                                     </span>
                                     ACTIVA
+                                  </>
+                                ) : c.status === "PENDING" ? (
+                                  <>
+                                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                                    PENDIENTE
                                   </>
                                 ) : (
                                   <>

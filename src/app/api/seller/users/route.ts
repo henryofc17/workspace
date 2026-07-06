@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSeller } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { generateReferralCode } from "@/lib/referral";
 
 // GET /api/seller/users — list seller's managed users
 export async function GET() {
@@ -76,6 +77,14 @@ export async function POST(request: NextRequest) {
       }
 
       // Atomic transaction: deduct from seller, create user with credits, record transactions
+      // Generate unique referral code before transaction
+      let referralCode = generateReferralCode();
+      for (let i = 0; i < 20; i++) {
+        const exists = await prisma.user.findUnique({ where: { referralCode } });
+        if (!exists) break;
+        referralCode = generateReferralCode();
+      }
+
       const user = await prisma.$transaction(async (tx) => {
         // Deduct from seller
         await tx.user.update({
@@ -91,6 +100,7 @@ export async function POST(request: NextRequest) {
             role: "USER",
             credits: creditAmount,
             sellerId: session.userId,
+            referralCode,
           },
           select: { id: true, username: true, role: true, credits: true, createdAt: true },
         });
@@ -122,6 +132,12 @@ export async function POST(request: NextRequest) {
     }
 
     // No initial credits - just create user normally
+    let referralCode = generateReferralCode();
+    for (let i = 0; i < 20; i++) {
+      const exists = await prisma.user.findUnique({ where: { referralCode } });
+      if (!exists) break;
+      referralCode = generateReferralCode();
+    }
     const user = await prisma.user.create({
       data: {
         username: username.trim(),
@@ -129,6 +145,7 @@ export async function POST(request: NextRequest) {
         role: "USER",
         credits: 0,
         sellerId: session.userId,
+        referralCode,
       },
       select: { id: true, username: true, role: true, credits: true, createdAt: true },
     });

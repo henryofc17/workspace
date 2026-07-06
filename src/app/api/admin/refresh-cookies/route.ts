@@ -123,12 +123,19 @@ export async function POST(request: NextRequest) {
 
     const countries = Object.values(countriesList).sort((a, b) => b.count - a.count);
 
-    // ── 5. Count how many cookies still have old lastUsed (not yet processed in this session) ──
-    // Window: 30 minutes — a full validation of 500 cookies takes ~20 min, so 30 min is safe
+    // ── 5. Count how many cookies still need processing in this session ──
+    // Include cookies with NULL lastUsed (never validated) AND cookies with old lastUsed.
+    // Prisma { lt: date } does NOT match null values, so we need an explicit OR.
     const sessionWindow = new Date(Date.now() - 30 * 60 * 1000);
     const remainingCount = await prisma.cookie.count({
-      where: { lastUsed: { lt: sessionWindow } },
+      where: {
+        OR: [
+          { lastUsed: null },
+          { lastUsed: { lt: sessionWindow } },
+        ],
+      },
     });
+    // processedCount = cookies that were updated in this session (lastUsed >= sessionWindow)
     const processedCount = allTotal - remainingCount;
     const done = remainingCount === 0;
 
